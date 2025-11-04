@@ -1,0 +1,5 @@
+{
+  "reply": "Chào bạn, Thắng! Rất vui được gặp bạn! Bạn có muốn trò chuyện về điều gì đặc biệt không? <JSON>{\"name\":\"Thắng\",\"hobby\":\"đọc sách\"}</JSON>",
+  "audio": "data:audio/mp3;base64,https://file01.fpt.ai/text2speech-v5/short/2025-10-23/e937a8ecb305634a33573516f469cfc2.mp3",
+  "emotion": "happy"
+}
