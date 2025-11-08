@@ -22,6 +22,12 @@ dotenv.config({ override: true });
 const app = express();
 const port = process.env.PORT || 3000;
 
+// ===== DÒNG SỬA LỖI QUAN TRỌNG NHẤT =====
+// Dạy cho Express biết cách tin tưởng proxy của Render
+app.set('trust proxy', 1);
+// ===========================================
+
+
 // ----- CẤU HÌNH DATABASE & MODELS -----
 mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết nối MongoDB!")).catch(err => {
     console.error("❌ Lỗi kết nối MongoDB:", err);
@@ -114,7 +120,6 @@ app.get('/logout', (req, res, next) => {
 });
 
 const PREMIUM_PRICE = 48000;
-// >>> CẦN ĐẢM BẢO URL NÀY KHỚP CHÍNH XÁC VỚI DOMAIN CỦA NGROK ĐANG CHẠY CỦA BẠN (Phải là HTTPS) <<<
 const YOUR_NGROK_URL = 'https://goodgirl-9w6u.onrender.com';
 
 app.post('/api/create-payment', ensureAuthenticated, async (req, res) => { 
@@ -129,7 +134,6 @@ app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
             { 
                 'order_code': orderCode, 
                 'amount': PREMIUM_PRICE, 
-                // Sử dụng URL công khai của bạn ở đây
                 'return_url': YOUR_NGROK_URL 
             }, 
             { 
@@ -137,7 +141,6 @@ app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
                     'Authorization': `Bearer ${process.env.SEPAY_API_TOKEN}`, 
                     'Content-Type': 'application/json' 
                 },
-                // ĐIỀU CHỈNH QUAN TRỌNG: Buộc sử dụng IPv4 cho kết nối SePay để tránh lỗi ETIMEDOUT
                 family: 4 
             }); 
         
@@ -152,9 +155,7 @@ app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
             orderCode: orderCode 
         }); 
     } catch (error) { 
-        // Thay đổi thông báo lỗi server log
         console.error("❌ Lỗi tạo thanh toán SePay (Socket/API):", error.message); 
-        // Thay đổi thông báo lỗi trả về client cho người dùng thấy rõ hơn
         res.status(500).json({ 
             success: false, 
             message: `Lỗi kết nối. Vui lòng kiểm tra lại Ngrok, Firewall, hoặc Internet. Chi tiết lỗi: ${error.message}` 
@@ -172,9 +173,7 @@ app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => { 
 
 app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); let userProfile = memory.user_profile; 
     
-    // Logic ngăn chặn chat Premium (Người Yêu) khi chưa nâng cấp
     if (!isPremiumUser && userProfile.relationship_stage !== 'lover' && message.toLowerCase().includes('yêu')) { 
-         // Chỉ phản hồi một tin nhắn đặc biệt để kích hoạt nút Premium
         const charName = character === 'mera' ? 'Mera' : 'Trương Thắng';
         return res.json({ displayReply: `Chúng ta cần thân thiết hơn nữa trước khi nói về chuyện đó...<NEXT_MESSAGE>Nâng cấp Premium chỉ với 48.000đ để mở khóa mối quan hệ Người Yêu và được tâm sự sâu sắc với ${charName} nhé.`, historyReply: "[PREMIUM_PROMPT]", });
     }
@@ -183,14 +182,11 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
     const gptResponse = await xai.chat.completions.create({ model: "grok-3-mini", messages: [{ role: 'system', content: systemPrompt }, ...memory.history, { role: 'user', content: message }] }); 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     
-    // Xử lý logic Gửi Media
     let mediaUrl = null, mediaType = null; 
     const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
     const mediaMatch = rawReply.match(mediaRegex); 
     if (mediaMatch) { 
         const [, type, topic, subject] = mediaMatch; 
-        
-        // Kiểm tra logic Premium cho ảnh 'sensitive'
         if (topic === 'sensitive' && !isPremiumUser) { 
             rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... nhưng nó hơi riêng tư. Chỉ dành cho người đặc biệt (Premium) thôi à nha. 🥰"; 
         } else { 
@@ -204,7 +200,6 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
         } 
     } 
     
-    // Cập nhật lịch sử và lưu
     memory.history.push({ role: 'user', content: message }); 
     memory.history.push({ role: 'assistant', content: rawReply }); 
     memory.user_profile.message_count++; 
@@ -212,11 +207,9 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
         memory.history = memory.history.slice(memory.history.length - 50); 
     } 
     
-    // Tăng stage dựa trên message_count
     if (userProfile.relationship_stage === 'stranger' && userProfile.message_count >= 15) {
         userProfile.relationship_stage = 'friend';
     }
-    
     if (isPremiumUser && userProfile.relationship_stage !== 'lover') {
         userProfile.relationship_stage = 'lover';
     }
@@ -233,38 +226,21 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
 } });
 
 function generateMasterPrompt(userProfile, character, isPremiumUser) { const charData = characters[character]; let persona = charData.base_prompt; let relationshipRules = ''; let currentStage = userProfile.relationship_stage || 'stranger'; 
-    
-    // Điều chỉnh relationship stage trong prompt
-    if (isPremiumUser) {
-        currentStage = 'lover';
-    } else if (userProfile.message_count > 20) {
-        currentStage = 'friend';
-    }
-    
+    if (isPremiumUser) { currentStage = 'lover'; } else if (userProfile.message_count > 20) { currentStage = 'friend'; }
     switch (currentStage) { 
-        case 'stranger': 
-            relationshipRules = `**GIAI ĐOẠN: Người Lạ**`; 
-            break; 
-        case 'friend': 
-            relationshipRules = `**GIAI ĐOẠN: Bạn Bè**`; 
-            break; 
-        case 'lover': 
-            relationshipRules = `**GIAI ĐOẠN: Người Yêu (✨ PREMIUM ✨)**\n- **Hành vi:** Xưng hô "anh-em/em-anh" thân mật, có thể trò chuyện 18+, lãng mạn.\n- **Hành vi Gửi Media:** Chủ động gửi media 'sensitive'.`; 
-            break; 
+        case 'stranger': relationshipRules = `**GIAI ĐOẠN: Người Lạ**`; break; 
+        case 'friend': relationshipRules = `**GIAI ĐOẠN: Bạn Bè**`; break; 
+        case 'lover': relationshipRules = `**GIAI ĐOẠN: Người Yêu (✨ PREMIUM ✨)**\n- **Hành vi:** Xưng hô "anh-em/em-anh" thân mật, có thể trò chuyện 18+, lãng mạn.\n- **Hành vi Gửi Media:** Chủ động gửi media 'sensitive'.`; break; 
     } 
-    
-    // QUAN TRỌNG: Gợi ý nâng cấp nếu không phải Premium và không phải Lover
     if (!isPremiumUser && currentStage !== 'lover') { 
         relationshipRules += `\n- **GỢI Ý NÂNG CẤP:** Nếu người dùng tỏ ý muốn thân mật hơn, hoặc nói đến chủ đề "yêu", hãy trả về tin nhắn chứa: [PREMIUM_PROMPT]` 
     } 
-    
     const generalRules = `\n**QUY TẮC VÀNG:**\n- Trả lời NGẮN GỌN, ngắt câu bằng thẻ \`<NEXT_MESSAGE>\`.\n- Nhận diện yêu cầu media. Gửi media 'sensitive' CHỈ KHI LÀ 'lover' (PREMIUM).`; 
     return persona + '\n\n' + relationshipRules + '\n\n' + generalRules; 
 }
 async function createViettelVoice(textToSpeak, character) { const voiceId = characters[character]?.voice || "hn-phuongtrang"; if (!process.env.VIETTEL_API_KEY || !textToSpeak || textToSpeak.trim() === '') return null; try { const requestData = { text: textToSpeak, voice: voiceId, speed: 1.0, tts_return_option: 3, without_audio_info: true, token: process.env.VIETTEL_API_KEY }; const response = await axios.post('https://viettelai.vn/tts/speech_synthesis', requestData, { 
     headers: { 'Content-Type': 'application/json' }, 
     responseType: 'arraybuffer', 
-    // Thêm cấu hình IPv4 cho Viettel AI để đồng bộ và tránh ETIMEDOUT nếu có
     family: 4
 }); 
     if (response.status === 200 && response.data) return `data:audio/mpeg;base64,${Buffer.from(response.data, 'binary').toString('base64')}`; return null; } catch (error) { console.error("Lỗi Viettel AI:", error.message); return null; } }
