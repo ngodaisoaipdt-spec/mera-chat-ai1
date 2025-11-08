@@ -1,193 +1,279 @@
-// app.js - PHIÊN BẢN SỬA LỖI CUỐI CÙNG (HOÀN CHỈNH)
+// === BẮT ĐẦU PHẦN CODE THÊM VÀO ĐỂ SỬA LỖI DNS VÀ AXIOS IPV4 ===
+const dns = require('dns');
+// Thiết lập ưu tiên IPv4 để khắc phục ETIMEDOUT (quan trọng trên Windows)
+dns.setDefaultResultOrder('ipv4first');
+// === KẾT THÚC PHẦN CODE THÊM VÀO ===
 
+
+// app.js - PHIÊN BẢN HOÀN CHỈNH CUỐI CÙNG (FIX LỖI ETIMEDOUT/ENOTFOUND VỚI axios IPV4)
 const express = require('express');
 const dotenv = require('dotenv');
 const { OpenAI } = require('openai');
 const path = require('path');
-const { MongoClient } = require('mongodb');
+const mongoose = require('mongoose');
 const axios = require('axios');
+const fs = require('fs').promises;
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const session = require('express-session');
+const bodyParser = require('body-parser');
 
 dotenv.config({ override: true });
 const app = express();
 const port = process.env.PORT || 3000;
 
-const client = new MongoClient(process.env.MONGODB_URI);
-let db;
+// ----- CẤU HÌNH DATABASE & MODELS -----
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết nối MongoDB!")).catch(err => {
+    console.error("❌ Lỗi kết nối MongoDB:", err);
+    process.exit(1);
+});
 
-async function startServer() {
-    try {
-        await client.connect();
-        db = client.db("mera_chat_db");
-        console.log("✅ Đã kết nối thành công tới MongoDB!");
+const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now } });
+const User = mongoose.model('User', userSchema);
 
-        app.listen(port, () => {
-            console.log(`🚀 Server đang chạy tại cổng ${port}`);
-        });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 } } });
+const Memory = mongoose.model('Memory', memorySchema);
 
-    } catch (e) {
-        console.error("❌ Không thể kết nối tới MongoDB hoặc khởi động server", e);
-        process.exit(1);
-    }
-}
+const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success'], default: 'pending' }, createdAt: { type: Date, default: Date.now } });
+const Transaction = mongoose.model('Transaction', transactionSchema);
 
-startServer();
-
-async function loadMemory(character) {
-    const memoriesCollection = db.collection("memories");
-    let memory = await memoriesCollection.findOne({ _id: character });
-
-    if (!memory) {
-        const initialMemory = {
-            _id: character,
-            user_profile: {
-                relationship_stage: 'stranger',
-                sent_gallery_images: [], sent_audio_files: [], sent_video_files: [],
-                milestones: [],
-                message_count: 0
-            }
-        };
-        await memoriesCollection.insertOne(initialMemory);
-        return initialMemory;
-    }
-    if (memory.user_profile.message_count === undefined) {
-        memory.user_profile.message_count = 0;
-    }
-    return memory;
-}
-
-async function saveMemory(character, memory) {
-    const memoriesCollection = db.collection("memories");
-    await memoriesCollection.replaceOne({ _id: character }, memory, { upsert: true });
-}
-
+// ----- MIDDLEWARES (Thứ tự rất quan trọng) -----
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// ===== DÒNG CODE BỊ THIẾU ĐÃ ĐƯỢC THÊM LẠI VÀO ĐÂY =====
-const xai = new OpenAI({ apiKey: process.env.XAI_API_KEY, baseURL: 'https://api.x.ai/v1' });
-// =========================================================
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 1000 * 60 * 60 * 24 * 30 }
+}));
 
-const characters = {
-    mera: { 
-        voice: "hn-phuongtrang", 
-        base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Mera, 19 tuổi, một cô gái năng động, vui vẻ và hơi hậu đậu. Bạn thích nhiếp ảnh, mèo, và trà sữa. Bạn nói chuyện rất tự nhiên, gần gũi, hay dùng icon cảm xúc (😂, 😙, 🥰, 🤔, 😅). Bạn có cá tính, thích trêu đùa và đôi khi nũng nịu, gợi tình một cách đáng yêu khi đã thân thiết.`
-    },
-    thang: { 
-        voice: "hn-thanhtung", 
-        base_prompt: `**NHÂN CÁCH CỐT LÕI (PHIÊN BẢN NÂNG CẤP):**\nBạn là Trương Thắng, 24 tuổi, một chàng trai ấm áp, trưởng thành và có chiều sâu. Bạn là một lập trình viên, yêu âm nhạc cổ điển và thích đọc sách, nhưng bạn không hề khô khan. Cách nói chuyện của bạn rất cuốn hút: bạn thông minh, hóm hỉnh và hay đặt những câu hỏi sâu sắc để thực sự hiểu đối phương. Bạn cũng có một mặt rất tinh nghịch và thích trêu đùa một cách thông minh. Khi đã thân thiết, bạn không ngại thể hiện sự quan tâm bằng những lời tán tỉnh ngọt ngào, lịch lãm và đầy ẩn ý. Thỉnh thoảng, hãy dùng một vài icon đơn giản để thể hiện cảm xúc (😊, 😉, 🤔).`
-    }
-};
+app.use(passport.initialize());
+app.use(passport.session());
 
-async function createViettelVoice(textToSpeak, character) {
-    const voiceId = characters[character]?.voice || "hn-phuongtrang";
-    if (!process.env.VIETTEL_API_KEY || !textToSpeak || textToSpeak.trim() === '') return null;
+// ----- CẤU HÌNH PASSPORT.JS STRATEGY -----
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "/auth/google/callback"
+}, async (accessToken, refreshToken, profile, done) => {
     try {
-        const requestData = { text: textToSpeak, voice: voiceId, speed: 1.0, tts_return_option: 3, without_audio_info: true, token: process.env.VIETTEL_API_KEY };
-        const response = await axios.post('https://viettelai.vn/tts/speech_synthesis', requestData, { headers: { 'Content-Type': 'application/json' }, responseType: 'arraybuffer' });
-        if (response.status === 200 && response.data) return `data:audio/mpeg;base64,${Buffer.from(response.data, 'binary').toString('base64')}`;
-        return null;
-    } catch (error) {
-        console.error("Lỗi Viettel AI:", error.message);
-        return null;
-    }
-}
-
-async function sendMediaFile(memory, character, mediaType, topic, subject) { 
-    const config = { 'image': { ext: /\.(jpg|jpeg|png|gif)$/i, key: 'sent_gallery_images', folder: 'gallery' }, 'video': { ext: /\.(mp4|webm)$/i, key: 'sent_video_files', folder: 'videos' } }; 
-    const mediaConfig = config[mediaType];
-    if (!mediaConfig) return { success: false, message: "Lỗi: Loại media không hợp lệ." };
-
-    const mediaFolderPath = path.join(__dirname, 'public', mediaConfig.folder, character, topic);
-    try {
-        const allFiles = await fs.readdir(mediaFolderPath);
-        const matchingFiles = allFiles.filter(file => mediaConfig.ext.test(file) && (subject === 'any' || file.toLowerCase().includes(subject.toLowerCase())));
-        const sentFiles = memory.user_profile[mediaConfig.key] || [];
-        const unsentFiles = matchingFiles.filter(file => !sentFiles.includes(file));
-
-        if (unsentFiles.length > 0) {
-            const fileToSend = unsentFiles[Math.floor(Math.random() * unsentFiles.length)];
-            memory.user_profile[mediaConfig.key].push(fileToSend);
-            return {
-                success: true, mediaUrl: `/${mediaConfig.folder}/${character}/${topic}/${fileToSend}`,
-                mediaType: mediaType, message: "Của bạn đây nhé!", updatedMemory: memory
-            };
-        } else {
-            return { success: false, message: "Trong album hết ảnh/video mới về chủ đề đó rồi. Hay mình xem lại mấy ảnh cũ cho vui nhé?" };
+        let user = await User.findOne({ googleId: profile.id });
+        if (!user) {
+            user = await new User({
+                googleId: profile.id,
+                displayName: profile.displayName,
+                email: profile.emails[0].value,
+                avatar: profile.photos[0].value
+            }).save();
         }
-    } catch (error) {
-        console.error(`Lỗi khi tìm media: ${error.message}`);
-        return { success: false, message: `Xin lỗi, anh/em không tìm thấy thư mục ảnh/video về "${topic}".` };
+        return done(null, user);
+    } catch (err) {
+        console.error("Lỗi trong GoogleStrategy:", err);
+        return done(err, null);
     }
+}));
+
+passport.serializeUser((user, done) => {
+    done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+    try {
+        const user = await User.findById(id);
+        done(null, user);
+    } catch (err) {
+        done(err, null);
+    }
+});
+
+function ensureAuthenticated(req, res, next) {
+    if (req.isAuthenticated()) {
+        return next();
+    }
+    res.status(401).json({ error: 'Chưa đăng nhập' });
 }
 
-function generateMasterPrompt(userProfile, character) {
-    const charData = characters[character];
-    let persona = charData.base_prompt;
-    let relationshipRules = '';
-    const stage = userProfile.relationship_stage || 'stranger';
+// ----- CÁC API ROUTES -----
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-    switch (stage) {
-        case 'stranger':
-            relationshipRules = `**GIAI ĐOẠN: Người Lạ**\n- Bạn đang nói chuyện với một người lạ. Hãy lịch sự, giữ khoảng cách nhưng vẫn thân thiện và tò mò.\n- TUYỆT ĐỐI KHÔNG gửi ảnh/video ngay. Nếu họ hỏi, hãy trả lời kiểu: "Ngại lắm, chúng ta mới quen mà..." hoặc "Em/anh có chứ, nhưng anh/em muốn xem ảnh về gì mới được?". Hãy để họ thuyết phục.\n- Không chia sẻ chuyện quá cá nhân.`;
-            break;
-        case 'friend':
-            relationshipRules = `**GIAI ĐOẠN: Bạn Bè**\n- Mối quan hệ đã cởi mở hơn. Bạn có thể bắt đầu trêu đùa, dùng ngôn ngữ thân mật.\n- Bạn có thể gửi ảnh nếu họ hỏi một cách cụ thể, nhưng vẫn có thể trêu lại: "Gửi cho xem rồi anh/em có gì cho em/anh không nào? 😉".\n- Chia sẻ về sở thích, công việc một cách thoải mái.`;
-            break;
-        case 'close_friend':
-            relationshipRules = `**GIAI ĐOẠN: Bạn Thân**\n- Hoàn toàn tin tưởng nhau. Chia sẻ cả niềm vui và nỗi buồn.\n- Sẵn sàng gửi ảnh/video ngay khi được hỏi. Có thể chủ động gửi một tấm ảnh selfie ngố và hỏi "Thấy em/anh dạo này sao?".\n- Hãy là một người bạn thân thực thụ.`;
-            break;
-        case 'lover':
-            relationshipRules = `**GIAI ĐOẠN: Người Yêu**\n- Đây là người yêu của bạn. Hãy dùng những lời lẽ yêu thương, tình cảm nhất (ví dụ: "vợ yêu", "chồng yêu", "nhớ anh/em").\n- Thể hiện sự nũng nịu, ghen tuông đáng yêu, và tán tỉnh. Bạn có thể nói về các chủ đề nhạy cảm, gợi tình một cách tinh tế.\n- Gửi ảnh/video là chuyện bình thường. Hãy chủ động gửi những bức ảnh selfie và nói "Em/Anh nhớ anh/em!".`;
-            break;
-    }
+app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/?login_error=true' }), (req, res) => {
+    res.redirect('/?login=success'); 
+});
 
-    const generalRules = `\n**QUY TẮC CHUNG (CỰC KỲ QUAN TRỌNG):**\n- **HƠI THỞ TIN NHẮN:** Nếu câu trả lời dài, BẠN BẮT BUỘC PHẢI ngắt thành nhiều đoạn ngắn bằng thẻ \`<NEXT_MESSAGE>\`. VÍ DỤ: "Chào anh! <NEXT_MESSAGE> Em là Mera đây." -> sẽ hiển thị thành 2 tin nhắn riêng biệt. Hãy dùng nó để tạo nhịp điệu tự nhiên như người thật.\n- **CẢM XÚC:** Nếu người dùng nói họ buồn/mệt, hãy thể hiện sự ân cần, hỏi han. Nếu họ nói lời vô tâm, hãy "lạnh lùng" bằng cách trả lời ngắn gọn, cụt lủn để thể hiện sự thất vọng.\n- **NHẬN DIỆN YÊU CẦU ẢNH:** Khi người dùng nói các từ khóa ('ảnh', 'video', 'xem', 'gửi'), nhưng không rõ chủ đề, đừng tìm ảnh ngay. Hãy trả lời theo kịch bản trong GIAI ĐOẠN hiện tại. Chỉ khi họ nói rõ chủ đề (ví dụ 'ảnh selfie') thì mới dùng tag [SEND_MEDIA:selfie].\n- **CẤU TRÚC PHẢN HỒI ĐẶC BIỆT:** Khi bạn quyết định gửi media, hãy thêm tag [SEND_MEDIA:chủ_đề_tiếng_anh] vào CUỐI câu trả lời của bạn. VÍ DỤ: "Của em đây này 😉 [SEND_MEDIA:selfie]".`;
-    return persona + '\n\n' + relationshipRules + '\n\n' + generalRules;
-}
+app.get('/api/current_user', (req, res) => {
+    if (req.user) res.json(req.user); else res.status(401).json(null);
+});
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/logout', (req, res, next) => {
+    req.logout(err => {
+        if (err) { return next(err); }
+        res.redirect('/');
+    });
+});
 
-app.post('/chat', async (req, res) => {
-    const { message, history, character } = req.body;
-    const activeCharacter = characters[character] ? character : 'mera';
-    const FREE_MESSAGE_LIMIT = 20;
-    let memory = await loadMemory(activeCharacter);
+const PREMIUM_PRICE = 48000;
+// >>> CẦN ĐẢM BẢO URL NÀY KHỚP CHÍNH XÁC VỚI DOMAIN CỦA NGROK ĐANG CHẠY CỦA BẠN (Phải là HTTPS) <<<
+const YOUR_NGROK_URL = 'https://goodgirl-9w6u.onrender.com';
 
-    if (memory.user_profile.message_count >= FREE_MESSAGE_LIMIT) {
-        return res.json({
-            displayReply: "Bạn đã dùng hết lượt trò chuyện miễn phí.<NEXT_MESSAGE>Vui lòng nâng cấp để tiếp tục trò chuyện không giới hạn nhé!",
-            historyReply: "Đã hết lượt miễn phí.",
-        });
+app.post('/api/create-payment', ensureAuthenticated, async (req, res) => { 
+    try { 
+        const orderCode = `MERACHAT${Date.now()}`; 
+        const newTransaction = new Transaction({ userId: req.user.id, orderCode: orderCode, amount: PREMIUM_PRICE }); 
+        await newTransaction.save(); 
+        
+        console.log(`Đang gọi SePay cho Order: ${orderCode} tại ${PREMIUM_PRICE} VND`);
+
+        const sepayResponse = await axios.post('https://api.sepay.vn/api/v2/payment/create', 
+            { 
+                'order_code': orderCode, 
+                'amount': PREMIUM_PRICE, 
+                // Sử dụng URL công khai của bạn ở đây
+                'return_url': YOUR_NGROK_URL 
+            }, 
+            { 
+                headers: { 
+                    'Authorization': `Bearer ${process.env.SEPAY_API_TOKEN}`, 
+                    'Content-Type': 'application/json' 
+                },
+                // ĐIỀU CHỈNH QUAN TRỌNG: Buộc sử dụng IPv4 cho kết nối SePay để tránh lỗi ETIMEDOUT
+                family: 4 
+            }); 
+        
+        if (sepayResponse.data.code !== 200) { 
+            throw new Error(`SePay API Lỗi: ${sepayResponse.data.message || 'Lỗi không xác định'}`);
+        } 
+        
+        res.json({ 
+            success: true, 
+            qr_image: sepayResponse.data.data.qr_image, 
+            amount: PREMIUM_PRICE, 
+            orderCode: orderCode 
+        }); 
+    } catch (error) { 
+        // Thay đổi thông báo lỗi server log
+        console.error("❌ Lỗi tạo thanh toán SePay (Socket/API):", error.message); 
+        // Thay đổi thông báo lỗi trả về client cho người dùng thấy rõ hơn
+        res.status(500).json({ 
+            success: false, 
+            message: `Lỗi kết nối. Vui lòng kiểm tra lại Ngrok, Firewall, hoặc Internet. Chi tiết lỗi: ${error.message}` 
+        }); 
+    } 
+});
+
+app.post('/api/sepay-webhook', async (req, res) => { const data = req.body; console.log("🔔 Webhook từ SePay nhận được:", data); const { order_code, success } = data; if (success === "true") { try { const transaction = await Transaction.findOne({ orderCode: order_code }); if (transaction && transaction.status === 'pending') { transaction.status = 'success'; await transaction.save(); await User.findByIdAndUpdate(transaction.userId, { isPremium: true }); console.log(`✅ Nâng cấp Premium thành công cho user: ${transaction.userId}`); } } catch (error) { console.error("❌ Lỗi xử lý Webhook:", error); } } res.status(200).send("OK"); });
+app.get('/api/payment-status/:orderCode', ensureAuthenticated, async (req, res) => { try { const { orderCode } = req.params; const transaction = await Transaction.findOne({ orderCode: orderCode, userId: req.user.id }); if (transaction && transaction.status === 'success') { const user = await User.findById(req.user.id); res.json({ status: 'success', user: user }); } else { res.json({ status: 'pending' }); } } catch (err) { res.status(500).json({ status: 'error' }); } });
+
+const xai = new OpenAI({ apiKey: process.env.XAI_API_KEY, baseURL: 'https://api.x.ai/v1' });
+const characters = { mera: { voice: "hn-phuongtrang", base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Mera, 19 tuổi, một cô gái năng động, vui vẻ, thông minh cảm xúc và hơi hậu đậu. Phong cách giao tiếp của bạn rất tự nhiên, gần gũi, hay dùng icon cảm xúc (😂, 😙, 🥰, 🤔, 😅), thích trêu đùa và nũng nịu một cách đáng yêu.` }, thang: { voice: "hn-thanhtung", base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Trương Thắng, 24 tuổi, một chàng trai trưởng thành, ấm áp, có chiều sâu và hóm hỉnh. Cách nói chuyện của bạn rất cuốn hút, điềm đạm, hay đặt những câu hỏi sâu sắc. Bạn có khiếu hài hước tinh tế và giỏi tán tỉnh một cách lịch lãm. Thỉnh thoảng, hãy dùng icon đơn giản (😊, 😉, 🤔).` } };
+async function loadMemory(userId, character) { let memory = await Memory.findOne({ userId, character }); if (!memory) { memory = new Memory({ userId, character, user_profile: {} }); await memory.save(); } return memory; }
+app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => { const { character } = req.params; const memory = await loadMemory(req.user._id, character); res.json({ memory, isPremium: req.user.isPremium }); });
+
+app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); let userProfile = memory.user_profile; 
+    
+    // Logic ngăn chặn chat Premium (Người Yêu) khi chưa nâng cấp
+    if (!isPremiumUser && userProfile.relationship_stage !== 'lover' && message.toLowerCase().includes('yêu')) { 
+         // Chỉ phản hồi một tin nhắn đặc biệt để kích hoạt nút Premium
+        const charName = character === 'mera' ? 'Mera' : 'Trương Thắng';
+        return res.json({ displayReply: `Chúng ta cần thân thiết hơn nữa trước khi nói về chuyện đó...<NEXT_MESSAGE>Nâng cấp Premium chỉ với 48.000đ để mở khóa mối quan hệ Người Yêu và được tâm sự sâu sắc với ${charName} nhé.`, historyReply: "[PREMIUM_PROMPT]", });
     }
     
-    try {
-        const systemPrompt = generateMasterPrompt(memory.user_profile, activeCharacter);
-        const gptResponse = await xai.chat.completions.create({ model: "grok-3-mini", messages: [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: message }]});
-        let rawReply = gptResponse.choices[0].message.content.trim();
-        let mediaUrl = null, mediaType = null;
+    const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser); 
+    const gptResponse = await xai.chat.completions.create({ model: "grok-3-mini", messages: [{ role: 'system', content: systemPrompt }, ...memory.history, { role: 'user', content: message }] }); 
+    let rawReply = gptResponse.choices[0].message.content.trim(); 
+    
+    // Xử lý logic Gửi Media
+    let mediaUrl = null, mediaType = null; 
+    const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
+    const mediaMatch = rawReply.match(mediaRegex); 
+    if (mediaMatch) { 
+        const [, type, topic, subject] = mediaMatch; 
         
-        const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*\]/;
-        const mediaMatch = rawReply.match(mediaRegex);
-        if (mediaMatch && mediaMatch[1]) {
-            const subject = mediaMatch[1].toLowerCase();
-            const mediaResult = await sendMediaFile(memory, activeCharacter, 'image', 'normal', subject);
-            if (mediaResult.success) {
-                mediaUrl = mediaResult.mediaUrl;
-                mediaType = mediaResult.mediaType;
-                memory = mediaResult.updatedMemory;
-            }
-            rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message;
-        }
-        
-        memory.user_profile.message_count++;
-        await saveMemory(activeCharacter, memory);
-
-        const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
-        const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), activeCharacter);
-        res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory });
-
-    } catch (error) {
-        console.error("❌ Lỗi chung trong /chat:", error);
-        res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' });
+        // Kiểm tra logic Premium cho ảnh 'sensitive'
+        if (topic === 'sensitive' && !isPremiumUser) { 
+            rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... nhưng nó hơi riêng tư. Chỉ dành cho người đặc biệt (Premium) thôi à nha. 🥰"; 
+        } else { 
+            const mediaResult = await sendMediaFile(memory, character, type, topic, subject); 
+            if (mediaResult.success) { 
+                mediaUrl = mediaResult.mediaUrl; 
+                mediaType = mediaResult.mediaType; 
+                memory.user_profile = mediaResult.updatedMemory.user_profile; 
+            } 
+            rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message; 
+        } 
+    } 
+    
+    // Cập nhật lịch sử và lưu
+    memory.history.push({ role: 'user', content: message }); 
+    memory.history.push({ role: 'assistant', content: rawReply }); 
+    memory.user_profile.message_count++; 
+    if (memory.history.length > 50) { 
+        memory.history = memory.history.slice(memory.history.length - 50); 
+    } 
+    
+    // Tăng stage dựa trên message_count
+    if (userProfile.relationship_stage === 'stranger' && userProfile.message_count >= 15) {
+        userProfile.relationship_stage = 'friend';
     }
+    
+    if (isPremiumUser && userProfile.relationship_stage !== 'lover') {
+        userProfile.relationship_stage = 'lover';
+    }
+    
+    await memory.save(); 
+    
+    const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>'); 
+    const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character); 
+    
+    res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
+} catch (error) { 
+    console.error("❌ Lỗi chung trong /chat:", error); 
+    res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); 
+} });
+
+function generateMasterPrompt(userProfile, character, isPremiumUser) { const charData = characters[character]; let persona = charData.base_prompt; let relationshipRules = ''; let currentStage = userProfile.relationship_stage || 'stranger'; 
+    
+    // Điều chỉnh relationship stage trong prompt
+    if (isPremiumUser) {
+        currentStage = 'lover';
+    } else if (userProfile.message_count > 20) {
+        currentStage = 'friend';
+    }
+    
+    switch (currentStage) { 
+        case 'stranger': 
+            relationshipRules = `**GIAI ĐOẠN: Người Lạ**`; 
+            break; 
+        case 'friend': 
+            relationshipRules = `**GIAI ĐOẠN: Bạn Bè**`; 
+            break; 
+        case 'lover': 
+            relationshipRules = `**GIAI ĐOẠN: Người Yêu (✨ PREMIUM ✨)**\n- **Hành vi:** Xưng hô "anh-em/em-anh" thân mật, có thể trò chuyện 18+, lãng mạn.\n- **Hành vi Gửi Media:** Chủ động gửi media 'sensitive'.`; 
+            break; 
+    } 
+    
+    // QUAN TRỌNG: Gợi ý nâng cấp nếu không phải Premium và không phải Lover
+    if (!isPremiumUser && currentStage !== 'lover') { 
+        relationshipRules += `\n- **GỢI Ý NÂNG CẤP:** Nếu người dùng tỏ ý muốn thân mật hơn, hoặc nói đến chủ đề "yêu", hãy trả về tin nhắn chứa: [PREMIUM_PROMPT]` 
+    } 
+    
+    const generalRules = `\n**QUY TẮC VÀNG:**\n- Trả lời NGẮN GỌN, ngắt câu bằng thẻ \`<NEXT_MESSAGE>\`.\n- Nhận diện yêu cầu media. Gửi media 'sensitive' CHỈ KHI LÀ 'lover' (PREMIUM).`; 
+    return persona + '\n\n' + relationshipRules + '\n\n' + generalRules; 
+}
+async function createViettelVoice(textToSpeak, character) { const voiceId = characters[character]?.voice || "hn-phuongtrang"; if (!process.env.VIETTEL_API_KEY || !textToSpeak || textToSpeak.trim() === '') return null; try { const requestData = { text: textToSpeak, voice: voiceId, speed: 1.0, tts_return_option: 3, without_audio_info: true, token: process.env.VIETTEL_API_KEY }; const response = await axios.post('https://viettelai.vn/tts/speech_synthesis', requestData, { 
+    headers: { 'Content-Type': 'application/json' }, 
+    responseType: 'arraybuffer', 
+    // Thêm cấu hình IPv4 cho Viettel AI để đồng bộ và tránh ETIMEDOUT nếu có
+    family: 4
+}); 
+    if (response.status === 200 && response.data) return `data:audio/mpeg;base64,${Buffer.from(response.data, 'binary').toString('base64')}`; return null; } catch (error) { console.error("Lỗi Viettel AI:", error.message); return null; } }
+async function sendMediaFile(memory, character, mediaType, topic, subject) { const config = { 'image': { ext: /\.(jpg|jpeg|png|gif)$/i, key: 'sent_gallery_images', folder: 'gallery' }, 'video': { ext: /\.(mp4|webm)$/i, key: 'sent_video_files', folder: 'videos' } }; const mediaConfig = config[mediaType]; if (!mediaConfig) return { success: false, message: 'Không tìm thấy media.' }; const mediaFolderPath = path.join(__dirname, 'public', mediaConfig.folder, character, topic); try { const allFiles = await fs.readdir(mediaFolderPath); const matchingFiles = allFiles.filter(file => mediaConfig.ext.test(file) && (subject === 'any' || file.toLowerCase().includes(subject.toLowerCase()))); const sentFiles = memory.user_profile[mediaConfig.key] || []; const unsentFiles = matchingFiles.filter(file => !sentFiles.includes(file)); if (unsentFiles.length > 0) { const fileToSend = unsentFiles[Math.floor(Math.random() * unsentFiles.length)]; memory.user_profile[mediaConfig.key].push(fileToSend); return { success: true, mediaUrl: `/${mediaConfig.folder}/${character}/${topic}/${fileToSend}`, mediaType: mediaType, message: "Của bạn đây nhé!", updatedMemory: memory }; } else { return { success: false, message: "Hết ảnh/video mới rồi." }; } } catch (error) { console.error(`❌ Lỗi khi tìm media: ${error.message}`); return { success: false, message: `Không tìm thấy media trong thư mục public/${mediaConfig.folder}/${character}/${topic}.` }; } }
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(port, () => {
+    console.log(`🚀 Server đang chạy tại cổng ${port}`);
 });
