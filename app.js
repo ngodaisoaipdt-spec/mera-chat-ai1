@@ -1,4 +1,4 @@
-// app.js - PHIÊN BẢN ĐẦY ĐỦ CUỐI CÙNG (DỌN DẸP CHO RENDER)
+// app.js - PHIÊN BẢN ĐẦY ĐỦ CUỐI CÙNG (DỌN DẸP & HARDCODE IP CHO RENDER)
 
 const express = require('express');
 const dotenv = require('dotenv');
@@ -11,6 +11,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const bodyParser = require('body-parser');
+const https = require('https'); // Thêm để dùng HTTPS Agent
 
 dotenv.config({ override: true });
 const app = express();
@@ -83,7 +84,9 @@ app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
         await new Transaction({ userId: req.user.id, orderCode: orderCode, amount: PREMIUM_PRICE }).save();
         console.log(`Đang gọi SePay cho Order: ${orderCode}`);
 
-        const sepayResponse = await axios.post('https://api.sepay.vn/api/v2/payment/create',
+        // FIX CUỐI CÙNG: DÙNG TRỰC TIẾP IP ĐỂ BỎ QUA LỖI DNS TRÊN RENDER
+        const sepayResponse = await axios.post(
+            'https://125.235.4.59/api/v2/payment/create', // <-- Dùng IP
             {
                 'order_code': orderCode,
                 'amount': PREMIUM_PRICE,
@@ -92,9 +95,15 @@ app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
             {
                 headers: {
                     'Authorization': `Bearer ${process.env.SEPAY_API_TOKEN}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    // Báo cho SePay biết chúng ta đang muốn truy cập host nào
+                    'Host': 'api.sepay.vn'
                 },
-                timeout: 20000
+                timeout: 20000,
+                // Cấu hình Agent để bỏ qua lỗi chứng chỉ do dùng IP thay vì domain
+                httpsAgent: new https.Agent({
+                    rejectUnauthorized: false
+                })
             });
 
         if (sepayResponse.data.code !== 200) {
