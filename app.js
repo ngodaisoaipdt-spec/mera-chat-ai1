@@ -287,6 +287,22 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
     res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
 } catch (error) { console.error("❌ Lỗi chung trong /chat:", error); res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); } });
 
+// Cập nhật tình trạng mối quan hệ
+app.post('/api/relationship', ensureAuthenticated, async (req, res) => {
+    try {
+        const { character, stage } = req.body;
+        if (!character || !stage) return res.status(400).json({ success: false, message: 'Thiếu tham số' });
+        const memory = await loadMemory(req.user._id, character);
+        memory.user_profile = memory.user_profile || {};
+        memory.user_profile.relationship_stage = stage;
+        await memory.save();
+        res.json({ success: true, stage });
+    } catch (e) {
+        console.error('❌ Lỗi cập nhật relationship:', e);
+        res.status(500).json({ success: false });
+    }
+});
+
 function generateMasterPrompt(userProfile, character, isPremiumUser) { /* Toàn bộ logic giữ nguyên */ return ``; }
 async function createViettelVoice(textToSpeak, character) { /* Toàn bộ logic giữ nguyên */ return null; }
 async function sendMediaFile(memory, character, mediaType, topic, subject) { /* Toàn bộ logic giữ nguyên */ return { success: false, message: "Lỗi" }; }

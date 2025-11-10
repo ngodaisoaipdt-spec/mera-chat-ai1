@@ -277,7 +277,36 @@ function initializeChatApp() {
     const premiumBtn = document.getElementById('premiumBtn');
     if (premiumBtn) { premiumBtn.addEventListener('click', handlePremiumClick); }
     document.getElementById('characterAvatarContainer').addEventListener('click', () => { const avatarImage = document.querySelector('.character-avatar'); if (avatarImage) { document.getElementById('lightboxImage').src = avatarImage.src; document.body.classList.add('lightbox-active'); } });
-    document.getElementById('relationshipStatus').addEventListener('click', () => { const descriptions = `CÁC GIAI ĐOẠN MỐI QUAN HỆ:\n\n` + `💔 Người Lạ: Giai đoạn làm quen ban đầu.\n\n` + `🧡 Bạn Bè: Giai đoạn cởi mở, chia sẻ hơn.\n\n` + `💖 Người Yêu (Premium): Mở khóa trò chuyện sâu sắc, lãng mạn, 18+ và media riêng tư!`; alert(descriptions); });
+    // Dropdown chọn mối quan hệ
+    const relationshipStatus = document.getElementById('relationshipStatus');
+    const relationshipMenu = document.getElementById('relationshipMenu');
+    const closeRelationshipMenu = () => relationshipMenu.style.display = 'none';
+    relationshipStatus.addEventListener('click', (e) => {
+        e.stopPropagation();
+        relationshipMenu.style.display = (relationshipMenu.style.display === 'block') ? 'none' : 'block';
+    });
+    document.body.addEventListener('click', (e) => {
+        if (relationshipMenu.style.display === 'block' && !relationshipMenu.contains(e.target)) closeRelationshipMenu();
+    });
+    relationshipMenu.querySelectorAll('.relationship-option').forEach(opt => {
+        opt.addEventListener('click', async () => {
+            const stage = opt.getAttribute('data-stage');
+            try {
+                const res = await fetch('/api/relationship', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ character: currentCharacter, stage })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentMemory.user_profile = currentMemory.user_profile || {};
+                    currentMemory.user_profile.relationship_stage = stage;
+                    updateRelationshipStatus();
+                    closeRelationshipMenu();
+                }
+            } catch (err) { console.error('Lỗi cập nhật relationship:', err); }
+        });
+    });
     document.getElementById('memoriesBtn').addEventListener('click', openMemoriesModal);
     if (SpeechRecognition) { recognition = new SpeechRecognition(); recognition.lang = 'vi-VN'; recognition.onresult = e => { DOMElements.userInput.value = e.results[0][0].transcript.trim(); sendMessageFromInput(); }; recognition.onerror = e => console.error("Lỗi recognition:", e.error); DOMElements.micBtnText.addEventListener('click', () => { if (!isProcessing) try { recognition.start(); } catch (e) {} }); }
     const imageLightbox = document.getElementById('imageLightbox'), closeLightboxBtn = document.getElementById('closeLightboxBtn');
