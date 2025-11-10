@@ -64,22 +64,11 @@
                         </svg>
                         <span>QR Code</span>
                     </button>
-                    <button id="vnpayPaymentBtn" class="payment-method-btn" data-method="vnpay">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                            <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
-                        </svg>
-                        <span>Thanh toán tự động</span>
-                    </button>
                 </div>
             </div>
             <div id="qrCodeArea" class="qr-code-area">
                 <p class="qr-loading">Đang tạo mã thanh toán...</p>
                 <img id="qrCodeImage" src="" alt="Mã QR thanh toán"/>
-            </div>
-            <div id="vnpayArea" class="vnpay-area" style="display: none;">
-                <p class="vnpay-loading">Đang chuyển hướng đến cổng thanh toán...</p>
-                <button id="vnpayRedirectBtn" class="vnpay-redirect-btn" style="display: none;">Thanh toán ngay</button>
             </div>
             <p id="paymentError" style="color: red; margin-top: 10px;"></p>
             <p class="payment-instructions" id="paymentInstructions">Dùng App Ngân hàng hoặc Ví điện tử để quét mã QR</p>

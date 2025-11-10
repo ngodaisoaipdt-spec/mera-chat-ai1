@@ -148,16 +148,16 @@ function updatePaymentMethodUI() {
     const instructions = document.getElementById('paymentInstructions');
     
     if (selectedPaymentMethod === 'qr') {
-        qrBtn.classList.add('active');
-        vnpayBtn.classList.remove('active');
-        qrArea.style.display = 'flex';
-        vnpayArea.style.display = 'none';
+        if (qrBtn) qrBtn.classList.add('active');
+        if (vnpayBtn) vnpayBtn.classList.remove('active');
+        if (qrArea) qrArea.style.display = 'flex';
+        if (vnpayArea) vnpayArea.style.display = 'none';
         instructions.textContent = 'Dùng App Ngân hàng hoặc Ví điện tử để quét mã QR';
     } else {
-        qrBtn.classList.remove('active');
-        vnpayBtn.classList.add('active');
-        qrArea.style.display = 'none';
-        vnpayArea.style.display = 'flex';
+        if (qrBtn) qrBtn.classList.remove('active');
+        if (vnpayBtn) vnpayBtn.classList.add('active');
+        if (qrArea) qrArea.style.display = 'none';
+        if (vnpayArea) vnpayArea.style.display = 'flex';
         instructions.textContent = 'Bạn sẽ được chuyển hướng đến cổng thanh toán VNPay';
     }
 }
