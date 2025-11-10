@@ -218,7 +218,9 @@ async function initiatePayment() {
             qrLoadingText.textContent = 'Đang tạo mã QR...';
             const base = 'https://img.vietqr.io/image';
             const template = 'compact';
-            const url = `${base}/${data.acqId}-${data.accountNo}-${template}.png?amount=${encodeURIComponent(data.amount)}&addInfo=${encodeURIComponent(data.orderCode)}&accountName=${encodeURIComponent(data.accountName)}`;
+            // Thêm tiền tố SEVQR để ngân hàng luôn đính kèm nội dung trong biến động (khuyến nghị từ SePay)
+            const memo = `SEVQR ${data.orderCode}`;
+            const url = `${base}/${data.acqId}-${data.accountNo}-${template}.png?amount=${encodeURIComponent(data.amount)}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(data.accountName)}`;
             qrCodeImage.src = url;
             qrCodeImage.style.display = 'block';
             qrLoadingText.style.display = 'none';
