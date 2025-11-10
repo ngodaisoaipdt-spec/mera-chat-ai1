@@ -165,7 +165,16 @@ app.post('/api/sepay-webhook', async (req, res) => {
 
         // Hỗ trợ nhiều trạng thái thành công
         const statusRaw = String(payload.status || payload.data?.status || payload.result || payload.event || '').toUpperCase();
-        const isSuccess = ['SUCCESS', 'PAID', 'COMPLETED', 'DONE', 'SUCCESSFUL'].some(k => statusRaw.includes(k)) || payload.success === true;
+        let isSuccess = ['SUCCESS', 'PAID', 'COMPLETED', 'DONE', 'SUCCESSFUL'].some(k => statusRaw.includes(k)) || payload.success === true;
+        // Một số webhook Bank API không có status, dùng transferType/amount để xác định "tiền vào"
+        const transferType = String(payload.transferType || payload.data?.transferType || '').toLowerCase();
+        const transferAmount = Number(payload.transferAmount || payload.amount || payload.data?.amount || 0);
+        if (!isSuccess) {
+            if (transferType === 'in' || transferType === 'credit') isSuccess = true;
+            else if (transferAmount > 0 && /CT\s*DEN|SEVQR/i.test(String(payload.description || payload.content || ''))) {
+                isSuccess = true;
+            }
+        }
 
         if (!orderCode) {
             console.warn('⚠️ Webhook không có orderCode/memo hợp lệ.');
