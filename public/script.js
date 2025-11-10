@@ -1,5 +1,3 @@
-// script.js - PHIÊN BẢN CUỐI CÙNG VỚI THANH TOÁN (ĐÃ SỬA LỖI ĐĂNG NHẬP)
-
 let conversationHistory = [];
 let recognition = null;
 let isProcessing = false;
@@ -18,6 +16,7 @@ const DOMElements = {
     micBtnText: document.getElementById("micBtnText"),
     userAvatar: document.getElementById('userAvatar'),
     userName: document.getElementById('userName'),
+    premiumBtn: document.getElementById('premiumBtn')
 };
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -25,12 +24,26 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 window.onload = async () => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('login_error')) {
-        alert("Đăng nhập thất bại. Vui lòng kiểm tra lại cấu hình trên Google Cloud và file .env của bạn.");
+        alert("Đăng nhập thất bại.");
         window.history.replaceState({}, document.title, "/");
     }
-    
-    // THÊM ĐOẠN NÀY: Dọn dẹp URL sau khi đăng nhập thành công
     if (urlParams.has('login')) {
+        window.history.replaceState({}, document.title, "/");
+    }
+    if (urlParams.has('payment')) {
+        const paymentStatus = urlParams.get('payment');
+        if (paymentStatus === 'success') {
+            alert("Thanh toán thành công! Chào mừng bạn đến với Premium.");
+            const userResponse = await fetch('/api/current_user');
+            if (userResponse.ok) currentUser = await userResponse.json();
+            if (window.chatAppInitialized) await loadChatData();
+        } else if (paymentStatus === 'failed') {
+            alert("Thanh toán thất bại. Vui lòng thử lại.");
+        } else if (paymentStatus === 'invalid') {
+            alert("Thanh toán không hợp lệ. Vui lòng liên hệ hỗ trợ.");
+        } else if (paymentStatus === 'error') {
+            alert("Có lỗi xảy ra trong quá trình thanh toán. Vui lòng thử lại.");
+        }
         window.history.replaceState({}, document.title, "/");
     }
 
@@ -41,7 +54,6 @@ window.onload = async () => {
             if (currentUser) {
                 showCharacterSelection();
             } else {
-                // Trường hợp API trả về ok nhưng không có user (hiếm gặp)
                 showLoginScreen();
             }
         } else {
@@ -52,7 +64,6 @@ window.onload = async () => {
         console.error("Lỗi kiểm tra session:", error);
     }
 };
-
 
 function showLoginScreen() {
     DOMElements.loginScreen.classList.add('active');
@@ -99,124 +110,181 @@ async function loadChatData() {
         const response = await fetch(`/api/chat-data/${currentCharacter}`);
         if (!response.ok) throw new Error('Không thể tải dữ liệu.');
         const data = await response.json();
-        
         currentMemory = data.memory;
         currentUser.isPremium = data.isPremium;
         conversationHistory = currentMemory.history || [];
-        
         DOMElements.chatBox.innerHTML = '';
         if (conversationHistory.length === 0) {
             addMessage(DOMElements.chatBox, currentCharacter, currentCharacter === 'mera' ? "Chào anh, em là Mera nè. 🥰" : "Chào em, anh là Trương Thắng.");
         } else {
-             conversationHistory.forEach(msg => {
-                // Thêm tin nhắn từ history, loại bỏ [PREMIUM_PROMPT] khỏi hiển thị
+            conversationHistory.forEach(msg => {
                 if (msg.role === 'user') addMessage(DOMElements.chatBox, "Bạn", msg.content);
-                if (msg.role === 'assistant') {
-                    if (msg.content.includes('[PREMIUM_PROMPT]')) {
-                         // Gặp [PREMIUM_PROMPT], gọi hàm thêm message Premium đặc biệt
-                         addMessage(DOMElements.chatBox, currentCharacter, "[PREMIUM_PROMPT]");
-                    } else {
-                         addMessage(DOMElements.chatBox, currentCharacter, msg.content);
-                    }
-                }
+                if (msg.role === 'assistant') addMessage(DOMElements.chatBox, currentCharacter, msg.content);
             });
         }
         updateRelationshipStatus();
         updateUIForPremium();
-        // Cuộn xuống cuối sau khi load
-        DOMElements.chatBox.scrollTop = DOMElements.chatBox.scrollHeight; 
+        DOMElements.chatBox.scrollTop = DOMElements.chatBox.scrollHeight;
     } catch (error) {
         console.error("Lỗi tải lịch sử chat:", error);
     }
 }
 
+let selectedPaymentMethod = 'qr';
+
 function handlePremiumClick() {
+    if (currentUser && currentUser.isPremium) return;
     document.getElementById('paymentScreen').classList.add('active');
+    selectedPaymentMethod = 'qr';
+    updatePaymentMethodUI();
     initiatePayment();
+}
+
+function updatePaymentMethodUI() {
+    const qrBtn = document.getElementById('qrPaymentBtn');
+    const vnpayBtn = document.getElementById('vnpayPaymentBtn');
+    const qrArea = document.getElementById('qrCodeArea');
+    const vnpayArea = document.getElementById('vnpayArea');
+    const instructions = document.getElementById('paymentInstructions');
+    
+    if (selectedPaymentMethod === 'qr') {
+        qrBtn.classList.add('active');
+        vnpayBtn.classList.remove('active');
+        qrArea.style.display = 'flex';
+        vnpayArea.style.display = 'none';
+        instructions.textContent = 'Dùng App Ngân hàng hoặc Ví điện tử để quét mã QR';
+    } else {
+        qrBtn.classList.remove('active');
+        vnpayBtn.classList.add('active');
+        qrArea.style.display = 'none';
+        vnpayArea.style.display = 'flex';
+        instructions.textContent = 'Bạn sẽ được chuyển hướng đến cổng thanh toán VNPay';
+    }
 }
 
 async function initiatePayment() {
     const qrCodeImage = document.getElementById('qrCodeImage');
     const qrLoadingText = document.querySelector('.qr-loading');
-    const paymentError = document.getElementById('paymentError'); // Element để hiển thị lỗi
-
+    const paymentError = document.getElementById('paymentError');
+    const vnpayArea = document.getElementById('vnpayArea');
+    const vnpayLoading = document.querySelector('.vnpay-loading');
+    const vnpayRedirectBtn = document.getElementById('vnpayRedirectBtn');
+    
+    paymentError.textContent = '';
+    
+    if (selectedPaymentMethod === 'vnpay') {
+        vnpayArea.style.display = 'flex';
+        vnpayLoading.style.display = 'block';
+        vnpayRedirectBtn.style.display = 'none';
+        
+        try {
+            const response = await fetch('/api/create-payment', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentMethod: 'vnpay' })
+            });
+            const data = await response.json();
+            if (data.success && data.paymentUrl) {
+                vnpayLoading.textContent = 'Sẵn sàng thanh toán!';
+                vnpayRedirectBtn.style.display = 'block';
+                vnpayRedirectBtn.onclick = () => {
+                    window.location.href = data.paymentUrl;
+                };
+            } else {
+                vnpayLoading.style.display = 'none';
+                paymentError.textContent = data.message || "Lỗi khi tạo thanh toán tự động.";
+            }
+        } catch (error) {
+            console.error("Lỗi trong quá trình initiatePayment:", error);
+            vnpayLoading.style.display = 'none';
+            paymentError.textContent = "Lỗi kết nối đến server.";
+        }
+        return;
+    }
+    
+    // QR Payment method
+    if (typeof VietQR === 'undefined') {
+        paymentError.textContent = 'Lỗi tải thư viện thanh toán, vui lòng làm mới trang.';
+        qrLoadingText.style.display = 'none';
+        return;
+    }
     qrCodeImage.style.display = 'none';
     qrLoadingText.style.display = 'block';
-    qrLoadingText.textContent = 'Đang tạo mã thanh toán...';
-    paymentError.textContent = ''; // Xóa lỗi cũ
-
+    qrLoadingText.textContent = 'Đang lấy thông tin thanh toán...';
+    
     try {
-        const response = await fetch('/api/create-payment', { method: 'POST' });
+        const response = await fetch('/api/create-payment', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentMethod: 'qr' })
+        });
         const data = await response.json();
         if (data.success) {
-            qrCodeImage.src = data.qr_image;
+            qrLoadingText.textContent = 'Đang tạo mã QR...';
+            const vietQR = new VietQR({});
+            const qrDataURL = await vietQR.genQRCodeBase64({
+                bank: data.acqId, accountName: data.accountName, accountNumber: data.accountNo,
+                amount: data.amount, memo: data.orderCode, template: 'compact'
+            });
+            qrCodeImage.src = qrDataURL;
             qrCodeImage.style.display = 'block';
             qrLoadingText.style.display = 'none';
             startCheckingPaymentStatus(data.orderCode);
         } else {
-            // Xử lý lỗi từ server (nếu server gửi lại message lỗi)
             qrLoadingText.style.display = 'none';
-            paymentError.textContent = data.message || "Lỗi không xác định khi tạo mã QR. Vui lòng kiểm tra console.";
+            paymentError.textContent = data.message || "Lỗi khi lấy thông tin thanh toán.";
         }
     } catch (error) {
-        console.error("Lỗi kết nối /api/create-payment:", error);
+        console.error("Lỗi trong quá trình initiatePayment:", error);
         qrLoadingText.style.display = 'none';
-        paymentError.textContent = "Lỗi kết nối. Vui lòng kiểm tra Network/Firewall hoặc URL Ngrok.";
+        paymentError.textContent = "Lỗi kết nối đến server.";
     }
 }
 
 function startCheckingPaymentStatus(orderCode) {
     if (paymentCheckInterval) clearInterval(paymentCheckInterval);
-    const paymentBox = document.querySelector('.payment-box');
-    
-    // Tạo element cho trạng thái chờ
-    let checkStatusText = document.getElementById('checkStatusText');
-    if (!checkStatusText) {
-        checkStatusText = document.createElement('p');
-        checkStatusText.id = 'checkStatusText';
-        checkStatusText.className = 'payment-instructions';
-        checkBox.appendChild(checkStatusText);
-    }
-    
     paymentCheckInterval = setInterval(async () => {
-        checkStatusText.textContent = "⌛ Đang chờ thanh toán được xác nhận...";
-
-        const response = await fetch(`/api/payment-status/${orderCode}`);
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-            clearInterval(paymentCheckInterval);
-            currentUser = data.user;
-            document.getElementById('paymentScreen').classList.remove('active');
-            alert("Thanh toán thành công! Chào mừng bạn đến với Premium.");
-            checkStatusText.remove(); // Xóa thông báo chờ
-            updateUIForPremium();
-            await loadChatData(); // Tải lại dữ liệu để AI nhận biết trạng thái mới
-        }
+        try {
+            const response = await fetch(`/api/payment-status/${orderCode}`);
+            const data = await response.json();
+            if (data.status === 'success') {
+                clearInterval(paymentCheckInterval);
+                document.getElementById('paymentScreen').classList.remove('active');
+                alert("Thanh toán thành công! Chào mừng bạn đến với Premium.");
+                const userResponse = await fetch('/api/current_user');
+                if (userResponse.ok) currentUser = await userResponse.json();
+                await loadChatData();
+            }
+        } catch (error) { console.error("Lỗi kiểm tra trạng thái thanh toán:", error); }
     }, 3000);
 }
 
 function updateUIForPremium() {
+    const premiumBtn = document.getElementById('premiumBtn');
     if (currentUser && currentUser.isPremium) {
         const statusBar = document.getElementById('relationshipStatus');
         if (statusBar) {
             statusBar.style.background = 'linear-gradient(45deg, var(--primary-color), var(--secondary-color))';
             statusBar.style.color = 'white';
             statusBar.title = "Bạn đã là Premium!";
-            statusBar.textContent = "💖 Người Yêu (Premium)"; // Cập nhật trạng thái
+            statusBar.textContent = "💖 Người Yêu";
         }
-        document.querySelectorAll('.premium-prompt-message').forEach(el => el.remove()); // Xóa tất cả các thông báo Premium
+        if (premiumBtn) { premiumBtn.classList.add('is-premium'); premiumBtn.title = "Bạn đã là thành viên Premium!"; }
+        document.querySelectorAll('.premium-prompt-message').forEach(el => el.remove());
+    } else {
+        if (premiumBtn) { premiumBtn.classList.remove('is-premium'); premiumBtn.title = "Nâng cấp Premium"; }
     }
 }
 
 function initializeChatApp() {
-    // ... (Không thay đổi, giữ nguyên các listeners)
     DOMElements.sendBtn.addEventListener("click", sendMessageFromInput);
     DOMElements.userInput.addEventListener("keypress", e => { if (e.key === "Enter") sendMessageFromInput(); });
+    const premiumBtn = document.getElementById('premiumBtn');
+    if (premiumBtn) { premiumBtn.addEventListener('click', handlePremiumClick); }
     document.getElementById('characterAvatarContainer').addEventListener('click', () => { const avatarImage = document.querySelector('.character-avatar'); if (avatarImage) { document.getElementById('lightboxImage').src = avatarImage.src; document.body.classList.add('lightbox-active'); } });
     document.getElementById('relationshipStatus').addEventListener('click', () => { const descriptions = `CÁC GIAI ĐOẠN MỐI QUAN HỆ:\n\n` + `💔 Người Lạ: Giai đoạn làm quen ban đầu.\n\n` + `🧡 Bạn Bè: Giai đoạn cởi mở, chia sẻ hơn.\n\n` + `💖 Người Yêu (Premium): Mở khóa trò chuyện sâu sắc, lãng mạn, 18+ và media riêng tư!`; alert(descriptions); });
     document.getElementById('memoriesBtn').addEventListener('click', openMemoriesModal);
-    if (SpeechRecognition) { recognition = new SpeechRecognition(); recognition.lang = 'vi-VN'; recognition.onresult = e => { DOMElements.userInput.value = e.results[0][0].transcript.trim(); sendMessageFromInput(); }; recognition.onerror = e => console.error("Lỗi recognition:", e.error); DOMElements.micBtnText.addEventListener('click', () => { if (!isProcessing) try { recognition.start(); } catch (e) { } }); }
+    if (SpeechRecognition) { recognition = new SpeechRecognition(); recognition.lang = 'vi-VN'; recognition.onresult = e => { DOMElements.userInput.value = e.results[0][0].transcript.trim(); sendMessageFromInput(); }; recognition.onerror = e => console.error("Lỗi recognition:", e.error); DOMElements.micBtnText.addEventListener('click', () => { if (!isProcessing) try { recognition.start(); } catch (e) {} }); }
     const imageLightbox = document.getElementById('imageLightbox'), closeLightboxBtn = document.getElementById('closeLightboxBtn');
     document.body.addEventListener('click', (e) => { if (e.target.matches('.chat-image')) { document.getElementById('lightboxImage').src = e.target.src; document.body.classList.add('lightbox-active'); } });
     const closeLightbox = () => document.body.classList.remove('lightbox-active');
@@ -227,27 +295,29 @@ function initializeChatApp() {
     if (memoriesModal) memoriesModal.addEventListener('click', e => { if (e.target === memoriesModal) document.body.classList.remove('memories-active'); });
     const closePaymentBtn = document.getElementById('closePaymentBtn');
     closePaymentBtn.addEventListener('click', () => { document.getElementById('paymentScreen').classList.remove('active'); if (paymentCheckInterval) clearInterval(paymentCheckInterval); });
+    
+    const qrPaymentBtn = document.getElementById('qrPaymentBtn');
+    const vnpayPaymentBtn = document.getElementById('vnpayPaymentBtn');
+    if (qrPaymentBtn) {
+        qrPaymentBtn.addEventListener('click', () => {
+            selectedPaymentMethod = 'qr';
+            updatePaymentMethodUI();
+            initiatePayment();
+        });
+    }
+    if (vnpayPaymentBtn) {
+        vnpayPaymentBtn.addEventListener('click', () => {
+            selectedPaymentMethod = 'vnpay';
+            updatePaymentMethodUI();
+            initiatePayment();
+        });
+    }
 }
 
 function sendMessageFromInput() { const message = DOMElements.userInput.value.trim(); if (!message || isProcessing) return; addMessage(DOMElements.chatBox, "Bạn", message); DOMElements.userInput.value = ""; const loadingId = addMessage(DOMElements.chatBox, currentCharacter, "💭 Đang suy nghĩ...", null, true); sendMessageToServer(message, loadingId); }
 async function sendMessageToServer(messageText, loadingId) { setProcessing(true); try { const response = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: messageText, character: currentCharacter }) }); if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`); const data = await response.json(); if (data.updatedMemory) currentMemory = data.updatedMemory; removeMessage(loadingId); updateRelationshipStatus(); const messages = data.displayReply.split('<NEXT_MESSAGE>').filter(m => m.trim().length > 0); for (let i = 0; i < messages.length; i++) { const msg = messages[i].trim(); addMessage(DOMElements.chatBox, currentCharacter, msg, (i === 0) ? data.audio : null, false, null, (i === messages.length - 1) ? data.mediaUrl : null, (i === messages.length - 1) ? data.mediaType : null); if (i < messages.length - 1) await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30)); } } catch (error) { console.error("Lỗi gửi tin nhắn:", error); if (loadingId) removeMessage(loadingId); addMessage(DOMElements.chatBox, currentCharacter, "Xin lỗi, có lỗi kết nối mất rồi!"); } finally { setProcessing(false); } }
-function setProcessing(state) { isProcessing = state; [DOMElements.userInput, DOMElements.sendBtn, DOMElements.micBtnText].forEach(el => { if (el) el.disabled = state; }); }
-function updateRelationshipStatus() { const stage = currentMemory?.user_profile?.relationship_stage || 'stranger'; const statusEl = document.getElementById('relationshipStatus'); if (!statusEl) return; const stages = { 'stranger': '💔 Người Lạ', 'friend': '🧡 Bạn Bè', 'lover': '💖 Người Yêu' }; 
-    statusEl.textContent = stages[stage] || '💔 Người Lạ';
-    // Đảm bảo trạng thái Premium luôn được hiển thị đúng
-    if (currentUser && currentUser.isPremium) {
-         statusEl.textContent = "💖 Người Yêu (Premium)";
-    }
-}
-function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào được chia sẻ...</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); mediaClone.style.marginTop = '0'; if (el.tagName === 'IMG') { mediaClone.onclick = () => { document.getElementById('lightboxImage').src = el.src; document.body.classList.add('lightbox-active'); }; } else if (el.tagName === 'VIDEO') { memoryItem.classList.add('video'); mediaClone.muted = true; mediaClone.onclick = () => { if (mediaClone.requestFullscreen) mediaClone.requestFullscreen(); }; } memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
-function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}-${Math.random()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; 
-    // Xử lý thông báo Premium đặc biệt
-    if (text.includes('[PREMIUM_PROMPT]')) { 
-        if(currentUser && currentUser.isPremium) return; // Không hiển thị nếu đã Premium
-        const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; 
-        const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp lên Premium chỉ với <strong>48.000đ/tháng</strong> để <strong>mở khóa giai đoạn Người Yêu</strong>! Khám phá những tâm sự sâu sắc nhất và truy cập <strong>toàn bộ album ảnh & video riêng tư</strong> của ${charName}.</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; 
-        if (chatBox) { chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; } return id; 
-    } 
-    
-    const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" onclick='new Audio(\`${audioBase64}\`).play()'>🔊</button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType) { switch (mediaType) { case 'image': mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; break; case 'video': mediaHtml = `<video controls playsinline muted class="chat-video" src="${mediaUrl}"></video>`; break; } } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; if (chatBox) { chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; } if (audioBase64 && !isLoading && !document.hidden) { new Audio(audioBase64).play(); } return id; }
+function setProcessing(state) { isProcessing = state;[DOMElements.userInput, DOMElements.sendBtn, DOMElements.micBtnText].forEach(el => { if (el) el.disabled = state; }); }
+function updateRelationshipStatus() { const stage = currentMemory?.user_profile?.relationship_stage || 'stranger'; const statusEl = document.getElementById('relationshipStatus'); if (!statusEl) return; const stages = { 'stranger': '💔 Người Lạ', 'friend': '🧡 Bạn Bè', 'lover': '💖 Người Yêu' }; statusEl.textContent = (currentUser && currentUser.isPremium) ? "💖 Người Yêu" : (stages[stage] || '💔 Người Lạ'); }
+function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
+function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" onclick='new Audio(\`${audioBase64}\`).play()'>🔊</button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; if (audioBase64 && !isLoading && !document.hidden) { new Audio(audioBase64).play(); } return id; }
 function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
