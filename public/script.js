@@ -262,13 +262,16 @@ function updateUIForPremium() {
             statusBar.style.background = 'linear-gradient(45deg, var(--primary-color), var(--secondary-color))';
             statusBar.style.color = 'white';
             statusBar.title = "Bạn đã là Premium!";
-            statusBar.textContent = "💖 Người Yêu";
+            // Không tự động đổi trạng thái; để người dùng phát triển mối quan hệ dần
+            updateRelationshipStatus();
         }
         if (premiumBtn) { premiumBtn.classList.add('is-premium'); premiumBtn.title = "Bạn đã là thành viên Premium!"; }
         document.querySelectorAll('.premium-prompt-message').forEach(el => el.remove());
     } else {
         if (premiumBtn) { premiumBtn.classList.remove('is-premium'); premiumBtn.title = "Nâng cấp Premium"; }
     }
+    // Sau khi tình trạng Premium thay đổi, render lại menu để cập nhật biểu tượng khóa/mở
+    if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
 }
 
 function initializeChatApp() {
@@ -281,6 +284,47 @@ function initializeChatApp() {
     const relationshipStatus = document.getElementById('relationshipStatus');
     const relationshipMenu = document.getElementById('relationshipMenu');
     const closeRelationshipMenu = () => relationshipMenu.style.display = 'none';
+
+    function renderRelationshipMenu() {
+        if (!relationshipMenu) return;
+        const isPremium = !!(currentUser && currentUser.isPremium);
+        const options = [
+            { stage: 'stranger', label: '💔 Người Lạ', locked: false },
+            { stage: 'friend', label: '🧡 Bạn Thân', locked: false },
+            { stage: 'lover', label: `${isPremium ? '🔓' : '🔒'} 💖 Người Yêu`, locked: !isPremium },
+            { stage: 'mistress', label: `${isPremium ? '🔓' : '🔒'} 💘 Tình Nhân`, locked: !isPremium }
+        ];
+        relationshipMenu.innerHTML = options.map(o => `<div class="relationship-option ${o.locked ? 'locked' : ''}" data-stage="${o.stage}">${o.label}</div>`).join('');
+        bindRelationshipOptionClicks();
+    }
+    window.renderRelationshipMenu = renderRelationshipMenu;
+
+    function bindRelationshipOptionClicks() {
+        relationshipMenu.querySelectorAll('.relationship-option').forEach(opt => {
+            opt.addEventListener('click', async () => {
+                const stage = opt.getAttribute('data-stage');
+                const isLocked = opt.classList.contains('locked');
+                if (isLocked) { closeRelationshipMenu(); handlePremiumClick(); return; }
+                try {
+                    const res = await fetch('/api/relationship', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ character: currentCharacter, stage })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        currentMemory.user_profile = currentMemory.user_profile || {};
+                        currentMemory.user_profile.relationship_stage = stage;
+                        updateRelationshipStatus();
+                        closeRelationshipMenu();
+                    }
+                } catch (err) { console.error('Lỗi cập nhật relationship:', err); }
+            });
+        });
+    }
+
+    // Khởi tạo menu lần đầu
+    renderRelationshipMenu();
     relationshipStatus.addEventListener('click', (e) => {
         e.stopPropagation();
         relationshipMenu.style.display = (relationshipMenu.style.display === 'block') ? 'none' : 'block';
@@ -288,25 +332,7 @@ function initializeChatApp() {
     document.body.addEventListener('click', (e) => {
         if (relationshipMenu.style.display === 'block' && !relationshipMenu.contains(e.target)) closeRelationshipMenu();
     });
-    relationshipMenu.querySelectorAll('.relationship-option').forEach(opt => {
-        opt.addEventListener('click', async () => {
-            const stage = opt.getAttribute('data-stage');
-            try {
-                const res = await fetch('/api/relationship', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ character: currentCharacter, stage })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    currentMemory.user_profile = currentMemory.user_profile || {};
-                    currentMemory.user_profile.relationship_stage = stage;
-                    updateRelationshipStatus();
-                    closeRelationshipMenu();
-                }
-            } catch (err) { console.error('Lỗi cập nhật relationship:', err); }
-        });
-    });
+
     document.getElementById('memoriesBtn').addEventListener('click', openMemoriesModal);
     if (SpeechRecognition) { recognition = new SpeechRecognition(); recognition.lang = 'vi-VN'; recognition.onresult = e => { DOMElements.userInput.value = e.results[0][0].transcript.trim(); sendMessageFromInput(); }; recognition.onerror = e => console.error("Lỗi recognition:", e.error); DOMElements.micBtnText.addEventListener('click', () => { if (!isProcessing) try { recognition.start(); } catch (e) {} }); }
     const imageLightbox = document.getElementById('imageLightbox'), closeLightboxBtn = document.getElementById('closeLightboxBtn');
@@ -341,7 +367,7 @@ function initializeChatApp() {
 function sendMessageFromInput() { const message = DOMElements.userInput.value.trim(); if (!message || isProcessing) return; addMessage(DOMElements.chatBox, "Bạn", message); DOMElements.userInput.value = ""; const loadingId = addMessage(DOMElements.chatBox, currentCharacter, "💭 Đang suy nghĩ...", null, true); sendMessageToServer(message, loadingId); }
 async function sendMessageToServer(messageText, loadingId) { setProcessing(true); try { const response = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: messageText, character: currentCharacter }) }); if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`); const data = await response.json(); if (data.updatedMemory) currentMemory = data.updatedMemory; removeMessage(loadingId); updateRelationshipStatus(); const messages = data.displayReply.split('<NEXT_MESSAGE>').filter(m => m.trim().length > 0); for (let i = 0; i < messages.length; i++) { const msg = messages[i].trim(); addMessage(DOMElements.chatBox, currentCharacter, msg, (i === 0) ? data.audio : null, false, null, (i === messages.length - 1) ? data.mediaUrl : null, (i === messages.length - 1) ? data.mediaType : null); if (i < messages.length - 1) await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30)); } } catch (error) { console.error("Lỗi gửi tin nhắn:", error); if (loadingId) removeMessage(loadingId); addMessage(DOMElements.chatBox, currentCharacter, "Xin lỗi, có lỗi kết nối mất rồi!"); } finally { setProcessing(false); } }
 function setProcessing(state) { isProcessing = state;[DOMElements.userInput, DOMElements.sendBtn, DOMElements.micBtnText].forEach(el => { if (el) el.disabled = state; }); }
-function updateRelationshipStatus() { const stage = currentMemory?.user_profile?.relationship_stage || 'stranger'; const statusEl = document.getElementById('relationshipStatus'); if (!statusEl) return; const stages = { 'stranger': '💔 Người Lạ', 'friend': '🧡 Bạn Bè', 'lover': '💖 Người Yêu' }; statusEl.textContent = (currentUser && currentUser.isPremium) ? "💖 Người Yêu" : (stages[stage] || '💔 Người Lạ'); }
+function updateRelationshipStatus() { const stage = currentMemory?.user_profile?.relationship_stage || 'stranger'; const statusEl = document.getElementById('relationshipStatus'); if (!statusEl) return; const stages = { 'stranger': '💔 Người Lạ', 'friend': '🧡 Bạn Thân', 'lover': '💖 Người Yêu', 'mistress': '💘 Tình Nhân' }; statusEl.textContent = (stages[stage] || '💔 Người Lạ'); }
 function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
 function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" onclick='new Audio(\`${audioBase64}\`).play()'>🔊</button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; if (audioBase64 && !isLoading && !document.hidden) { new Audio(audioBase64).play(); } return id; }
 function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
