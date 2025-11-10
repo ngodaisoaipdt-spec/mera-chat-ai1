@@ -203,11 +203,6 @@ async function initiatePayment() {
     }
     
     // QR Payment method
-    if (typeof VietQR === 'undefined') {
-        paymentError.textContent = 'Lỗi tải thư viện thanh toán, vui lòng làm mới trang.';
-        qrLoadingText.style.display = 'none';
-        return;
-    }
     qrCodeImage.style.display = 'none';
     qrLoadingText.style.display = 'block';
     qrLoadingText.textContent = 'Đang lấy thông tin thanh toán...';
@@ -221,12 +216,10 @@ async function initiatePayment() {
         const data = await response.json();
         if (data.success) {
             qrLoadingText.textContent = 'Đang tạo mã QR...';
-            const vietQR = new VietQR({});
-            const qrDataURL = await vietQR.genQRCodeBase64({
-                bank: data.acqId, accountName: data.accountName, accountNumber: data.accountNo,
-                amount: data.amount, memo: data.orderCode, template: 'compact'
-            });
-            qrCodeImage.src = qrDataURL;
+            const base = 'https://img.vietqr.io/image';
+            const template = 'compact';
+            const url = `${base}/${data.acqId}-${data.accountNo}-${template}.png?amount=${encodeURIComponent(data.amount)}&addInfo=${encodeURIComponent(data.orderCode)}&accountName=${encodeURIComponent(data.accountName)}`;
+            qrCodeImage.src = url;
             qrCodeImage.style.display = 'block';
             qrLoadingText.style.display = 'none';
             startCheckingPaymentStatus(data.orderCode);
