@@ -147,21 +147,69 @@ function createVNPayPaymentUrl(orderCode, amount, req) {
 }
 
 app.post('/api/sepay-webhook', async (req, res) => {
-    const data = req.body;
-    console.log("🔔 Webhook từ SePay/Casso nhận được:", data);
-    const orderCode = data.description || data.memo || data.order_code;
-    if (orderCode && (data.status === 'SUCCESS' || data.status === 'success')) {
-        try {
-            const transaction = await Transaction.findOne({ orderCode: orderCode });
-            if (transaction && transaction.status === 'pending') {
-                transaction.status = 'success';
-                await transaction.save();
-                await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
-                console.log(`✅ Nâng cấp Premium thành công qua Webhook cho user: ${transaction.userId} với order ${orderCode}`);
-            }
-        } catch (error) { console.error("❌ Lỗi xử lý Webhook:", error); }
+    try {
+        const payload = req.body || {};
+        console.log("🔔 Webhook từ SePay/Casso nhận được:", payload);
+
+        // Hỗ trợ nhiều tên trường khác nhau cho "nội dung/memo"
+        const possibleMemoFields = [
+            payload.description, payload.memo, payload.order_code, payload.content, payload.addInfo, payload.note,
+            payload.txContent, payload.message, payload.comment,
+            payload.data?.description, payload.data?.addInfo, payload.data?.memo
+        ].filter(v => typeof v === 'string');
+
+        let memo = possibleMemoFields.find(Boolean) || '';
+        // Trích xuất MERACHATxxxx nếu có
+        const matched = memo.match(/MERACHAT\d+/i);
+        const orderCode = matched ? matched[0] : memo;
+
+        // Hỗ trợ nhiều trạng thái thành công
+        const statusRaw = String(payload.status || payload.data?.status || payload.result || payload.event || '').toUpperCase();
+        const isSuccess = ['SUCCESS', 'PAID', 'COMPLETED', 'DONE', 'SUCCESSFUL'].some(k => statusRaw.includes(k)) || payload.success === true;
+
+        if (!orderCode) {
+            console.warn('⚠️ Webhook không có orderCode/memo hợp lệ.');
+            return res.status(200).send('NO_ORDER_CODE');
+        }
+
+        if (!isSuccess) {
+            console.warn(`⚠️ Webhook chưa ở trạng thái thành công (status=${statusRaw}).`);
+            return res.status(200).send('IGNORED');
+        }
+
+        const transaction = await Transaction.findOne({ orderCode });
+        if (transaction && transaction.status === 'pending') {
+            transaction.status = 'success';
+            await transaction.save();
+            await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
+            console.log(`✅ Nâng cấp Premium thành công qua Webhook cho user: ${transaction.userId} với order ${orderCode}`);
+        } else {
+            console.log(`ℹ️ Không tìm thấy transaction pending cho order ${orderCode} (có thể đã xử lý).`);
+        }
+
+        res.status(200).send('OK');
+    } catch (err) {
+        console.error('❌ Lỗi xử lý Webhook:', err);
+        res.status(200).send('ERROR');
     }
-    res.status(200).send("OK");
+});
+
+// Endpoint xác nhận thủ công (dùng khi cần test nếu webhook chậm)
+app.post('/api/confirm-payment', ensureAuthenticated, async (req, res) => {
+    try {
+        const { orderCode } = req.body;
+        if (!orderCode) return res.status(400).json({ success: false, message: 'Thiếu orderCode' });
+        const transaction = await Transaction.findOne({ orderCode, userId: req.user.id });
+        if (!transaction) return res.status(404).json({ success: false, message: 'Không tìm thấy giao dịch' });
+        if (transaction.status === 'success') return res.json({ success: true, message: 'Đã xác nhận trước đó' });
+        transaction.status = 'success';
+        await transaction.save();
+        await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
+        return res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false });
+    }
 });
 
 app.get('/api/vnpay-return', async (req, res) => {
