@@ -61,6 +61,8 @@ body.memories-active .modal { display:flex; opacity: 1; }
 .qr-code-area { min-height: 250px; display: flex; justify-content: center; align-items: center; }
 #qrCodeImage { width: 250px; height: 250px; border-radius: 10px; border: 1px solid #eee; display: none; }
 .qr-loading { font-style: italic; color: #888; }
+.bank-info { margin-top: 10px; font-size: 0.9em; color: #555; text-align: left; line-height: 1.4; }
+.bank-info p { margin: 2px 0; }
 .payment-instructions { font-size: 0.9em; margin-top: 15px; color: #777; }
 .payment-method-selection { margin-bottom: 20px; }
 .payment-methods { display: flex; gap: 10px; justify-content: center; }
