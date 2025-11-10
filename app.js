@@ -107,6 +107,15 @@ function createVNPayPaymentUrl(orderCode, amount, req) {
     const createDate = formatDateVNPay(date);
     const expireDate = formatDateVNPay(new Date(date.getTime() + 15 * 60000));
     
+    // Try to get a clean IPv4 address for VNPay
+    const rawIp =
+        (req.headers['x-forwarded-for'] && req.headers['x-forwarded-for'].split(',')[0].trim()) ||
+        req.connection?.remoteAddress ||
+        req.socket?.remoteAddress ||
+        (req.connection && req.connection.socket && req.connection.socket.remoteAddress) ||
+        '127.0.0.1';
+    const ipv4 = rawIp.replace('::ffff:', '') || '127.0.0.1';
+    
     const vnp_Params = {};
     vnp_Params['vnp_Version'] = '2.1.0';
     vnp_Params['vnp_Command'] = 'pay';
@@ -118,7 +127,7 @@ function createVNPayPaymentUrl(orderCode, amount, req) {
     vnp_Params['vnp_OrderType'] = 'other';
     vnp_Params['vnp_Amount'] = (amount * 100).toString();
     vnp_Params['vnp_ReturnUrl'] = vnp_ReturnUrl;
-    vnp_Params['vnp_IpAddr'] = req.ip || req.connection.remoteAddress || '127.0.0.1';
+    vnp_Params['vnp_IpAddr'] = ipv4;
     vnp_Params['vnp_CreateDate'] = createDate;
     vnp_Params['vnp_ExpireDate'] = expireDate;
     
@@ -130,6 +139,8 @@ function createVNPayPaymentUrl(orderCode, amount, req) {
     const signData = querystring.stringify(sortedParams, { encode: false });
     const hmac = crypto.createHmac('sha512', vnp_HashSecret);
     const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
+    // Append hash after signing; do not include in signed string
+    vnp_Params['vnp_SecureHashType'] = 'HMACSHA512';
     vnp_Params['vnp_SecureHash'] = signed;
     
     return vnp_Url + '?' + querystring.stringify(vnp_Params, { encode: false });
