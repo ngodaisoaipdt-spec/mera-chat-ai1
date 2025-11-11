@@ -90,17 +90,17 @@
                     </div>
                 </div>
                 <button id="premiumBtn" class="premium-btn" title="Nâng cấp Premium">
-                    <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM9 16.2L4.8 12l1.4-1.4L9 13.4l7.8-7.8L18.2 7 9 16.2z"/></svg>
+                    <img id="premiumIcon" src="icons/icon-premium-inactive.png" alt="Premium">
                 </button>
             </div>
             <div class="status-bar">
                 <div id="relationshipStatus" class="relationship-status">💔 Người Lạ</div>
                 <div class="status-actions">
                     <button id="memoriesBtn" class="status-btn" title="Kỷ niệm">
-                        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 4v12h-4.83L14 17.17L12.83 16H4V4h16m2-2H2v14h10l4 4l4-4h2V2z"/></svg>
+                        <img src="icons/icon-memories.png" alt="Kỷ niệm">
                     </button>
                     <button id="clearChatBtn" class="status-btn" title="Xóa cuộc trò chuyện">
-                        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 3V4H4V6H5V19A2 2 0 0 0 7 21H17A2 2 0 0 0 19 19V6H20V4H15V3H9M7 6H17V19H7V6Z"/></svg>
+                        <img src="icons/icon-trash.png" alt="Xóa">
                     </button>
                 </div>
             </div>
@@ -108,8 +108,12 @@
             <div id="chatBox" class="chat-box"></div>
             <div class="input-area">
                 <input type="text" id="userInput" placeholder="Nhập tin nhắn..." autocomplete="off">
-                <button id="sendBtn" class="mic-btn">▶</button>
-                <button id="micBtnText" class="mic-btn">🎤</button>
+                <button id="sendBtn" class="mic-btn send-btn" title="Gửi tin nhắn">
+                    <img src="icons/icon-send.png" alt="Gửi">
+                </button>
+                <button id="micBtnText" class="mic-btn" title="Nhắn bằng giọng nói">
+                    <img src="icons/icon-mic.png" alt="Mic">
+                </button>
             </div>
         </div>
     </div>

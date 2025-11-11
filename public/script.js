@@ -13,6 +13,16 @@ const RELATIONSHIP_RULES_CONFIG = [
     { stage: 'mistress', emoji: '💘', label: 'Tình Nhân', minMessages: 45, requiresPremium: true }
 ];
 
+const ICON_PATHS = {
+    speaker: 'icons/icon-speaker.png',
+    send: 'icons/icon-send.png',
+    mic: 'icons/icon-mic.png',
+    memories: 'icons/icon-memories.png',
+    premiumActive: 'icons/icon-premium-active.png',
+    premiumInactive: 'icons/icon-premium-inactive.png',
+    trash: 'icons/icon-trash.png'
+};
+
 const DOMElements = {
     loginScreen: document.getElementById('loginScreen'),
     characterSelectionScreen: document.getElementById('characterSelectionScreen'),
@@ -264,6 +274,7 @@ function startCheckingPaymentStatus(orderCode) {
 
 function updateUIForPremium() {
     const premiumBtn = document.getElementById('premiumBtn');
+    const premiumIconEl = document.getElementById('premiumIcon');
     if (currentUser && currentUser.isPremium) {
         const statusBar = document.getElementById('relationshipStatus');
         if (statusBar) {
@@ -274,6 +285,7 @@ function updateUIForPremium() {
             updateRelationshipStatus();
         }
         if (premiumBtn) { premiumBtn.classList.add('is-premium'); premiumBtn.title = "Bạn đã là thành viên Premium!"; }
+        if (premiumIconEl) premiumIconEl.src = ICON_PATHS.premiumActive;
         document.querySelectorAll('.premium-prompt-message').forEach(el => el.remove());
     } else {
         if (premiumBtn) { premiumBtn.classList.remove('is-premium'); premiumBtn.title = "Nâng cấp Premium"; }
@@ -284,6 +296,7 @@ function updateUIForPremium() {
             statusBar.title = "Nâng cấp Premium để mở khóa cấp độ cao hơn";
             updateRelationshipStatus();
         }
+        if (premiumIconEl) premiumIconEl.src = ICON_PATHS.premiumInactive;
     }
     // Sau khi tình trạng Premium thay đổi, render lại menu để cập nhật biểu tượng khóa/mở
     if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
@@ -440,5 +453,5 @@ function updateRelationshipStatus() {
     statusEl.dataset.stage = stage;
 }
 function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
-function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" onclick='new Audio(\`${audioBase64}\`).play()'>🔊</button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; if (audioBase64 && !isLoading && !document.hidden) { new Audio(audioBase64).play(); } return id; }
+function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='new Audio(\`${audioBase64}\`).play()'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; if (audioBase64 && !isLoading && !document.hidden) { new Audio(audioBase64).play(); } return id; }
 function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
