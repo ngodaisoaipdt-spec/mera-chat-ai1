@@ -31,6 +31,33 @@ const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
 
+const RELATIONSHIP_RULES = [
+    { stage: 'stranger', minMessages: 0, requiresPremium: false },
+    { stage: 'friend', minMessages: 10, requiresPremium: false },
+    { stage: 'lover', minMessages: 25, requiresPremium: true },
+    { stage: 'mistress', minMessages: 45, requiresPremium: true }
+];
+
+function determineRelationshipStage(messageCount = 0, isPremiumUser = false) {
+    let currentStage = 'stranger';
+    for (const rule of RELATIONSHIP_RULES) {
+        if (messageCount >= rule.minMessages && (!rule.requiresPremium || isPremiumUser)) {
+            currentStage = rule.stage;
+        } else {
+            break;
+        }
+    }
+    return currentStage;
+}
+
+function canSelectRelationshipStage(stage, messageCount = 0, isPremiumUser = false) {
+    const rule = RELATIONSHIP_RULES.find(r => r.stage === stage);
+    if (!rule) return false;
+    if (rule.requiresPremium && !isPremiumUser) return false;
+    if (messageCount < rule.minMessages) return false;
+    return true;
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -274,14 +301,24 @@ const xai = new OpenAI({ apiKey: process.env.XAI_API_KEY, baseURL: 'https://api.
 const characters = { mera: { voice: "hn-phuongtrang", base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Mera, 19 tuổi, một cô gái năng động...` }, thang: { voice: "hn-thanhtung", base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Trương Thắng, 24 tuổi...` } };
 
 async function loadMemory(userId, character) { let memory = await Memory.findOne({ userId, character }); if (!memory) { memory = new Memory({ userId, character, user_profile: {} }); await memory.save(); } return memory; }
-app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => { const { character } = req.params; const memory = await loadMemory(req.user._id, character); res.json({ memory, isPremium: req.user.isPremium }); });
-app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); let userProfile = memory.user_profile; 
+app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
+    const { character } = req.params;
+    const memory = await loadMemory(req.user._id, character);
+    memory.user_profile = memory.user_profile || {};
+    const computedStage = determineRelationshipStage(memory.user_profile.message_count || 0, req.user.isPremium);
+    if (memory.user_profile.relationship_stage !== computedStage) {
+        memory.user_profile.relationship_stage = computedStage;
+        await memory.save();
+    }
+    res.json({ memory, isPremium: req.user.isPremium });
+});
+app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); memory.user_profile = memory.user_profile || {}; let userProfile = memory.user_profile; 
     if (!isPremiumUser && message.toLowerCase().includes('yêu')) { const charName = character === 'mera' ? 'Mera' : 'Trương Thắng'; return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); }
     const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser); 
     const gptResponse = await xai.chat.completions.create({ model: "grok-3-mini", messages: [{ role: 'system', content: systemPrompt }, ...memory.history, { role: 'user', content: message }] }); 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     let mediaUrl = null, mediaType = null; const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; const mediaMatch = rawReply.match(mediaRegex); if (mediaMatch) { const [, type, topic, subject] = mediaMatch; if (topic === 'sensitive' && !isPremiumUser) { rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... riêng tư lắm."; } else { const mediaResult = await sendMediaFile(memory, character, type, topic, subject); if (mediaResult.success) { mediaUrl = mediaResult.mediaUrl; mediaType = mediaResult.mediaType; memory.user_profile = mediaResult.updatedMemory.user_profile; } rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message; } } 
-    memory.history.push({ role: 'user', content: message }); memory.history.push({ role: 'assistant', content: rawReply }); memory.user_profile.message_count++; if (memory.history.length > 50) { memory.history = memory.history.slice(memory.history.length - 50); } 
+    memory.history.push({ role: 'user', content: message }); memory.history.push({ role: 'assistant', content: rawReply }); userProfile.message_count = (userProfile.message_count || 0) + 1; const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) { userProfile.relationship_stage = computedStage; } if (memory.history.length > 50) { memory.history = memory.history.slice(memory.history.length - 50); } 
     await memory.save(); 
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>'); const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character); 
     res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
@@ -294,6 +331,15 @@ app.post('/api/relationship', ensureAuthenticated, async (req, res) => {
         if (!character || !stage) return res.status(400).json({ success: false, message: 'Thiếu tham số' });
         const memory = await loadMemory(req.user._id, character);
         memory.user_profile = memory.user_profile || {};
+        const rule = RELATIONSHIP_RULES.find(r => r.stage === stage);
+        if (!rule) return res.status(400).json({ success: false, message: 'Cấp độ không hợp lệ' });
+        const messageCount = memory.user_profile.message_count || 0;
+        if (rule.requiresPremium && !req.user.isPremium) {
+            return res.status(403).json({ success: false, message: 'Bạn cần nâng cấp Premium để mở khóa giai đoạn này.' });
+        }
+        if (messageCount < rule.minMessages) {
+            return res.status(403).json({ success: false, message: 'Bạn hãy trò chuyện nhiều hơn để thăng cấp mối quan hệ.' });
+        }
         memory.user_profile.relationship_stage = stage;
         await memory.save();
         res.json({ success: true, stage });
