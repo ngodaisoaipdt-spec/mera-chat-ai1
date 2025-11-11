@@ -349,6 +349,24 @@ app.post('/api/relationship', ensureAuthenticated, async (req, res) => {
     }
 });
 
+// Xóa toàn bộ cuộc trò chuyện
+app.post('/api/clear-chat', ensureAuthenticated, async (req, res) => {
+    try {
+        const { character } = req.body;
+        if (!character) return res.status(400).json({ success: false, message: 'Thiếu tham số' });
+        const memory = await loadMemory(req.user._id, character);
+        memory.history = [];
+        memory.user_profile = memory.user_profile || {};
+        memory.user_profile.message_count = 0;
+        memory.user_profile.relationship_stage = determineRelationshipStage(0, req.user.isPremium);
+        await memory.save();
+        res.json({ success: true, memory });
+    } catch (error) {
+        console.error('❌ Lỗi xóa cuộc trò chuyện:', error);
+        res.status(500).json({ success: false, message: 'Xóa cuộc trò chuyện thất bại' });
+    }
+});
+
 function generateMasterPrompt(userProfile, character, isPremiumUser) { /* Toàn bộ logic giữ nguyên */ return ``; }
 async function createViettelVoice(textToSpeak, character) { /* Toàn bộ logic giữ nguyên */ return null; }
 async function sendMediaFile(memory, character, mediaType, topic, subject) { /* Toàn bộ logic giữ nguyên */ return { success: false, message: "Lỗi" }; }

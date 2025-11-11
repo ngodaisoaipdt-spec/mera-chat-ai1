@@ -368,6 +368,36 @@ function initializeChatApp() {
     });
 
     document.getElementById('memoriesBtn').addEventListener('click', openMemoriesModal);
+    const clearChatBtn = document.getElementById('clearChatBtn');
+    if (clearChatBtn) {
+        clearChatBtn.addEventListener('click', async () => {
+            if (!confirm("Bạn chắc chắn muốn xóa toàn bộ cuộc trò chuyện với nhân vật này?")) return;
+            try {
+                const res = await fetch('/api/clear-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ character: currentCharacter })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentMemory = data.memory;
+                    DOMElements.chatBox.innerHTML = '';
+                    if (currentCharacter === 'mera') {
+                        addMessage(DOMElements.chatBox, currentCharacter, "Chào anh, em là Mera nè. 🥰");
+                    } else {
+                        addMessage(DOMElements.chatBox, currentCharacter, "Chào em, anh là Trương Thắng.");
+                    }
+                    updateRelationshipStatus();
+                    if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
+                } else {
+                    alert(data.message || "Xóa cuộc trò chuyện thất bại.");
+                }
+            } catch (err) {
+                console.error("Lỗi xóa chat:", err);
+                alert("Có lỗi xảy ra khi xóa cuộc trò chuyện.");
+            }
+        });
+    }
     if (SpeechRecognition) { recognition = new SpeechRecognition(); recognition.lang = 'vi-VN'; recognition.onresult = e => { DOMElements.userInput.value = e.results[0][0].transcript.trim(); sendMessageFromInput(); }; recognition.onerror = e => console.error("Lỗi recognition:", e.error); DOMElements.micBtnText.addEventListener('click', () => { if (!isProcessing) try { recognition.start(); } catch (e) {} }); }
     const imageLightbox = document.getElementById('imageLightbox'), closeLightboxBtn = document.getElementById('closeLightboxBtn');
     document.body.addEventListener('click', (e) => { if (e.target.matches('.chat-image')) { document.getElementById('lightboxImage').src = e.target.src; document.body.classList.add('lightbox-active'); } });
