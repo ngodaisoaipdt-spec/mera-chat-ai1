@@ -104,16 +104,16 @@ app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
                 paymentMethod: 'vnpay'
             });
         } else {
-            console.log(`Đã tạo thông tin thanh toán VietQR cho Order: ${orderCode}`);
-            res.json({
-                success: true,
-                accountNo: process.env.SEPAY_ACCOUNT_NO,
-                accountName: process.env.SEPAY_ACCOUNT_NAME,
-                acqId: process.env.SEPAY_BANK_BIN,
-                amount: PREMIUM_PRICE,
+        console.log(`Đã tạo thông tin thanh toán VietQR cho Order: ${orderCode}`);
+        res.json({
+            success: true,
+            accountNo: process.env.SEPAY_ACCOUNT_NO,
+            accountName: process.env.SEPAY_ACCOUNT_NAME,
+            acqId: process.env.SEPAY_BANK_BIN,
+            amount: PREMIUM_PRICE,
                 orderCode: orderCode,
                 paymentMethod: 'qr'
-            });
+        });
         }
     } catch (error) {
         console.error("❌ Lỗi tạo thông tin giao dịch:", error.message);
@@ -222,11 +222,11 @@ app.post('/api/sepay-webhook', async (req, res) => {
         }
 
         const transaction = await Transaction.findOne({ orderCode });
-        if (transaction && transaction.status === 'pending') {
-            transaction.status = 'success';
-            await transaction.save();
-            await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
-            console.log(`✅ Nâng cấp Premium thành công qua Webhook cho user: ${transaction.userId} với order ${orderCode}`);
+            if (transaction && transaction.status === 'pending') {
+                transaction.status = 'success';
+                await transaction.save();
+                await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
+                console.log(`✅ Nâng cấp Premium thành công qua Webhook cho user: ${transaction.userId} với order ${orderCode}`);
         } else {
             console.log(`ℹ️ Không tìm thấy transaction pending cho order ${orderCode} (có thể đã xử lý).`);
         }
@@ -320,13 +320,36 @@ app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
     }
     res.json({ memory, isPremium: req.user.isPremium });
 });
-app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); memory.user_profile = memory.user_profile || {}; let userProfile = memory.user_profile; 
+app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character, image } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); memory.user_profile = memory.user_profile || {}; let userProfile = memory.user_profile; 
     if (!isPremiumUser && message.toLowerCase().includes('yêu')) { const charName = character === 'mera' ? 'Mera' : 'Trương Thắng'; return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); }
     const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser); 
-    const gptResponse = await xai.chat.completions.create({ model: "grok-3-mini", messages: [{ role: 'system', content: systemPrompt }, ...memory.history, { role: 'user', content: message }] }); 
+    
+    // Chuẩn bị messages với vision support
+    const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
+    
+    // Nếu có ảnh, thêm vào message với vision format
+    if (image) {
+        const userMessage = {
+            role: 'user',
+            content: [
+                { type: 'text', text: message || 'Xem ảnh này giúp em/anh nhé' },
+                { type: 'image_url', image_url: { url: image } }
+            ]
+        };
+        messages.push(userMessage);
+    } else {
+        messages.push({ role: 'user', content: message });
+    }
+    
+    // Sử dụng grok-3-mini cho cả text và vision
+    const modelName = 'grok-3-mini';
+    const gptResponse = await xai.chat.completions.create({ model: modelName, messages: messages }); 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     let mediaUrl = null, mediaType = null; const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; const mediaMatch = rawReply.match(mediaRegex); if (mediaMatch) { const [, type, topic, subject] = mediaMatch; if (topic === 'sensitive' && !isPremiumUser) { rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... riêng tư lắm."; } else { const mediaResult = await sendMediaFile(memory, character, type, topic, subject); if (mediaResult.success) { mediaUrl = mediaResult.mediaUrl; mediaType = mediaResult.mediaType; memory.user_profile = mediaResult.updatedMemory.user_profile; } rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message; } } 
-    memory.history.push({ role: 'user', content: message }); memory.history.push({ role: 'assistant', content: rawReply }); userProfile.message_count = (userProfile.message_count || 0) + 1; const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) { userProfile.relationship_stage = computedStage; } if (memory.history.length > 50) { memory.history = memory.history.slice(memory.history.length - 50); } 
+    // Lưu history - nếu có ảnh thì lưu message text, không lưu ảnh vào history (tiết kiệm)
+    const userHistoryContent = image ? message || 'Đã gửi ảnh' : message;
+    memory.history.push({ role: 'user', content: userHistoryContent }); 
+    memory.history.push({ role: 'assistant', content: rawReply }); userProfile.message_count = (userProfile.message_count || 0) + 1; const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) { userProfile.relationship_stage = computedStage; } if (memory.history.length > 50) { memory.history = memory.history.slice(memory.history.length - 50); } 
     await memory.save(); 
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>'); const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character); 
     res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
