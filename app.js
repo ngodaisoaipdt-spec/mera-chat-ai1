@@ -393,60 +393,63 @@ async function createViettelVoice(textToSpeak, character) {
         const voice = characters[character]?.voice || 'hn-phuongtrang';
         
         // Endpoint đúng theo tài liệu Viettel AI
-        const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://viettelai.vn/api/tts';
+        const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://viettelai.vn/tts/speech_synthesis';
         
-        // Payload theo format của Viettel AI
+        // Payload theo đúng format của Viettel AI (token trong body, không phải header!)
         const payload = {
             text: trimmed,
             voice: voice,
-            speed: 1.0
+            speed: 1.0,
+            tts_return_option: 3, // 3 = mp3, 2 = wav
+            token: token, // Token gửi trong body, không phải header!
+            without_filter: false
         };
         
         console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, text length: ${trimmed.length}`);
         
+        // Gọi API - response trả về binary audio data
         const response = await axios.post(ttsUrl, payload, {
             headers: {
                 'Content-Type': 'application/json',
-                'Token': token
+                'accept': '*/*'
             },
+            responseType: 'arraybuffer', // Nhận binary data
             timeout: 15000
         });
         
-        // Xử lý response - có thể trả về link file hoặc base64
-        if (response.data) {
-            // Nếu trả về link file audio
-            if (response.data.url || response.data.audio_url) {
-                const audioUrl = response.data.url || response.data.audio_url;
-                console.log(`✅ Nhận được audio URL từ Viettel AI: ${audioUrl}`);
-                // Tải file và convert sang base64
-                try {
-                    const audioResponse = await axios.get(audioUrl, { responseType: 'arraybuffer', timeout: 10000 });
-                    const base64Audio = Buffer.from(audioResponse.data).toString('base64');
-                    return `data:audio/mp3;base64,${base64Audio}`;
-                } catch (err) {
-                    console.error("❌ Lỗi tải audio từ URL:", err.message);
-                    return null;
-                }
-            }
-            // Nếu trả về base64 trực tiếp
-            if (response.data.data || response.data.audio) {
-                const base64Audio = response.data.data || response.data.audio;
-                return `data:audio/mp3;base64,${base64Audio}`;
-            }
-            // Nếu trả về object có result
-            if (response.data.result && (response.data.result.data || response.data.result.audio)) {
-                const base64Audio = response.data.result.data || response.data.result.audio;
-                return `data:audio/mp3;base64,${base64Audio}`;
+        // Kiểm tra response status
+        if (response.status === 200 && response.data) {
+            // Convert binary audio data sang base64
+            const base64Audio = Buffer.from(response.data).toString('base64');
+            console.log(`✅ Tạo giọng nói thành công! Audio size: ${response.data.length} bytes`);
+            return `data:audio/mp3;base64,${base64Audio}`;
+        } else {
+            // Nếu response không phải audio (có thể là JSON error)
+            try {
+                const errorText = Buffer.from(response.data).toString('utf-8');
+                const errorJson = JSON.parse(errorText);
+                console.error("❌ Lỗi từ Viettel AI:", errorJson);
+                return null;
+            } catch (e) {
+                console.error("❌ Response không hợp lệ từ Viettel AI");
+                return null;
             }
         }
-        
-        console.warn("⚠️ Response từ Viettel AI không có dữ liệu audio hợp lệ:", response.data);
-        return null;
     } catch (error) {
-        console.error("❌ Lỗi tạo giọng nói Viettel:", error.response?.data || error.message);
+        console.error("❌ Lỗi tạo giọng nói Viettel:", error.message);
         if (error.response) {
             console.error("   Status:", error.response.status);
-            console.error("   Data:", JSON.stringify(error.response.data));
+            // Nếu response là JSON error
+            if (error.response.data && typeof error.response.data === 'object') {
+                console.error("   Error Data:", JSON.stringify(error.response.data));
+            } else if (error.response.data) {
+                try {
+                    const errorText = Buffer.from(error.response.data).toString('utf-8');
+                    console.error("   Error Text:", errorText);
+                } catch (e) {
+                    console.error("   Error Data (binary):", error.response.data.length, "bytes");
+                }
+            }
         }
         return null;
     }
