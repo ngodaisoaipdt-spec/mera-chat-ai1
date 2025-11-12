@@ -43,9 +43,21 @@ body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; backgroun
 .message .replay-btn.playing img { filter: brightness(0) saturate(100%) invert(48%) sepia(79%) saturate(2476%) hue-rotate(194deg) brightness(98%) contrast(92%); }
 .input-area { display: flex; padding: 20px; gap: 10px; flex-shrink: 0; }
 #userInput { flex: 1; padding: 15px 20px; border: 1px solid #ddd; border-radius: 25px; font-family: 'Nunito', sans-serif; font-size: 1em; }
-#sendBtn, .mic-btn { width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: #fff; transition: transform 0.2s ease; }
+#sendBtn, .mic-btn { width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: #fff; transition: transform 0.2s ease, background-color 0.3s ease; }
 #sendBtn:hover, .mic-btn:hover { transform: scale(1.05); }
 .mic-btn img { width: 32px; height: 32px; object-fit: contain; }
+.mic-btn.listening { background-color: #ff6b6b; animation: pulse-mic 1.5s ease-in-out infinite; }
+.mic-btn.listening img { filter: brightness(0) invert(1); }
+@keyframes pulse-mic {
+    0%, 100% { 
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7);
+    }
+    50% { 
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(255, 107, 107, 0);
+    }
+}
 .send-btn img { width: 32px; height: 32px; }
 .mic-btn:disabled, #sendBtn:disabled { opacity: .5; cursor: not-allowed; }
 .chat-image { max-width: 100%; border-radius: 15px; margin-top: 10px; cursor: pointer; }

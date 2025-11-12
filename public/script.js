@@ -420,7 +420,54 @@ function initializeChatApp() {
             }
         });
     }
-    if (SpeechRecognition) { recognition = new SpeechRecognition(); recognition.lang = 'vi-VN'; recognition.onresult = e => { DOMElements.userInput.value = e.results[0][0].transcript.trim(); sendMessageFromInput(); }; recognition.onerror = e => console.error("Lỗi recognition:", e.error); DOMElements.micBtnText.addEventListener('click', () => { if (!isProcessing) try { recognition.start(); } catch (e) {} }); }
+    if (SpeechRecognition) { 
+        recognition = new SpeechRecognition(); 
+        recognition.lang = 'vi-VN'; 
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        
+        // Khi bắt đầu lắng nghe
+        recognition.onstart = () => {
+            if (DOMElements.micBtnText) {
+                DOMElements.micBtnText.classList.add('listening');
+            }
+        };
+        
+        // Khi kết thúc lắng nghe
+        recognition.onend = () => {
+            if (DOMElements.micBtnText) {
+                DOMElements.micBtnText.classList.remove('listening');
+            }
+        };
+        
+        // Khi có kết quả
+        recognition.onresult = e => { 
+            DOMElements.userInput.value = e.results[0][0].transcript.trim(); 
+            sendMessageFromInput();
+            if (DOMElements.micBtnText) {
+                DOMElements.micBtnText.classList.remove('listening');
+            }
+        }; 
+        
+        // Xử lý lỗi
+        recognition.onerror = e => { 
+            console.error("Lỗi recognition:", e.error);
+            if (DOMElements.micBtnText) {
+                DOMElements.micBtnText.classList.remove('listening');
+            }
+        }; 
+        
+        // Khi click vào nút mic
+        DOMElements.micBtnText.addEventListener('click', () => { 
+            if (!isProcessing) {
+                try { 
+                    recognition.start(); 
+                } catch (e) {
+                    console.error("Lỗi khởi động recognition:", e);
+                }
+            }
+        }); 
+    }
     const imageLightbox = document.getElementById('imageLightbox'), closeLightboxBtn = document.getElementById('closeLightboxBtn');
     document.body.addEventListener('click', (e) => { if (e.target.matches('.chat-image')) { document.getElementById('lightboxImage').src = e.target.src; document.body.classList.add('lightbox-active'); } });
     const closeLightbox = () => document.body.classList.remove('lightbox-active');
