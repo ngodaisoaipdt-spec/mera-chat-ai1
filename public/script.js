@@ -32,6 +32,8 @@ const DOMElements = {
     userInput: document.getElementById("userInput"),
     sendBtn: document.getElementById("sendBtn"),
     micBtnText: document.getElementById("micBtnText"),
+    imageInput: document.getElementById("imageInput"),
+    imageUploadBtn: document.getElementById("imageUploadBtn"),
     userAvatar: document.getElementById('userAvatar'),
     userName: document.getElementById('userName'),
     premiumBtn: document.getElementById('premiumBtn')
@@ -306,6 +308,85 @@ function updateUIForPremium() {
 function initializeChatApp() {
     DOMElements.sendBtn.addEventListener("click", sendMessageFromInput);
     DOMElements.userInput.addEventListener("keypress", e => { if (e.key === "Enter") sendMessageFromInput(); });
+    
+    // Xử lý upload ảnh
+    const imageUploadBtn = DOMElements.imageUploadBtn || document.getElementById("imageUploadBtn");
+    const imageInput = DOMElements.imageInput || document.getElementById("imageInput");
+    
+    if (imageUploadBtn && imageInput) {
+        console.log("✅ Đã tìm thấy nút upload ảnh");
+        imageUploadBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("🖼️ Nút upload ảnh được click");
+            imageInput.click();
+        });
+        
+        imageInput.addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Kiểm tra kích thước file (tối đa 10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                alert("Ảnh quá lớn! Vui lòng chọn ảnh nhỏ hơn 10MB.");
+                imageInput.value = '';
+                return;
+            }
+            
+            // Convert sang base64
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                const imageBase64 = event.target.result;
+                
+                // Hiển thị ảnh preview trong chat
+                const previewId = addMessage(DOMElements.chatBox, "Bạn", "📷 Đang gửi ảnh...", null, true);
+                
+                // Gửi ảnh đến server
+                try {
+                    const response = await fetch("/chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            message: DOMElements.userInput.value.trim() || "Xem ảnh này giúp em/anh nhé",
+                            character: currentCharacter,
+                            image: imageBase64
+                        })
+                    });
+                    
+                    if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`);
+                    
+                    const data = await response.json();
+                    removeMessage(previewId);
+                    
+                    // Hiển thị ảnh đã gửi
+                    addMessage(DOMElements.chatBox, "Bạn", "", null, false, imageBase64);
+                    
+                    // Hiển thị phản hồi từ AI
+                    if (data.updatedMemory) currentMemory = data.updatedMemory;
+                    updateRelationshipStatus();
+                    if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
+                    
+                    const messages = data.displayReply.split('<NEXT_MESSAGE>').filter(m => m.trim().length > 0);
+                    for (let i = 0; i < messages.length; i++) {
+                        const msg = messages[i].trim();
+                        addMessage(DOMElements.chatBox, currentCharacter, msg, (i === 0) ? data.audio : null, false, null, (i === messages.length - 1) ? data.mediaUrl : null, (i === messages.length - 1) ? data.mediaType : null);
+                        if (i < messages.length - 1) await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30));
+                    }
+                    
+                    DOMElements.userInput.value = '';
+                } catch (error) {
+                    console.error("Lỗi gửi ảnh:", error);
+                    removeMessage(previewId);
+                    addMessage(DOMElements.chatBox, currentCharacter, "Xin lỗi, có lỗi khi gửi ảnh!");
+                }
+            };
+            
+            reader.readAsDataURL(file);
+            imageInput.value = ''; // Reset input
+        });
+    } else {
+        console.warn("⚠️ Không tìm thấy nút upload ảnh hoặc input file");
+    }
     const premiumBtn = document.getElementById('premiumBtn');
     if (premiumBtn) { premiumBtn.addEventListener('click', handlePremiumClick); }
     document.getElementById('characterAvatarContainer').addEventListener('click', () => { const avatarImage = document.querySelector('.character-avatar'); if (avatarImage) { document.getElementById('lightboxImage').src = avatarImage.src; document.body.classList.add('lightbox-active'); } });
@@ -555,7 +636,7 @@ function toggleAudio(messageId, audioBase64) {
     }
 }
 
-function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='toggleAudio("${id}", \`${audioBase64}\`)'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; return id; }
+function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='toggleAudio("${id}", \`${audioBase64}\`)'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; let mediaHtml = ''; if (imageBase64) { mediaHtml = `<img src="${imageBase64}" alt="Ảnh đã gửi" class="chat-image"/>`; } else if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; return id; }
 function removeMessage(id) { 
     // Dừng audio nếu đang phát
     if (activeAudios[id]) {
