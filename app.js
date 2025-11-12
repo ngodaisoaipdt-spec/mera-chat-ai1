@@ -327,21 +327,22 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
     // Chuẩn bị messages với vision support
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
     
-    // Nếu có ảnh, thêm vào message với vision format
+    // Nếu có ảnh, tạm thời vô hiệu hóa vì grok-3-mini không hỗ trợ vision
     if (image) {
-        const userMessage = {
-            role: 'user',
-            content: [
-                { type: 'text', text: message || 'Xem ảnh này giúp em/anh nhé' },
-                { type: 'image_url', image_url: { url: image } }
-            ]
-        };
-        messages.push(userMessage);
-    } else {
-        messages.push({ role: 'user', content: message });
+        console.log("⚠️ Tính năng gửi ảnh tạm thời chưa được hỗ trợ với model hiện tại");
+        return res.status(400).json({ 
+            displayReply: 'Xin lỗi, tính năng xem ảnh hiện chưa khả dụng. Bạn có thể mô tả ảnh cho em/anh biết nhé! 😊', 
+            historyReply: 'Tính năng vision chưa khả dụng',
+            audio: null,
+            mediaUrl: null,
+            mediaType: null,
+            updatedMemory: memory
+        });
     }
     
-    // Sử dụng grok-3-mini cho cả text và vision
+    messages.push({ role: 'user', content: message });
+    
+    // Sử dụng grok-3-mini cho text
     const modelName = 'grok-3-mini';
     const gptResponse = await xai.chat.completions.create({ model: modelName, messages: messages }); 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
