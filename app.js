@@ -376,7 +376,71 @@ app.post('/api/clear-chat', ensureAuthenticated, async (req, res) => {
 });
 
 function generateMasterPrompt(userProfile, character, isPremiumUser) { /* Toàn bộ logic giữ nguyên */ return ``; }
-async function createViettelVoice(textToSpeak, character) { /* Toàn bộ logic giữ nguyên */ return null; }
+let cachedViettelToken = process.env.VIETTEL_AI_TOKEN || null;
+let cachedTokenExpiredAt = 0;
+
+async function getViettelToken() {
+    if (cachedViettelToken && Date.now() < cachedTokenExpiredAt) {
+        return cachedViettelToken;
+    }
+    const tokenUrl = process.env.VIETTEL_AI_TOKEN_URL;
+    const clientId = process.env.VIETTEL_AI_CLIENT_ID;
+    const clientSecret = process.env.VIETTEL_AI_CLIENT_SECRET;
+    if (!tokenUrl || !clientId || !clientSecret) {
+        return cachedViettelToken;
+    }
+    try {
+        const response = await axios.post(tokenUrl, {
+            client_id: clientId,
+            client_secret: clientSecret
+        }, { timeout: 8000 });
+        const token = response.data?.access_token || response.data?.token;
+        const expiresIn = response.data?.expires_in || 3600;
+        if (token) {
+            cachedViettelToken = token;
+            cachedTokenExpiredAt = Date.now() + (expiresIn - 30) * 1000;
+        }
+        return cachedViettelToken;
+    } catch (error) {
+        console.error("❌ Lỗi lấy token Viettel AI:", error.response?.data || error.message);
+        return cachedViettelToken;
+    }
+}
+
+async function createViettelVoice(textToSpeak, character) {
+    try {
+        const trimmed = (textToSpeak || '').trim();
+        if (!trimmed) return null;
+        const voice = characters[character]?.voice || 'hn-phuongtrang';
+        const token = await getViettelToken();
+        if (!token) {
+            console.warn("⚠️ Chưa cấu hình token Viettel AI, bỏ qua sinh giọng nói.");
+            return null;
+        }
+        const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://viettelgroup.ai/api/tts/v1/rest/syn';
+        const payload = {
+            text: trimmed,
+            voice,
+            id: crypto.randomUUID(),
+            speed: 1,
+            volume: 1,
+            tts_return_option: 3 // trả về dữ liệu base64
+        };
+        const response = await axios.post(ttsUrl, payload, {
+            headers: {
+                'Content-Type': 'application/json',
+                'token': token
+            },
+            timeout: 15000
+        });
+        const base64Audio = response.data?.data || response.data?.result?.data;
+        if (!base64Audio) return null;
+        return `data:audio/wav;base64,${base64Audio}`;
+    } catch (error) {
+        console.error("❌ Lỗi tạo giọng nói Viettel:", error.response?.data || error.message);
+        return null;
+    }
+}
 async function sendMediaFile(memory, character, mediaType, topic, subject) { /* Toàn bộ logic giữ nguyên */ return { success: false, message: "Lỗi" }; }
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
