@@ -104,16 +104,16 @@ app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
                 paymentMethod: 'vnpay'
             });
         } else {
-            console.log(`Đã tạo thông tin thanh toán VietQR cho Order: ${orderCode}`);
-            res.json({
-                success: true,
-                accountNo: process.env.SEPAY_ACCOUNT_NO,
-                accountName: process.env.SEPAY_ACCOUNT_NAME,
-                acqId: process.env.SEPAY_BANK_BIN,
-                amount: PREMIUM_PRICE,
+        console.log(`Đã tạo thông tin thanh toán VietQR cho Order: ${orderCode}`);
+        res.json({
+            success: true,
+            accountNo: process.env.SEPAY_ACCOUNT_NO,
+            accountName: process.env.SEPAY_ACCOUNT_NAME,
+            acqId: process.env.SEPAY_BANK_BIN,
+            amount: PREMIUM_PRICE,
                 orderCode: orderCode,
                 paymentMethod: 'qr'
-            });
+        });
         }
     } catch (error) {
         console.error("❌ Lỗi tạo thông tin giao dịch:", error.message);
@@ -222,11 +222,11 @@ app.post('/api/sepay-webhook', async (req, res) => {
         }
 
         const transaction = await Transaction.findOne({ orderCode });
-        if (transaction && transaction.status === 'pending') {
-            transaction.status = 'success';
-            await transaction.save();
-            await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
-            console.log(`✅ Nâng cấp Premium thành công qua Webhook cho user: ${transaction.userId} với order ${orderCode}`);
+            if (transaction && transaction.status === 'pending') {
+                transaction.status = 'success';
+                await transaction.save();
+                await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
+                console.log(`✅ Nâng cấp Premium thành công qua Webhook cho user: ${transaction.userId} với order ${orderCode}`);
         } else {
             console.log(`ℹ️ Không tìm thấy transaction pending cho order ${orderCode} (có thể đã xử lý).`);
         }
@@ -417,7 +417,7 @@ async function createViettelVoice(textToSpeak, character) {
             console.warn("⚠️ Chưa cấu hình token Viettel AI, bỏ qua sinh giọng nói.");
             return null;
         }
-        const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://viettelgroup.ai/api/tts/v1/rest/syn';
+        const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://api.viettelai.vn/api/tts/v1/rest/syn';
         const payload = {
             text: trimmed,
             voice,
@@ -429,6 +429,7 @@ async function createViettelVoice(textToSpeak, character) {
         const response = await axios.post(ttsUrl, payload, {
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
                 'token': token
             },
             timeout: 15000
