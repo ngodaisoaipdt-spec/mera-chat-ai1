@@ -376,7 +376,7 @@ app.post('/api/clear-chat', ensureAuthenticated, async (req, res) => {
 });
 
 function generateMasterPrompt(userProfile, character, isPremiumUser) { /* Toàn bộ logic giữ nguyên */ return ``; }
-let cachedViettelToken = process.env.VIETTEL_AI_TOKEN || null;
+let cachedViettelToken = process.env.VIETTEL_AI_TOKEN || process.env.VIETTEL_API_KEY || null;
 let cachedTokenExpiredAt = 0;
 
 async function getViettelToken() {
@@ -386,8 +386,8 @@ async function getViettelToken() {
     const tokenUrl = process.env.VIETTEL_AI_TOKEN_URL;
     const clientId = process.env.VIETTEL_AI_CLIENT_ID;
     const clientSecret = process.env.VIETTEL_AI_CLIENT_SECRET;
-    if (!tokenUrl || !clientId || !clientSecret) {
-        return cachedViettelToken;
+        if (!tokenUrl || !clientId || !clientSecret) {
+            return cachedViettelToken;
     }
     try {
         const response = await axios.post(tokenUrl, {
