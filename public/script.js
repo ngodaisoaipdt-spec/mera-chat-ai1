@@ -5,6 +5,7 @@ let currentCharacter = 'mera';
 let currentMemory = {};
 let currentUser = null;
 let paymentCheckInterval = null;
+let activeAudios = {}; // Lưu trữ audio instances theo message ID
 
 const RELATIONSHIP_RULES_CONFIG = [
     { stage: 'stranger', emoji: '💔', label: 'Người Lạ', minMessages: 0, requiresPremium: false },
@@ -393,6 +394,14 @@ function initializeChatApp() {
                 });
                 const data = await res.json();
                 if (data.success) {
+                    // Dừng tất cả audio đang phát
+                    Object.keys(activeAudios).forEach(id => {
+                        if (activeAudios[id]) {
+                            activeAudios[id].pause();
+                            activeAudios[id].currentTime = 0;
+                        }
+                    });
+                    activeAudios = {};
                     currentMemory = data.memory;
                     DOMElements.chatBox.innerHTML = '';
                     if (currentCharacter === 'mera') {
@@ -453,5 +462,60 @@ function updateRelationshipStatus() {
     statusEl.dataset.stage = stage;
 }
 function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
-function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='new Audio(\`${audioBase64}\`).play()'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; return id; }
-function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
+
+function toggleAudio(messageId, audioBase64) {
+    const btn = document.querySelector(`#${messageId} .replay-btn`);
+    if (!btn) return;
+    
+    // Nếu đang có audio đang phát cho message này
+    if (activeAudios[messageId]) {
+        const audio = activeAudios[messageId];
+        if (!audio.paused) {
+            // Đang phát -> Dừng
+            audio.pause();
+            audio.currentTime = 0;
+            btn.classList.remove('playing');
+            btn.title = 'Nghe lại';
+            delete activeAudios[messageId];
+        } else {
+            // Đã dừng -> Phát lại
+            audio.play();
+            btn.classList.add('playing');
+            btn.title = 'Dừng';
+        }
+    } else {
+        // Chưa có audio -> Tạo mới và phát
+        const audio = new Audio(audioBase64);
+        activeAudios[messageId] = audio;
+        
+        // Xử lý khi audio kết thúc
+        audio.onended = () => {
+            btn.classList.remove('playing');
+            btn.title = 'Nghe lại';
+            delete activeAudios[messageId];
+        };
+        
+        // Xử lý lỗi
+        audio.onerror = () => {
+            btn.classList.remove('playing');
+            btn.title = 'Nghe lại';
+            delete activeAudios[messageId];
+        };
+        
+        audio.play();
+        btn.classList.add('playing');
+        btn.title = 'Dừng';
+    }
+}
+
+function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='toggleAudio("${id}", \`${audioBase64}\`)'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; return id; }
+function removeMessage(id) { 
+    // Dừng audio nếu đang phát
+    if (activeAudios[id]) {
+        activeAudios[id].pause();
+        activeAudios[id].currentTime = 0;
+        delete activeAudios[id];
+    }
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
