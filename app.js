@@ -104,16 +104,16 @@ app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
                 paymentMethod: 'vnpay'
             });
         } else {
-        console.log(`Đã tạo thông tin thanh toán VietQR cho Order: ${orderCode}`);
-        res.json({
-            success: true,
-            accountNo: process.env.SEPAY_ACCOUNT_NO,
-            accountName: process.env.SEPAY_ACCOUNT_NAME,
-            acqId: process.env.SEPAY_BANK_BIN,
-            amount: PREMIUM_PRICE,
+            console.log(`Đã tạo thông tin thanh toán VietQR cho Order: ${orderCode}`);
+            res.json({
+                success: true,
+                accountNo: process.env.SEPAY_ACCOUNT_NO,
+                accountName: process.env.SEPAY_ACCOUNT_NAME,
+                acqId: process.env.SEPAY_BANK_BIN,
+                amount: PREMIUM_PRICE,
                 orderCode: orderCode,
                 paymentMethod: 'qr'
-        });
+            });
         }
     } catch (error) {
         console.error("❌ Lỗi tạo thông tin giao dịch:", error.message);
@@ -222,11 +222,11 @@ app.post('/api/sepay-webhook', async (req, res) => {
         }
 
         const transaction = await Transaction.findOne({ orderCode });
-            if (transaction && transaction.status === 'pending') {
-                transaction.status = 'success';
-                await transaction.save();
-                await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
-                console.log(`✅ Nâng cấp Premium thành công qua Webhook cho user: ${transaction.userId} với order ${orderCode}`);
+        if (transaction && transaction.status === 'pending') {
+            transaction.status = 'success';
+            await transaction.save();
+            await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
+            console.log(`✅ Nâng cấp Premium thành công qua Webhook cho user: ${transaction.userId} với order ${orderCode}`);
         } else {
             console.log(`ℹ️ Không tìm thấy transaction pending cho order ${orderCode} (có thể đã xử lý).`);
         }
@@ -376,72 +376,82 @@ app.post('/api/clear-chat', ensureAuthenticated, async (req, res) => {
 });
 
 function generateMasterPrompt(userProfile, character, isPremiumUser) { /* Toàn bộ logic giữ nguyên */ return ``; }
-let cachedViettelToken = process.env.VIETTEL_AI_TOKEN || process.env.VIETTEL_API_KEY || null;
-let cachedTokenExpiredAt = 0;
-
-async function getViettelToken() {
-    if (cachedViettelToken && Date.now() < cachedTokenExpiredAt) {
-        return cachedViettelToken;
-    }
-    const tokenUrl = process.env.VIETTEL_AI_TOKEN_URL;
-    const clientId = process.env.VIETTEL_AI_CLIENT_ID;
-    const clientSecret = process.env.VIETTEL_AI_CLIENT_SECRET;
-        if (!tokenUrl || !clientId || !clientSecret) {
-            return cachedViettelToken;
-    }
-    try {
-        const response = await axios.post(tokenUrl, {
-            client_id: clientId,
-            client_secret: clientSecret
-        }, { timeout: 8000 });
-        const token = response.data?.access_token || response.data?.token;
-        const expiresIn = response.data?.expires_in || 3600;
-        if (token) {
-            cachedViettelToken = token;
-            cachedTokenExpiredAt = Date.now() + (expiresIn - 30) * 1000;
-        }
-        return cachedViettelToken;
-    } catch (error) {
-        console.error("❌ Lỗi lấy token Viettel AI:", error.response?.data || error.message);
-        return cachedViettelToken;
-    }
-}
 
 async function createViettelVoice(textToSpeak, character) {
     try {
         const trimmed = (textToSpeak || '').trim();
         if (!trimmed) return null;
-        const voice = characters[character]?.voice || 'hn-phuongtrang';
-        const token = await getViettelToken();
+        
+        // Lấy token từ env (có thể là VIETTEL_API_KEY hoặc VIETTEL_AI_TOKEN)
+        const token = process.env.VIETTEL_AI_TOKEN || process.env.VIETTEL_API_KEY;
         if (!token) {
             console.warn("⚠️ Chưa cấu hình token Viettel AI, bỏ qua sinh giọng nói.");
             return null;
         }
-        const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://api.viettelai.vn/api/tts/v1/rest/syn';
+        
+        // Lấy voice từ character config
+        const voice = characters[character]?.voice || 'hn-phuongtrang';
+        
+        // Endpoint đúng theo tài liệu Viettel AI
+        const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://viettelai.vn/api/tts';
+        
+        // Payload theo format của Viettel AI
         const payload = {
             text: trimmed,
-            voice,
-            id: crypto.randomUUID(),
-            speed: 1,
-            volume: 1,
-            tts_return_option: 3 // trả về dữ liệu base64
+            voice: voice,
+            speed: 1.0
         };
+        
+        console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, text length: ${trimmed.length}`);
+        
         const response = await axios.post(ttsUrl, payload, {
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-                'token': token
+                'Token': token
             },
             timeout: 15000
         });
-        const base64Audio = response.data?.data || response.data?.result?.data;
-        if (!base64Audio) return null;
-        return `data:audio/wav;base64,${base64Audio}`;
+        
+        // Xử lý response - có thể trả về link file hoặc base64
+        if (response.data) {
+            // Nếu trả về link file audio
+            if (response.data.url || response.data.audio_url) {
+                const audioUrl = response.data.url || response.data.audio_url;
+                console.log(`✅ Nhận được audio URL từ Viettel AI: ${audioUrl}`);
+                // Tải file và convert sang base64
+                try {
+                    const audioResponse = await axios.get(audioUrl, { responseType: 'arraybuffer', timeout: 10000 });
+                    const base64Audio = Buffer.from(audioResponse.data).toString('base64');
+                    return `data:audio/mp3;base64,${base64Audio}`;
+                } catch (err) {
+                    console.error("❌ Lỗi tải audio từ URL:", err.message);
+                    return null;
+                }
+            }
+            // Nếu trả về base64 trực tiếp
+            if (response.data.data || response.data.audio) {
+                const base64Audio = response.data.data || response.data.audio;
+                return `data:audio/mp3;base64,${base64Audio}`;
+            }
+            // Nếu trả về object có result
+            if (response.data.result && (response.data.result.data || response.data.result.audio)) {
+                const base64Audio = response.data.result.data || response.data.result.audio;
+                return `data:audio/mp3;base64,${base64Audio}`;
+            }
+        }
+        
+        console.warn("⚠️ Response từ Viettel AI không có dữ liệu audio hợp lệ:", response.data);
+        return null;
     } catch (error) {
         console.error("❌ Lỗi tạo giọng nói Viettel:", error.response?.data || error.message);
+        if (error.response) {
+            console.error("   Status:", error.response.status);
+            console.error("   Data:", JSON.stringify(error.response.data));
+        }
         return null;
     }
 }
+
 async function sendMediaFile(memory, character, mediaType, topic, subject) { /* Toàn bộ logic giữ nguyên */ return { success: false, message: "Lỗi" }; }
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
