@@ -411,6 +411,30 @@ function initializeChatApp() {
             }
         });
     }
+
+    const openPremiumInfoBtn = document.getElementById('openPremiumInfoBtn');
+    const premiumInfoModal = document.getElementById('premiumInfoModal');
+    const closePremiumInfoBtn = document.getElementById('closePremiumInfoBtn');
+    if (openPremiumInfoBtn && premiumInfoModal) {
+        openPremiumInfoBtn.addEventListener('click', () => {
+            document.body.classList.add('memories-active');
+            premiumInfoModal.classList.add('active');
+        });
+    }
+    if (closePremiumInfoBtn && premiumInfoModal) {
+        closePremiumInfoBtn.addEventListener('click', () => {
+            premiumInfoModal.classList.remove('active');
+            document.body.classList.remove('memories-active');
+        });
+    }
+    if (premiumInfoModal) {
+        premiumInfoModal.addEventListener('click', (e) => {
+            if (e.target === premiumInfoModal) {
+                premiumInfoModal.classList.remove('active');
+                document.body.classList.remove('memories-active');
+            }
+        });
+    }
     if (SpeechRecognition) { recognition = new SpeechRecognition(); recognition.lang = 'vi-VN'; recognition.onresult = e => { DOMElements.userInput.value = e.results[0][0].transcript.trim(); sendMessageFromInput(); }; recognition.onerror = e => console.error("Lỗi recognition:", e.error); DOMElements.micBtnText.addEventListener('click', () => { if (!isProcessing) try { recognition.start(); } catch (e) {} }); }
     const imageLightbox = document.getElementById('imageLightbox'), closeLightboxBtn = document.getElementById('closeLightboxBtn');
     document.body.addEventListener('click', (e) => { if (e.target.matches('.chat-image')) { document.getElementById('lightboxImage').src = e.target.src; document.body.classList.add('lightbox-active'); } });
@@ -418,8 +442,8 @@ function initializeChatApp() {
     if (closeLightboxBtn) closeLightboxBtn.addEventListener('click', closeLightbox);
     if (imageLightbox) imageLightbox.addEventListener('click', e => { if (e.target === imageLightbox) closeLightbox(); });
     const memoriesModal = document.getElementById('memoriesModal'), closeMemoriesBtn = document.getElementById('closeMemoriesBtn');
-    if (closeMemoriesBtn) closeMemoriesBtn.addEventListener('click', () => document.body.classList.remove('memories-active'));
-    if (memoriesModal) memoriesModal.addEventListener('click', e => { if (e.target === memoriesModal) document.body.classList.remove('memories-active'); });
+    if (closeMemoriesBtn) closeMemoriesBtn.addEventListener('click', () => { document.body.classList.remove('memories-active'); if (memoriesModal) memoriesModal.classList.remove('active'); });
+    if (memoriesModal) memoriesModal.addEventListener('click', e => { if (e.target === memoriesModal) { document.body.classList.remove('memories-active'); memoriesModal.classList.remove('active'); } });
     const closePaymentBtn = document.getElementById('closePaymentBtn');
     closePaymentBtn.addEventListener('click', () => { document.getElementById('paymentScreen').classList.remove('active'); if (paymentCheckInterval) clearInterval(paymentCheckInterval); });
     
@@ -452,6 +476,6 @@ function updateRelationshipStatus() {
     statusEl.textContent = `${rule.emoji} ${rule.label}`;
     statusEl.dataset.stage = stage;
 }
-function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
+function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); const memoriesModal = document.getElementById('memoriesModal'); if (!memoriesGrid || !memoriesModal) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); memoriesModal.classList.add('active'); }
 function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='new Audio(\`${audioBase64}\`).play()'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; let mediaHtml = ''; if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; if (audioBase64 && !isLoading && !document.hidden) { new Audio(audioBase64).play(); } return id; }
 function removeMessage(id) { const el = document.getElementById(id); if (el) el.remove(); }
