@@ -24,8 +24,8 @@ body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; backgroun
 .header-info .name { font-size: 1.2em; font-weight: 700; color: var(--text-dark); }
 .status-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 20px; flex-shrink: 0; border-bottom: 1px solid var(--border-color-light); background-color: #f9f9f9; }
 .relationship-status { font-size: .9em; font-weight: 600; color: #555; padding: 6px 12px; border-radius: 15px; background-color: #eee; cursor: pointer; }
-.status-actions { display: flex; align-items: center; gap: 5px; }
-.status-btn { width: 44px; height: 44px; border-radius: 50%; border: none; background: 0 0; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #888; transition: transform 0.2s ease; }
+.status-actions { display: flex; align-items: center; gap: 6px; }
+.status-btn { width: 44px; height: 44px; border-radius: 50%; border: none; background: 0 0; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #888; transition: transform 0.2s ease, box-shadow 0.2s ease; background-color: #fff; box-shadow: 0 6px 14px rgba(0,0,0,0.12); }
 .status-btn:hover { transform: scale(1.05); }
 .status-btn img { width: 30px; height: 30px; object-fit: contain; }
 .relationship-menu { position: absolute; top: 140px; left: 20px; background: #fff; border: 1px solid #eee; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,.15); display: none; overflow: hidden; z-index: 50; }
@@ -96,8 +96,6 @@ body.memories-active .modal:not(.active) { display: none; }
 .premium-btn:hover { transform: scale(1.1); background-color: #fef3c7; }
 .premium-btn.is-premium { background: linear-gradient(45deg, var(--primary-color), var(--secondary-color)); cursor: default; }
 .premium-btn.is-premium img { filter: none; }
-.premium-info-btn { border: none; background: linear-gradient(90deg, rgba(142,130,255,0.85), rgba(255,117,171,0.85)); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 0.9em; font-weight: 600; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; }
-.premium-info-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(142,130,255,0.28); }
 .premium-info-content { max-width: 520px; }
 .premium-info-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .premium-info-body ul { list-style: disc; text-align: left; margin: 0 0 0 20px; display: flex; flex-direction: column; gap: 10px; color: #444; }

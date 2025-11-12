@@ -356,7 +356,7 @@ function initializeChatApp() {
                     });
                     const data = await res.json();
                     if (!data.success) {
-                        alert(data.message || "Bạn hãy trò chuyện nhiều hơn để thăng cấp mối quan hệ.");
+                    alert(data.message || "Bạn hãy trò chuyện nhiều hơn để thăng cấp mối quan hệ.");
                         closeRelationshipMenu();
                         return;
                     }
@@ -412,7 +412,7 @@ function initializeChatApp() {
         });
     }
 
-    const openPremiumInfoBtn = document.getElementById('openPremiumInfoBtn');
+    const openPremiumInfoBtn = document.getElementById('premiumInfoBtn');
     const premiumInfoModal = document.getElementById('premiumInfoModal');
     const closePremiumInfoBtn = document.getElementById('closePremiumInfoBtn');
     if (openPremiumInfoBtn && premiumInfoModal) {
