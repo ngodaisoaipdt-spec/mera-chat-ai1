@@ -329,7 +329,14 @@ app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
     }
     res.json({ memory, isPremium: req.user.isPremium });
 });
-app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); memory.user_profile = memory.user_profile || {}; let userProfile = memory.user_profile; 
+app.post('/chat', ensureAuthenticated, async (req, res) => { 
+    try { 
+        const { message, character } = req.body; 
+        console.log(`💬 Nhận tin nhắn từ user: "${message}" (character: ${character})`);
+        const isPremiumUser = req.user.isPremium; 
+        let memory = await loadMemory(req.user._id, character); 
+        memory.user_profile = memory.user_profile || {}; 
+        let userProfile = memory.user_profile; 
     if (!isPremiumUser && message.toLowerCase().includes('yêu')) { const charName = character === 'mera' ? 'Mera' : 'Trương Thắng'; return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); }
     const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser); 
     
@@ -340,38 +347,58 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
     // Sử dụng grok-3 (model hoàn chỉnh)
     const modelName = 'grok-3';
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
-    const gptResponse = await xai.chat.completions.create({ model: modelName, messages: messages }); 
+    let gptResponse;
+    try {
+        gptResponse = await Promise.race([
+            xai.chat.completions.create({ model: modelName, messages: messages }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout after 30s')), 30000))
+        ]);
+    } catch (apiError) {
+        console.error("❌ Lỗi khi gọi xAI API:", apiError.message);
+        throw new Error(`Lỗi kết nối đến AI: ${apiError.message}`);
+    } 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
+    console.log(`📝 AI reply (raw): ${rawReply.substring(0, 200)}...`);
     let mediaUrl = null, mediaType = null; 
     const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
     const mediaMatch = rawReply.match(mediaRegex); 
     if (mediaMatch) { 
         const [, type, topic, subject] = mediaMatch; 
-        if (topic === 'sensitive' && !isPremiumUser) {
-            // Nếu chưa Premium mà yêu cầu sensitive → gửi normal thay thế
-            console.log(`⚠️ User chưa Premium yêu cầu sensitive, gửi normal thay thế`);
-            const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
-            const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
-            if (mediaResult.success) {
-                mediaUrl = mediaResult.mediaUrl;
-                mediaType = mediaResult.mediaType;
-                memory.user_profile = mediaResult.updatedMemory.user_profile;
-                // Thay thế text để giải thích nhẹ nhàng
-                rawReply = rawReply.replace(mediaRegex, '').trim();
-                if (!rawReply || rawReply.length < 10) {
-                    rawReply = "Em/Anh chỉ chia sẻ nội dung đó với người thân thiết. Đây là ảnh/video bình thường nhé!";
+        console.log(`🖼️ Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}`);
+        try {
+            if (topic === 'sensitive' && !isPremiumUser) {
+                // Nếu chưa Premium mà yêu cầu sensitive → gửi normal thay thế
+                console.log(`⚠️ User chưa Premium yêu cầu sensitive, gửi normal thay thế`);
+                const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
+                const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
+                if (mediaResult && mediaResult.success) {
+                    mediaUrl = mediaResult.mediaUrl;
+                    mediaType = mediaResult.mediaType;
+                    memory.user_profile = mediaResult.updatedMemory.user_profile;
+                    // Thay thế text để giải thích nhẹ nhàng
+                    rawReply = rawReply.replace(mediaRegex, '').trim();
+                    if (!rawReply || rawReply.length < 10) {
+                        rawReply = "Em/Anh chỉ chia sẻ nội dung đó với người thân thiết. Đây là ảnh/video bình thường nhé!";
+                    }
+                } else {
+                    console.warn(`⚠️ Không thể gửi media fallback:`, mediaResult?.message || 'Unknown error');
+                    rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh chỉ chia sẻ nội dung đó với người thân thiết. Đây là ảnh/video bình thường nhé!";
                 }
             } else {
-                rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... riêng tư lắm.";
+                const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
+                if (mediaResult && mediaResult.success) {
+                    mediaUrl = mediaResult.mediaUrl;
+                    mediaType = mediaResult.mediaType;
+                    memory.user_profile = mediaResult.updatedMemory.user_profile;
+                    console.log(`✅ Đã gửi media thành công: ${mediaUrl}`);
+                } else {
+                    console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
+                }
+                rawReply = rawReply.replace(mediaRegex, '').trim() || (mediaResult?.message || "Đã gửi media cho bạn!");
             }
-        } else {
-            const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
-            if (mediaResult.success) {
-                mediaUrl = mediaResult.mediaUrl;
-                mediaType = mediaResult.mediaType;
-                memory.user_profile = mediaResult.updatedMemory.user_profile;
-            }
-            rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message;
+        } catch (mediaError) {
+            console.error("❌ Lỗi khi xử lý media:", mediaError);
+            rawReply = rawReply.replace(mediaRegex, '').trim() || "Xin lỗi, có lỗi khi gửi media!";
         }
     } 
     // Lưu history
@@ -379,8 +406,13 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
     memory.history.push({ role: 'assistant', content: rawReply }); userProfile.message_count = (userProfile.message_count || 0) + 1; const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) { userProfile.relationship_stage = computedStage; } if (memory.history.length > 50) { memory.history = memory.history.slice(memory.history.length - 50); } 
     await memory.save(); 
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>'); const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character); 
+    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}`);
     res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
-} catch (error) { console.error("❌ Lỗi chung trong /chat:", error); res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); } });
+} catch (error) { 
+    console.error("❌ Lỗi chung trong /chat:", error);
+    console.error("   Stack:", error.stack);
+    res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); 
+} });
 
 // Cập nhật tình trạng mối quan hệ
 app.post('/api/relationship', ensureAuthenticated, async (req, res) => {
