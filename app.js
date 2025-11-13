@@ -358,11 +358,44 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         throw new Error(`Lỗi kết nối đến AI: ${apiError.message}`);
     } 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
-    console.log(`📝 AI reply (raw): ${rawReply.substring(0, 200)}...`);
+    console.log(`📝 AI reply (raw): ${rawReply.substring(0, 500)}...`);
     let mediaUrl = null, mediaType = null; 
+    
+    // Kiểm tra xem user có yêu cầu media không
+    const userRequestedMedia = /(cho.*xem|gửi|send|show).*(ảnh|hình|image|video|vid)/i.test(message);
+    const userRequestedVideo = /(cho.*xem|gửi|send|show).*(video|vid)/i.test(message);
+    const userRequestedImage = /(cho.*xem|gửi|send|show).*(ảnh|hình|image)/i.test(message);
+    const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape)/i.test(message);
+    
     const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
     const mediaMatch = rawReply.match(mediaRegex); 
-    if (mediaMatch) { 
+    
+    // Nếu user yêu cầu media nhưng AI không gửi [SEND_MEDIA] → tự động gửi
+    if (userRequestedMedia && !mediaMatch) {
+        console.log(`⚠️ User yêu cầu media nhưng AI không gửi [SEND_MEDIA], tự động gửi media...`);
+        const autoType = userRequestedVideo ? 'video' : 'image';
+        const autoTopic = (userRequestedSensitive && isPremiumUser) ? 'sensitive' : 'normal';
+        let autoSubject = 'selfie';
+        if (autoType === 'video') {
+            autoSubject = userRequestedSensitive ? (character === 'mera' ? 'shape' : 'private') : 'moment';
+        } else {
+            if (autoTopic === 'sensitive') {
+                autoSubject = character === 'mera' ? 'bikini' : 'body';
+            }
+        }
+        console.log(`🔄 Tự động gửi: type=${autoType}, topic=${autoTopic}, subject=${autoSubject}`);
+        try {
+            const mediaResult = await sendMediaFile(memory, character, autoType, autoTopic, autoSubject);
+            if (mediaResult && mediaResult.success) {
+                mediaUrl = mediaResult.mediaUrl;
+                mediaType = mediaResult.mediaType;
+                memory.user_profile = mediaResult.updatedMemory.user_profile;
+                console.log(`✅ Đã tự động gửi media: ${mediaUrl}`);
+            }
+        } catch (autoError) {
+            console.error("❌ Lỗi khi tự động gửi media:", autoError);
+        }
+    } else if (mediaMatch) { 
         const [, type, topic, subject] = mediaMatch; 
         console.log(`🖼️ Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}`);
         try {
