@@ -497,7 +497,18 @@ function initializeChatApp() {
     }
 }
 
-function sendMessageFromInput() { const message = DOMElements.userInput.value.trim(); if (!message || isProcessing) return; addMessage(DOMElements.chatBox, "Bạn", message); DOMElements.userInput.value = ""; const loadingId = addMessage(DOMElements.chatBox, currentCharacter, "💭 Đang suy nghĩ...", null, true); sendMessageToServer(message, loadingId); }
+function sendMessageFromInput() { 
+    const message = DOMElements.userInput.value.trim(); 
+    if (!message || isProcessing) return; 
+    
+    // Lưu ID của tin nhắn user để đảm bảo không bị mất
+    const userMessageId = addMessage(DOMElements.chatBox, "Bạn", message); 
+    console.log(`✅ Đã thêm tin nhắn user với ID: ${userMessageId}`);
+    
+    DOMElements.userInput.value = ""; 
+    const loadingId = addMessage(DOMElements.chatBox, currentCharacter, "💭 Đang suy nghĩ...", null, true); 
+    sendMessageToServer(message, loadingId); 
+}
 async function sendMessageToServer(messageText, loadingId) { setProcessing(true); try { const response = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: messageText, character: currentCharacter }) }); if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`); const data = await response.json(); if (data.updatedMemory) currentMemory = data.updatedMemory; removeMessage(loadingId); updateRelationshipStatus(); if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu(); const messages = data.displayReply.split('<NEXT_MESSAGE>').filter(m => m.trim().length > 0); for (let i = 0; i < messages.length; i++) { const msg = messages[i].trim(); addMessage(DOMElements.chatBox, currentCharacter, msg, (i === 0) ? data.audio : null, false, null, (i === messages.length - 1) ? data.mediaUrl : null, (i === messages.length - 1) ? data.mediaType : null); if (i < messages.length - 1) await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30)); } } catch (error) { console.error("Lỗi gửi tin nhắn:", error); if (loadingId) removeMessage(loadingId); addMessage(DOMElements.chatBox, currentCharacter, "Xin lỗi, có lỗi kết nối mất rồi!"); } finally { setProcessing(false); } }
 function setProcessing(state) { isProcessing = state;[DOMElements.userInput, DOMElements.sendBtn, DOMElements.micBtnText].forEach(el => { if (el) el.disabled = state; }); }
 function updateRelationshipStatus() {
@@ -555,7 +566,42 @@ function toggleAudio(messageId, audioBase64) {
     }
 }
 
-function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { const id = `msg-${Date.now()}`; const msgClass = sender === "Bạn" ? "user" : "mera"; const loadingClass = isLoading ? "loading" : ""; if (text.includes('[PREMIUM_PROMPT]')) { if (currentUser && currentUser.isPremium) return; const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; chatBox.insertAdjacentHTML('beforeend', promptHtml); chatBox.scrollTop = chatBox.scrollHeight; return id; } const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='toggleAudio("${id}", \`${audioBase64}\`)'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; let mediaHtml = ''; if (imageBase64) { mediaHtml = `<img src="${imageBase64}" alt="Ảnh đã gửi" class="chat-image"/>`; } else if (mediaUrl && mediaType === 'image') { mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; } else if (mediaUrl && mediaType === 'video') { mediaHtml = `<video src="${mediaUrl}" controls class="chat-video"><source src="${mediaUrl}" type="video/mp4">Trình duyệt không hỗ trợ video.</video>`; } const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; chatBox.insertAdjacentHTML('beforeend', html); chatBox.scrollTop = chatBox.scrollHeight; return id; }
+function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false, imageBase64 = null, mediaUrl = null, mediaType = null) { 
+    // Tạo ID unique với timestamp và random để tránh trùng lặp
+    const id = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`; 
+    const msgClass = sender === "Bạn" ? "user" : "mera"; 
+    const loadingClass = isLoading ? "loading" : ""; 
+    
+    if (text.includes('[PREMIUM_PROMPT]')) { 
+        if (currentUser && currentUser.isPremium) return null; 
+        const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; 
+        const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; 
+        chatBox.insertAdjacentHTML('beforeend', promptHtml); 
+        chatBox.scrollTop = chatBox.scrollHeight; 
+        return id; 
+    } 
+    
+    const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='toggleAudio("${id}", \`${audioBase64}\`)'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; 
+    let mediaHtml = ''; 
+    if (imageBase64) { 
+        mediaHtml = `<img src="${imageBase64}" alt="Ảnh đã gửi" class="chat-image"/>`; 
+    } else if (mediaUrl && mediaType === 'image') { 
+        mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; 
+    } else if (mediaUrl && mediaType === 'video') { 
+        mediaHtml = `<video src="${mediaUrl}" controls class="chat-video"><source src="${mediaUrl}" type="video/mp4">Trình duyệt không hỗ trợ video.</video>`; 
+    } 
+    
+    const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; 
+    chatBox.insertAdjacentHTML('beforeend', html); 
+    chatBox.scrollTop = chatBox.scrollHeight; 
+    
+    // Debug log để kiểm tra
+    if (sender === "Bạn") {
+        console.log(`✅ Đã thêm tin nhắn user vào DOM với ID: ${id}, text: "${text.substring(0, 50)}..."`);
+    }
+    
+    return id; 
+}
 function removeMessage(id) { 
     // Dừng audio nếu đang phát
     if (activeAudios[id]) {
