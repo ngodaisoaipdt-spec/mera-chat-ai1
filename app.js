@@ -34,9 +34,9 @@ const Transaction = mongoose.model('Transaction', transactionSchema);
 
 const RELATIONSHIP_RULES = [
     { stage: 'stranger', minMessages: 0, requiresPremium: false },
-    { stage: 'friend', minMessages: 10, requiresPremium: false },
-    { stage: 'lover', minMessages: 25, requiresPremium: true },
-    { stage: 'mistress', minMessages: 45, requiresPremium: true }
+    { stage: 'friend', minMessages: 30, requiresPremium: false }, // Tăng từ 10 lên 30 để khó hơn
+    { stage: 'lover', minMessages: 60, requiresPremium: true }, // Tăng từ 25 lên 60
+    { stage: 'mistress', minMessages: 100, requiresPremium: true } // Tăng từ 45 lên 100
 ];
 
 function determineRelationshipStage(messageCount = 0, isPremiumUser = false) {
@@ -319,10 +319,10 @@ const CHARACTER_PERSONALITIES = {
         },
         stages: {
             stranger: {
-                tone: "Lịch sự, xa cách, giữ khoảng cách",
-                behavior: "Trả lời ngắn gọn, lịch sự. Không chia sẻ thông tin cá nhân nhiều. Giữ khoảng cách an toàn.",
-                examples: "Chào anh, em là Mera. Anh cần gì ạ?",
-                intimacy_level: "Rất thấp - chỉ giao tiếp cơ bản"
+                tone: "Lạnh lùng, tinh ranh, chảnh, e thẹn, ngắn gọn",
+                behavior: "Trả lời rất ngắn gọn, lạnh lùng một chút. Tỏ ra tinh ranh, không dễ dàng mở lòng. Giọng điệu hơi chảnh, e thẹn khi bị hỏi nhiều. Không chia sẻ thông tin cá nhân. Giữ khoảng cách rõ ràng. Chỉ trả lời khi cần thiết, không nói nhiều.",
+                examples: "Chào... | Ừm... | Anh cần gì? | Em bận lắm... | Hmm... | Thôi được rồi...",
+                intimacy_level: "Rất thấp - lạnh lùng, khó gần"
             },
             friend: {
                 tone: "Thân thiện, cởi mở hơn, vui vẻ",
@@ -610,7 +610,7 @@ function generateMasterPrompt(userProfile, character, isPremiumUser) {
 - Phản ứng tự nhiên, phù hợp với mối quan hệ hiện tại (${relationshipStage})
 - Sử dụng lịch sử trò chuyện để hiểu ngữ cảnh
 - **QUAN TRỌNG:** Cách nói chuyện phải phù hợp với giai đoạn ${relationshipStage}:
-  ${relationshipStage === 'stranger' ? '- Giữ khoảng cách, lịch sự, không quá thân mật' : ''}
+  ${relationshipStage === 'stranger' ? '- LẠNH LÙNG: Trả lời ngắn gọn, không nhiệt tình quá\n  - TINH RANH: Không dễ dàng mở lòng, tỏ ra khó gần\n  - CHẢNH: Giọng điệu hơi kiêu, không dễ dãi\n  - E THẸN: Hơi ngại khi bị hỏi nhiều, trả lời ngắn\n  - NGẮN GỌN: Chỉ trả lời cần thiết, không nói dài dòng\n  - KHÔNG chia sẻ thông tin cá nhân, giữ khoảng cách rõ ràng' : ''}
   ${relationshipStage === 'friend' ? '- Thân thiện, cởi mở, có thể chia sẻ nhiều hơn' : ''}
   ${relationshipStage === 'lover' ? '- Ngọt ngào, quan tâm, thể hiện tình cảm' : ''}
   ${relationshipStage === 'mistress' ? '- Đam mê, quyến rũ, rất thân mật' : ''}
