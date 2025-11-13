@@ -594,11 +594,23 @@ function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false
     } else if (mediaUrl && mediaType === 'image') { 
         mediaHtml = `<img src="${mediaUrl}" alt="Kỷ niệm" class="chat-image"/>`; 
     } else if (mediaUrl && mediaType === 'video') { 
-        mediaHtml = `<video src="${mediaUrl}" controls class="chat-video"><source src="${mediaUrl}" type="video/mp4">Trình duyệt không hỗ trợ video.</video>`; 
+        // Thêm muted={false} và playsinline để đảm bảo âm thanh không bị tắt
+        mediaHtml = `<video src="${mediaUrl}" controls class="chat-video" muted="false" playsinline><source src="${mediaUrl}" type="video/mp4">Trình duyệt không hỗ trợ video.</video>`; 
     } 
     
     const html = `<div id="${id}" class="message ${msgClass} ${loadingClass}"><p>${text.replace(/\n/g, "<br>")}</p>${mediaHtml}${audioBtn}</div>`; 
     chatBox.insertAdjacentHTML('beforeend', html); 
+    
+    // Sau khi thêm video, đảm bảo không bị muted
+    if (mediaUrl && mediaType === 'video') {
+        const videoElement = document.querySelector(`#${id} video`);
+        if (videoElement) {
+            videoElement.muted = false;
+            videoElement.volume = 1.0;
+            console.log(`🔊 Đã đảm bảo video không bị muted: ${mediaUrl}`);
+        }
+    }
+    
     chatBox.scrollTop = chatBox.scrollHeight; 
     
     // Debug log để kiểm tra
