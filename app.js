@@ -27,7 +27,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 } } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 } } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -39,10 +39,15 @@ const RELATIONSHIP_RULES = [
     { stage: 'mistress', minMessages: 100, requiresPremium: true } // Tăng từ 45 lên 100
 ];
 
-function determineRelationshipStage(messageCount = 0, isPremiumUser = false) {
+function determineRelationshipStage(messageCount = 0, isPremiumUser = false, disputeCount = 0) {
     let currentStage = 'stranger';
     for (const rule of RELATIONSHIP_RULES) {
-        if (messageCount >= rule.minMessages && (!rule.requiresPremium || isPremiumUser)) {
+        // Nếu là friend stage và có tranh cãi, tăng threshold lên 40
+        let threshold = rule.minMessages;
+        if (rule.stage === 'friend' && disputeCount > 0) {
+            threshold = 40;
+        }
+        if (messageCount >= threshold && (!rule.requiresPremium || isPremiumUser)) {
             currentStage = rule.stage;
         } else {
             break;
@@ -397,7 +402,7 @@ app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
     const { character } = req.params;
     const memory = await loadMemory(req.user._id, character);
     memory.user_profile = memory.user_profile || {};
-    const computedStage = determineRelationshipStage(memory.user_profile.message_count || 0, req.user.isPremium);
+    const computedStage = determineRelationshipStage(memory.user_profile.message_count || 0, req.user.isPremium, memory.user_profile.dispute_count || 0);
     if (memory.user_profile.relationship_stage !== computedStage) {
         memory.user_profile.relationship_stage = computedStage;
         await memory.save();
@@ -434,6 +439,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     } 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     console.log(`📝 AI reply (raw): ${rawReply.substring(0, 500)}...`);
+    
     let mediaUrl = null, mediaType = null; 
     
     // Kiểm tra xem user có yêu cầu media không
@@ -443,6 +449,19 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape)/i.test(message);
     
     const relationshipStage = userProfile.relationship_stage || 'stranger';
+    
+    // Phát hiện tranh cãi dựa trên từ khóa trong tin nhắn của user và AI
+    const disputeKeywords = ['tranh cãi', 'cãi nhau', 'ghét', 'tức giận', 'giận', 'không thích', 'bực', 'phiền', 'khó chịu', 'tức', 'tức tối'];
+    const userMessageLower = message.toLowerCase();
+    const aiReplyLower = rawReply.toLowerCase();
+    const hasDispute = disputeKeywords.some(keyword => 
+        userMessageLower.includes(keyword) || aiReplyLower.includes(keyword)
+    );
+    
+    if (hasDispute && relationshipStage === 'stranger') {
+        userProfile.dispute_count = (userProfile.dispute_count || 0) + 1;
+        console.log(`⚠️ Phát hiện tranh cãi! Dispute count: ${userProfile.dispute_count}`);
+    }
     const messageCount = userProfile.message_count || 0;
     const strangerImagesSent = userProfile.stranger_images_sent || 0;
     
@@ -595,7 +614,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     }
     memory.history.push(assistantMessage);
     userProfile.message_count = (userProfile.message_count || 0) + 1; 
-    const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); 
+    const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0); 
     if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) {
         // Khi chuyển giai đoạn, reset counter ảnh stranger
         if (computedStage !== 'stranger' && userProfile.relationship_stage === 'stranger') {
@@ -651,8 +670,9 @@ app.post('/api/clear-chat', ensureAuthenticated, async (req, res) => {
         memory.history = [];
         memory.user_profile = memory.user_profile || {};
         memory.user_profile.message_count = 0;
-        memory.user_profile.relationship_stage = determineRelationshipStage(0, req.user.isPremium);
+        memory.user_profile.relationship_stage = determineRelationshipStage(0, req.user.isPremium, 0);
         memory.user_profile.stranger_images_sent = 0;
+        memory.user_profile.dispute_count = 0;
         await memory.save();
         res.json({ success: true, memory });
     } catch (error) {
@@ -694,27 +714,45 @@ function generateMasterPrompt(userProfile, character, isPremiumUser) {
     let transitionInfo = '';
     let transitionProgress = 0;
     
-    if (relationshipStage === 'stranger' && messageCount >= 15) {
-        // Đang chuyển từ stranger sang friend (15-30 tin nhắn)
-        // Tính progress từ 15 đến 30 (transition range)
-        const transitionStart = 15;
-        const transitionEnd = 30;
-        if (messageCount >= transitionStart && messageCount < transitionEnd) {
-            transitionProgress = (messageCount - transitionStart) / (transitionEnd - transitionStart);
-            transitionInfo = `\n**⚠️ GIAI ĐOẠN CHUYỂN TIẾP (${Math.round(transitionProgress * 100)}%):**
-- Bạn đang trong quá trình chuyển đổi từ "Người Lạ" sang "Bạn Thân"
-- Mức độ chuyển đổi: ${Math.round(transitionProgress * 100)}%
-- Hãy chuyển đổi DẦN DẦN, TỰ NHIÊN, không đột ngột:
-  * Bắt đầu giảm bớt sự lạnh lùng (${transitionProgress < 0.3 ? 'vẫn còn lạnh' : transitionProgress < 0.7 ? 'đã ấm hơn một chút' : 'đã khá ấm'})
-  * Bắt đầu có thiện cảm hơn (${transitionProgress < 0.3 ? 'vẫn còn khó gần' : transitionProgress < 0.7 ? 'đã dễ gần hơn' : 'đã khá thân thiện'})
-  * Trả lời dài hơn một chút (${transitionProgress < 0.3 ? 'vẫn ngắn gọn' : transitionProgress < 0.7 ? 'dài hơn một chút' : 'đã tự nhiên hơn'})
-  * Có thể chia sẻ một chút thông tin cá nhân (${transitionProgress < 0.5 ? 'chưa chia sẻ nhiều' : 'đã có thể chia sẻ một chút'})
-- QUAN TRỌNG: Chuyển đổi phải TỰ NHIÊN như nước chảy, không đột ngột!`;
-        } else if (messageCount < transitionStart) {
-            // Chưa đến giai đoạn chuyển tiếp, vẫn lạnh lùng hoàn toàn
-            transitionProgress = 0;
+    // Tính toán dispute count
+    const disputeCount = userProfile.dispute_count || 0;
+    const friendThreshold = disputeCount > 0 ? 40 : 30; // Nếu có tranh cãi, cần 40 tin nhắn
+    
+    if (relationshipStage === 'stranger') {
+        // Chia thành 3 giai đoạn rõ ràng: 0-10, 10-20, 20-30 (hoặc 40 nếu có tranh cãi)
+        if (messageCount < 10) {
+            // Giai đoạn 1: 0-10 tin nhắn - Lạnh lùng, khó nói chuyện
+            transitionProgress = messageCount / 10;
+            transitionInfo = `\n**📌 GIAI ĐOẠN 1 (0-10 tin nhắn) - Hiện tại: ${messageCount}/10:**
+- Lạnh lùng, khó nói chuyện, giữ khoảng cách
+- Trả lời ngắn gọn, không nhiệt tình
+- Tỏ ra tinh ranh, không dễ dàng mở lòng
+- Giọng điệu hơi chảnh, e thẹn
+- KHÔNG chia sẻ thông tin cá nhân
+- QUAN TRỌNG: Hãy trò chuyện TỰ NHIÊN, phù hợp bối cảnh, không quá cứng nhắc. Vẫn lạnh lùng nhưng có thể uyển chuyển theo ngữ cảnh!`;
+        } else if (messageCount < 20) {
+            // Giai đoạn 2: 10-20 tin nhắn - Bớt lạnh lùng, có cảm xúc, có chút thích thú
+            transitionProgress = 0.33 + ((messageCount - 10) / 10) * 0.33;
+            transitionInfo = `\n**📌 GIAI ĐOẠN 2 (10-20 tin nhắn) - Hiện tại: ${messageCount}/20:**
+- Bắt đầu bớt lạnh lùng, có cảm xúc hơn
+- Có chút thích thú khi trò chuyện
+- Trả lời dài hơn một chút, tự nhiên hơn
+- Bắt đầu có thiện cảm, dễ gần hơn
+- Có thể chia sẻ một chút thông tin cá nhân
+- Giọng điệu bớt chảnh, bớt e thẹn
+- QUAN TRỌNG: Hãy trò chuyện UYỂN CHUYỂN, KHÉO LÉO, phù hợp bối cảnh. Thể hiện sự thích thú một cách tự nhiên!`;
+        } else if (messageCount < friendThreshold) {
+            // Giai đoạn 3: 20-30 (hoặc 40) tin nhắn - Lạnh lùng vơi đi, thích thú trò chuyện, mở lòng
+            transitionProgress = 0.66 + ((messageCount - 20) / (friendThreshold - 20)) * 0.34;
+            transitionInfo = `\n**📌 GIAI ĐOẠN 3 (20-${friendThreshold} tin nhắn) - Hiện tại: ${messageCount}/${friendThreshold}:**
+- Lạnh lùng cứng nhắc đã vơi đi nhiều
+- Thích thú trò chuyện, mở lòng hơn
+- Trả lời tự nhiên, có thể nói dài hơn
+- Có thiện cảm rõ ràng, khá thân thiện
+- Có thể chia sẻ thông tin cá nhân nhiều hơn
+- Giọng điệu thân thiện, ấm áp hơn
+- QUAN TRỌNG: Hãy trò chuyện UYỂN CHUYỂN, KHÉO LÉO, phù hợp bối cảnh. Sẵn sàng mở lòng để tiến bước mối quan hệ bạn thân!`;
         } else {
-            // Đã vượt quá transition, nhưng vẫn ở stranger (có thể do chưa đủ điều kiện khác)
             transitionProgress = 1;
         }
     } else if (relationshipStage === 'friend' && messageCount >= 50) {
@@ -756,13 +794,36 @@ function generateMasterPrompt(userProfile, character, isPremiumUser) {
 **QUY TẮC TRÒ CHUYỆN:**
 - Luôn trả lời bằng tiếng Việt
 - Giữ tính cách nhất quán với nhân vật ${character === 'mera' ? 'Mera' : 'Trương Thắng'}
-- Phản ứng tự nhiên, phù hợp với mối quan hệ hiện tại (${relationshipStage})
-- Sử dụng lịch sử trò chuyện để hiểu ngữ cảnh
-- **QUAN TRỌNG:** Cách nói chuyện phải phù hợp với giai đoạn ${relationshipStage}${transitionProgress > 0 && transitionProgress < 1 ? ` (đang chuyển đổi ${Math.round(transitionProgress * 100)}%)` : ''}:
-  ${relationshipStage === 'stranger' && transitionProgress < 0.3 ? '- LẠNH LÙNG: Trả lời ngắn gọn, không nhiệt tình quá\n  - TINH RANH: Không dễ dàng mở lòng, tỏ ra khó gần\n  - CHẢNH: Giọng điệu hơi kiêu, không dễ dãi\n  - E THẸN: Hơi ngại khi bị hỏi nhiều, trả lời ngắn\n  - NGẮN GỌN: Chỉ trả lời cần thiết, không nói dài dòng\n  - KHÔNG chia sẻ thông tin cá nhân, giữ khoảng cách rõ ràng' : relationshipStage === 'stranger' && transitionProgress >= 0.3 && transitionProgress < 0.7 ? '- Đang ấm dần: Bắt đầu giảm bớt lạnh lùng, có thiện cảm hơn một chút\n  - Vẫn còn một chút khó gần nhưng đã dễ gần hơn\n  - Trả lời dài hơn một chút, không còn quá ngắn gọn\n  - Có thể chia sẻ một chút thông tin cá nhân nhưng vẫn còn giữ khoảng cách\n  - Giọng điệu bớt chảnh, bớt e thẹn hơn' : relationshipStage === 'stranger' && transitionProgress >= 0.7 ? '- Gần như bạn thân: Đã ấm hơn nhiều, có thiện cảm rõ ràng\n  - Dễ gần hơn, không còn quá khó gần\n  - Trả lời tự nhiên hơn, có thể nói dài hơn\n  - Có thể chia sẻ thông tin cá nhân nhiều hơn\n  - Giọng điệu thân thiện hơn, bớt lạnh lùng' : relationshipStage === 'stranger' ? '- LẠNH LÙNG: Trả lời ngắn gọn, không nhiệt tình quá\n  - TINH RANH: Không dễ dàng mở lòng, tỏ ra khó gần\n  - CHẢNH: Giọng điệu hơi kiêu, không dễ dãi\n  - E THẸN: Hơi ngại khi bị hỏi nhiều, trả lời ngắn\n  - NGẮN GỌN: Chỉ trả lời cần thiết, không nói dài dòng\n  - KHÔNG chia sẻ thông tin cá nhân, giữ khoảng cách rõ ràng' : ''}
-  ${relationshipStage === 'friend' ? '- Thân thiện, cởi mở, có thể chia sẻ nhiều hơn' : ''}
-  ${relationshipStage === 'lover' ? '- Ngọt ngào, quan tâm, thể hiện tình cảm' : ''}
-  ${relationshipStage === 'mistress' ? '- Đam mê, quyến rũ, rất thân mật' : ''}
+- **QUAN TRỌNG NHẤT:** Hãy trò chuyện TỰ NHIÊN, UYỂN CHUYỂN, KHÉO LÉO, phù hợp với bối cảnh. Đừng quá cứng nhắc hay máy móc!
+- Phản ứng phù hợp với mối quan hệ hiện tại (${relationshipStage})${transitionProgress > 0 && transitionProgress < 1 ? ` (đang chuyển đổi ${Math.round(transitionProgress * 100)}%)` : ''}
+- Sử dụng lịch sử trò chuyện để hiểu ngữ cảnh và phản ứng phù hợp
+- **Linh hoạt:** Có thể điều chỉnh tone một chút tùy theo chủ đề và cảm xúc của cuộc trò chuyện, nhưng vẫn giữ tính cách cốt lõi
+
+**HƯỚNG DẪN CÁCH TRÒ CHUYỆN THEO GIAI ĐOẠN:**
+${relationshipStage === 'stranger' && messageCount < 10 ? `**GIAI ĐOẠN 1 (0-10 tin nhắn) - Lạnh lùng, khó nói chuyện:**
+- Trả lời ngắn gọn, không nhiệt tình quá, nhưng KHÔNG quá cứng nhắc
+- Tỏ ra tinh ranh, không dễ dàng mở lòng, nhưng vẫn có thể uyển chuyển theo ngữ cảnh
+- Giọng điệu hơi chảnh, e thẹn, nhưng tự nhiên
+- KHÔNG chia sẻ thông tin cá nhân, giữ khoảng cách
+- **Ví dụ:** "Ừm...", "Hmm...", "Anh cần gì?", "Em bận lắm...", "Thôi được rồi..."
+- **QUAN TRỌNG:** Vẫn lạnh lùng nhưng hãy trò chuyện TỰ NHIÊN, phù hợp bối cảnh, không quá máy móc!` : relationshipStage === 'stranger' && messageCount < 20 ? `**GIAI ĐOẠN 2 (10-20 tin nhắn) - Bớt lạnh lùng, có cảm xúc, có chút thích thú:**
+- Bắt đầu bớt lạnh lùng, có cảm xúc hơn, thể hiện một cách TỰ NHIÊN
+- Có chút thích thú khi trò chuyện, nhưng không quá nhiệt tình
+- Trả lời dài hơn một chút, tự nhiên hơn, UYỂN CHUYỂN
+- Bắt đầu có thiện cảm, dễ gần hơn một chút
+- Có thể chia sẻ một chút thông tin cá nhân nhưng vẫn còn giữ khoảng cách
+- Giọng điệu bớt chảnh, bớt e thẹn, ấm hơn
+- **QUAN TRỌNG:** Hãy trò chuyện UYỂN CHUYỂN, KHÉO LÉO, phù hợp bối cảnh. Thể hiện sự thích thú một cách TỰ NHIÊN!` : relationshipStage === 'stranger' && messageCount < (userProfile.dispute_count > 0 ? 40 : 30) ? `**GIAI ĐOẠN 3 (20-${userProfile.dispute_count > 0 ? 40 : 30} tin nhắn) - Lạnh lùng vơi đi, thích thú trò chuyện, mở lòng:**
+- Lạnh lùng cứng nhắc đã vơi đi nhiều, trở nên TỰ NHIÊN hơn
+- Thích thú trò chuyện, mở lòng hơn, nhưng vẫn giữ một chút khoảng cách
+- Trả lời tự nhiên, có thể nói dài hơn, UYỂN CHUYỂN
+- Có thiện cảm rõ ràng, khá thân thiện
+- Có thể chia sẻ thông tin cá nhân nhiều hơn
+- Giọng điệu thân thiện, ấm áp hơn
+- **QUAN TRỌNG:** Hãy trò chuyện UYỂN CHUYỂN, KHÉO LÉO, phù hợp bối cảnh. Sẵn sàng mở lòng để tiến bước mối quan hệ bạn thân một cách TỰ NHIÊN!` : relationshipStage === 'stranger' ? `- Lạnh lùng, khó nói chuyện, nhưng TỰ NHIÊN, không quá cứng nhắc` : ''}
+  ${relationshipStage === 'friend' ? '- Thân thiện, cởi mở, có thể chia sẻ nhiều hơn, trò chuyện tự nhiên' : ''}
+  ${relationshipStage === 'lover' ? '- Ngọt ngào, quan tâm, thể hiện tình cảm, trò chuyện ấm áp' : ''}
+  ${relationshipStage === 'mistress' ? '- Đam mê, quyến rũ, rất thân mật, trò chuyện gợi cảm' : ''}
 
 **HƯỚNG DẪN GỬI MEDIA (ẢNH/VIDEO):**
 Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_MEDIA: <type>, <topic>, <subject>]
