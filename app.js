@@ -329,37 +329,22 @@ app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
     }
     res.json({ memory, isPremium: req.user.isPremium });
 });
-app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character, image } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); memory.user_profile = memory.user_profile || {}; let userProfile = memory.user_profile; 
+app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { message, character } = req.body; const isPremiumUser = req.user.isPremium; let memory = await loadMemory(req.user._id, character); memory.user_profile = memory.user_profile || {}; let userProfile = memory.user_profile; 
     if (!isPremiumUser && message.toLowerCase().includes('yêu')) { const charName = character === 'mera' ? 'Mera' : 'Trương Thắng'; return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); }
     const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser); 
     
-    // Chuẩn bị messages với vision support
+    // Chuẩn bị messages
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
+    messages.push({ role: 'user', content: message });
     
-    // Nếu có ảnh, thêm vào message với vision format (grok-3 hỗ trợ vision)
-    if (image) {
-        const userMessage = {
-            role: 'user',
-            content: [
-                { type: 'text', text: message || 'Xem ảnh này giúp em/anh nhé' },
-                { type: 'image_url', image_url: { url: image } }
-            ]
-        };
-        messages.push(userMessage);
-        console.log("🖼️ Đã nhận ảnh từ user, gửi đến grok-3 với vision support");
-    } else {
-        messages.push({ role: 'user', content: message });
-    }
-    
-    // Sử dụng grok-3 (model hoàn chỉnh, hỗ trợ cả text và vision)
+    // Sử dụng grok-3 (model hoàn chỉnh)
     const modelName = 'grok-3';
-    console.log(`🚀 Đang sử dụng model: ${modelName}${image ? ' (với vision)' : ''}`);
+    console.log(`🚀 Đang sử dụng model: ${modelName}`);
     const gptResponse = await xai.chat.completions.create({ model: modelName, messages: messages }); 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     let mediaUrl = null, mediaType = null; const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; const mediaMatch = rawReply.match(mediaRegex); if (mediaMatch) { const [, type, topic, subject] = mediaMatch; if (topic === 'sensitive' && !isPremiumUser) { rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... riêng tư lắm."; } else { const mediaResult = await sendMediaFile(memory, character, type, topic, subject); if (mediaResult.success) { mediaUrl = mediaResult.mediaUrl; mediaType = mediaResult.mediaType; memory.user_profile = mediaResult.updatedMemory.user_profile; } rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message; } } 
-    // Lưu history - nếu có ảnh thì lưu message text, không lưu ảnh vào history (tiết kiệm)
-    const userHistoryContent = image ? message || 'Đã gửi ảnh' : message;
-    memory.history.push({ role: 'user', content: userHistoryContent }); 
+    // Lưu history
+    memory.history.push({ role: 'user', content: message }); 
     memory.history.push({ role: 'assistant', content: rawReply }); userProfile.message_count = (userProfile.message_count || 0) + 1; const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) { userProfile.relationship_stage = computedStage; } if (memory.history.length > 50) { memory.history = memory.history.slice(memory.history.length - 50); } 
     await memory.save(); 
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>'); const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character); 
