@@ -136,8 +136,14 @@ async function loadChatData() {
             addMessage(DOMElements.chatBox, currentCharacter, currentCharacter === 'mera' ? "Chào anh, em là Mera nè. 🥰" : "Chào em, anh là Trương Thắng.");
         } else {
             conversationHistory.forEach(msg => {
-                if (msg.role === 'user') addMessage(DOMElements.chatBox, "Bạn", msg.content);
-                if (msg.role === 'assistant') addMessage(DOMElements.chatBox, currentCharacter, msg.content);
+                if (msg.role === 'user') {
+                    addMessage(DOMElements.chatBox, "Bạn", msg.content);
+                } else if (msg.role === 'assistant') {
+                    // Nếu có media trong history, hiển thị kèm theo
+                    const mediaUrl = msg.mediaUrl || null;
+                    const mediaType = msg.mediaType || null;
+                    addMessage(DOMElements.chatBox, currentCharacter, msg.content, null, false, null, mediaUrl, mediaType);
+                }
             });
         }
         updateRelationshipStatus();

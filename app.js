@@ -344,8 +344,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
     messages.push({ role: 'user', content: message });
     
-    // Sử dụng grok-3 (model hoàn chỉnh)
-    const modelName = 'grok-3';
+    // Sử dụng grok-3-mini (linh hoạt hơn, dễ gửi media hơn)
+    const modelName = 'grok-3-mini';
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
     let gptResponse;
     try {
@@ -434,9 +434,23 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             rawReply = rawReply.replace(mediaRegex, '').trim() || "Xin lỗi, có lỗi khi gửi media!";
         }
     } 
-    // Lưu history
+    // Lưu history - lưu cả mediaUrl và mediaType để hiển thị lại khi reload
     memory.history.push({ role: 'user', content: message }); 
-    memory.history.push({ role: 'assistant', content: rawReply }); userProfile.message_count = (userProfile.message_count || 0) + 1; const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) { userProfile.relationship_stage = computedStage; } if (memory.history.length > 50) { memory.history = memory.history.slice(memory.history.length - 50); } 
+    const assistantMessage = { role: 'assistant', content: rawReply };
+    if (mediaUrl && mediaType) {
+        assistantMessage.mediaUrl = mediaUrl;
+        assistantMessage.mediaType = mediaType;
+        console.log(`💾 Lưu media vào history: ${mediaUrl} (${mediaType})`);
+    }
+    memory.history.push(assistantMessage);
+    userProfile.message_count = (userProfile.message_count || 0) + 1; 
+    const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); 
+    if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) { 
+        userProfile.relationship_stage = computedStage; 
+    } 
+    if (memory.history.length > 50) { 
+        memory.history = memory.history.slice(memory.history.length - 50); 
+    } 
     await memory.save(); 
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>'); const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character); 
     console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}`);
@@ -536,6 +550,11 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
 **QUY TẮC GỬI MEDIA (BẮT BUỘC - KHÔNG ĐƯỢC BỎ QUA):**
 
 ⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!
+
+**QUAN TRỌNG VỀ SENSITIVE MEDIA:**
+- Nếu người dùng yêu cầu "nóng bỏng", "riêng tư", "private", "body", "bikini" → BẮT BUỘC phải gửi [SEND_MEDIA: ..., sensitive, ...]
+- KHÔNG được từ chối hay giải thích dài dòng, chỉ cần gửi media ngay!
+- Nếu người dùng CHƯA Premium, hệ thống sẽ tự động gửi normal thay thế - bạn không cần lo lắng về điều này!
 
 **Từ khóa BẮT BUỘC phải gửi media:**
 - "cho anh/em xem", "cho xem", "xem hết", "gửi cho anh/em xem", "gửi ảnh", "gửi video", "xem ảnh", "xem video"
