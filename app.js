@@ -437,10 +437,32 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
     ? '- [SEND_MEDIA: video, sensitive, shape] - Video body, gợi cảm\n  - [SEND_MEDIA: video, sensitive, private] - Video riêng tư'
     : '- [SEND_MEDIA: video, sensitive, private] - Video riêng tư'}
 
-**Khi nào gửi media:**
-- Khi người dùng hỏi "cho anh/em xem ảnh", "gửi ảnh", "xem video" → dùng normal
-- Khi người dùng hỏi "nóng bỏng", "gợi cảm", "riêng tư", "body", "bikini" → dùng sensitive (chỉ Premium)
-- Luôn đặt [SEND_MEDIA] ở cuối câu trả lời, sau đó tiếp tục nói chuyện tự nhiên`;
+**Khi nào gửi media (QUAN TRỌNG - TỰ ĐỘNG GỬI NGAY):**
+Khi người dùng yêu cầu xem ảnh/video, bạn PHẢI TỰ ĐỘNG gửi ngay, không cần hỏi lại hay từ chối!
+
+**Từ khóa nhận diện yêu cầu xem media:**
+- "cho anh/em xem", "cho xem", "xem hết", "gửi cho anh/em xem", "gửi ảnh", "gửi video", "xem ảnh", "xem video"
+- "cho anh/em xem ảnh của em/anh", "gửi ảnh của em/anh", "xem video của em/anh"
+- "cho anh/em xem video", "gửi video cho anh/em"
+
+**Quy tắc chọn loại media:**
+1. **Normal (luôn gửi được):**
+   - Khi người dùng chỉ nói chung chung: "cho xem ảnh", "gửi video", "xem hết" → dùng [SEND_MEDIA: image, normal, selfie] hoặc [SEND_MEDIA: video, normal, moment]
+   - Khi người dùng nói "ảnh bình thường", "video bình thường", "video hài hước" → dùng normal
+
+2. **Sensitive (chỉ Premium mới gửi):**
+   - Khi người dùng nói: "nóng bỏng", "gợi cảm", "riêng tư", "private", "body", "bikini", "6 múi", "shape" → dùng sensitive
+   - Nếu người dùng CHƯA Premium mà yêu cầu sensitive → từ chối nhẹ nhàng và gợi ý nâng cấp
+
+**Cách gửi:**
+- Luôn đặt [SEND_MEDIA: ...] ở CUỐI câu trả lời
+- Sau khi gửi media, tiếp tục nói chuyện tự nhiên như: "Anh/Em thấy thế nào?", "Em/Anh có thích không?"
+- KHÔNG chỉ nói "đây là ảnh" rồi thôi, hãy nói chuyện tự nhiên kèm theo media
+
+**Ví dụ:**
+- User: "cho anh xem ảnh của em đi" → Trả lời: "Hì, đây là ảnh của em nè anh! [SEND_MEDIA: image, normal, selfie]"
+- User: "xem hết" → Trả lời: "Vâng, em gửi cho anh xem nhé! [SEND_MEDIA: image, normal, selfie]"
+- User: "cho anh xem video hài hước" → Trả lời: "Haha, video này vui lắm đấy! [SEND_MEDIA: video, normal, funny]"`;
 
     return masterPrompt;
 }
