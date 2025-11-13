@@ -306,7 +306,16 @@ app.get('/api/payment-status/:orderCode', ensureAuthenticated, async (req, res) 
 });
 
 const xai = new OpenAI({ apiKey: process.env.XAI_API_KEY, baseURL: 'https://api.x.ai/v1' });
-const characters = { mera: { voice: "hn-phuongtrang", base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Mera, 19 tuổi, một cô gái năng động...` }, thang: { voice: "hn-thanhtung", base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Trương Thắng, 24 tuổi...` } };
+const characters = { 
+    mera: { 
+        voice: "hn-phuongtrang", 
+        base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Mera, 19 tuổi, một cô gái năng động...` 
+    }, 
+    thang: { 
+        voice: "hn-thanhtung", 
+        base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là Trương Thắng, 24 tuổi...` 
+    } 
+};
 
 async function loadMemory(userId, character) { let memory = await Memory.findOne({ userId, character }); if (!memory) { memory = new Memory({ userId, character, user_profile: {} }); await memory.save(); } return memory; }
 app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
@@ -327,23 +336,24 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
     // Chuẩn bị messages với vision support
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
     
-    // Nếu có ảnh, tạm thời vô hiệu hóa vì grok-3-mini không hỗ trợ vision
+    // Nếu có ảnh, thêm vào message với vision format (grok-3 hỗ trợ vision)
     if (image) {
-        console.log("⚠️ Tính năng gửi ảnh tạm thời chưa được hỗ trợ với model hiện tại");
-        return res.status(400).json({ 
-            displayReply: 'Xin lỗi, tính năng xem ảnh hiện chưa khả dụng. Bạn có thể mô tả ảnh cho em/anh biết nhé! 😊', 
-            historyReply: 'Tính năng vision chưa khả dụng',
-            audio: null,
-            mediaUrl: null,
-            mediaType: null,
-            updatedMemory: memory
-        });
+        const userMessage = {
+            role: 'user',
+            content: [
+                { type: 'text', text: message || 'Xem ảnh này giúp em/anh nhé' },
+                { type: 'image_url', image_url: { url: image } }
+            ]
+        };
+        messages.push(userMessage);
+        console.log("🖼️ Đã nhận ảnh từ user, gửi đến grok-3 với vision support");
+    } else {
+        messages.push({ role: 'user', content: message });
     }
     
-    messages.push({ role: 'user', content: message });
-    
-    // Sử dụng grok-3-mini cho text
-    const modelName = 'grok-3-mini';
+    // Sử dụng grok-3 (model hoàn chỉnh, hỗ trợ cả text và vision)
+    const modelName = 'grok-3';
+    console.log(`🚀 Đang sử dụng model: ${modelName}${image ? ' (với vision)' : ''}`);
     const gptResponse = await xai.chat.completions.create({ model: modelName, messages: messages }); 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     let mediaUrl = null, mediaType = null; const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; const mediaMatch = rawReply.match(mediaRegex); if (mediaMatch) { const [, type, topic, subject] = mediaMatch; if (topic === 'sensitive' && !isPremiumUser) { rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... riêng tư lắm."; } else { const mediaResult = await sendMediaFile(memory, character, type, topic, subject); if (mediaResult.success) { mediaUrl = mediaResult.mediaUrl; mediaType = mediaResult.mediaType; memory.user_profile = mediaResult.updatedMemory.user_profile; } rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message; } } 
@@ -399,7 +409,31 @@ app.post('/api/clear-chat', ensureAuthenticated, async (req, res) => {
     }
 });
 
-function generateMasterPrompt(userProfile, character, isPremiumUser) { /* Toàn bộ logic giữ nguyên */ return ``; }
+function generateMasterPrompt(userProfile, character, isPremiumUser) {
+    const charConfig = characters[character];
+    if (!charConfig) {
+        return 'Bạn là một trợ lý AI thân thiện.';
+    }
+    
+    const relationshipStage = userProfile.relationship_stage || 'stranger';
+    const messageCount = userProfile.message_count || 0;
+    
+    // Tạo prompt cơ bản (tính cách chi tiết sẽ được thiết lập sau)
+    const masterPrompt = `${charConfig.base_prompt}
+
+**TÌNH TRẠNG MỐI QUAN HỆ:**
+- Cấp độ hiện tại: ${relationshipStage}
+- Số tin nhắn đã trao đổi: ${messageCount}
+
+**HƯỚNG DẪN TRÒ CHUYỆN:**
+- Luôn trả lời bằng tiếng Việt
+- Giữ tính cách nhất quán với nhân vật ${character === 'mera' ? 'Mera' : 'Trương Thắng'}
+- Phản ứng tự nhiên, phù hợp với mối quan hệ hiện tại
+- Sử dụng lịch sử trò chuyện để hiểu ngữ cảnh
+- Nếu cần gửi media (ảnh/video), sử dụng format: [SEND_MEDIA: image/video, normal/sensitive, selfie/moment/funny/private/shape/body]`;
+
+    return masterPrompt;
+}
 
 async function createViettelVoice(textToSpeak, character) {
     try {
