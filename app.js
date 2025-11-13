@@ -415,7 +415,32 @@ function generateMasterPrompt(userProfile, character, isPremiumUser) {
 - Giữ tính cách nhất quán với nhân vật ${character === 'mera' ? 'Mera' : 'Trương Thắng'}
 - Phản ứng tự nhiên, phù hợp với mối quan hệ hiện tại
 - Sử dụng lịch sử trò chuyện để hiểu ngữ cảnh
-- Nếu cần gửi media (ảnh/video), sử dụng format: [SEND_MEDIA: image/video, normal/sensitive, selfie/moment/funny/private/shape/body]`;
+
+**HƯỚNG DẪN GỬI MEDIA (ẢNH/VIDEO):**
+Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_MEDIA: <type>, <topic>, <subject>]
+
+**Các loại media có sẵn:**
+
+**ẢNH (image):**
+- Normal: [SEND_MEDIA: image, normal, selfie] - Ảnh selfie bình thường
+- Sensitive: 
+  ${character === 'mera' 
+    ? '- [SEND_MEDIA: image, sensitive, bikini] - Ảnh bikini, gợi cảm\n  - [SEND_MEDIA: image, sensitive, private] - Ảnh riêng tư'
+    : '- [SEND_MEDIA: image, sensitive, body] - Ảnh body, 6 múi\n  - [SEND_MEDIA: image, sensitive, private] - Ảnh riêng tư'}
+
+**VIDEO (video):**
+- Normal: 
+  - [SEND_MEDIA: video, normal, moment] - Video moment bình thường
+  - [SEND_MEDIA: video, normal, funny] - Video hài hước
+- Sensitive:
+  ${character === 'mera'
+    ? '- [SEND_MEDIA: video, sensitive, shape] - Video body, gợi cảm\n  - [SEND_MEDIA: video, sensitive, private] - Video riêng tư'
+    : '- [SEND_MEDIA: video, sensitive, private] - Video riêng tư'}
+
+**Khi nào gửi media:**
+- Khi người dùng hỏi "cho anh/em xem ảnh", "gửi ảnh", "xem video" → dùng normal
+- Khi người dùng hỏi "nóng bỏng", "gợi cảm", "riêng tư", "body", "bikini" → dùng sensitive (chỉ Premium)
+- Luôn đặt [SEND_MEDIA] ở cuối câu trả lời, sau đó tiếp tục nói chuyện tự nhiên`;
 
     return masterPrompt;
 }
@@ -498,7 +523,114 @@ async function createViettelVoice(textToSpeak, character) {
     }
 }
 
-async function sendMediaFile(memory, character, mediaType, topic, subject) { /* Toàn bộ logic giữ nguyên */ return { success: false, message: "Lỗi" }; }
+async function sendMediaFile(memory, character, mediaType, topic, subject) {
+    try {
+        // Map character với folder name
+        const charFolder = character === 'mera' ? 'mera' : 'thang';
+        
+        // Xác định đường dẫn folder và extension
+        let folderPath, fileExtension, fileNamePattern;
+        
+        if (mediaType === 'image') {
+            fileExtension = '.jpg';
+            if (topic === 'normal') {
+                folderPath = path.join(__dirname, 'public', 'gallery', charFolder, 'normal');
+                fileNamePattern = 'selfie';
+            } else { // sensitive
+                folderPath = path.join(__dirname, 'public', 'gallery', charFolder, 'sensitive');
+                // Mera: bikini hoặc private, Thang: body hoặc private
+                if (character === 'mera') {
+                    fileNamePattern = (subject === 'private') ? 'private' : 'bikini';
+                } else { // thang
+                    fileNamePattern = (subject === 'private') ? 'private' : 'body';
+                }
+            }
+        } else { // video
+            fileExtension = '.mp4';
+            if (topic === 'normal') {
+                folderPath = path.join(__dirname, 'public', 'videos', charFolder, 'normal');
+                fileNamePattern = (subject === 'funny') ? 'funny' : 'moment';
+            } else { // sensitive
+                folderPath = path.join(__dirname, 'public', 'videos', charFolder, 'sensitive');
+                // Mera: shape hoặc private, Thang: private
+                if (character === 'mera') {
+                    fileNamePattern = (subject === 'private') ? 'private' : 'shape';
+                } else { // thang
+                    fileNamePattern = 'private';
+                }
+            }
+        }
+        
+        // Đọc danh sách file trong folder
+        let files;
+        try {
+            files = await fs.readdir(folderPath);
+        } catch (err) {
+            console.error(`❌ Không thể đọc folder ${folderPath}:`, err.message);
+            return { success: false, message: "Không tìm thấy media" };
+        }
+        
+        // Lọc file theo pattern (bắt đầu với fileNamePattern và kết thúc bằng fileExtension)
+        const patternRegex = new RegExp(`^${fileNamePattern}-\\d+\\${fileExtension}$`);
+        const matchingFiles = files.filter(file => patternRegex.test(file));
+        
+        if (matchingFiles.length === 0) {
+            console.warn(`⚠️ Không tìm thấy file nào với pattern ${fileNamePattern}-XX${fileExtension} trong ${folderPath}`);
+            return { success: false, message: "Không tìm thấy media phù hợp" };
+        }
+        
+        // Lấy danh sách file đã gửi
+        const sentList = mediaType === 'image' 
+            ? (memory.user_profile.sent_gallery_images || [])
+            : (memory.user_profile.sent_video_files || []);
+        
+        // Lọc file chưa gửi
+        const availableFiles = matchingFiles.filter(file => !sentList.includes(file));
+        
+        // Nếu đã gửi hết, reset và gửi lại từ đầu
+        let selectedFile;
+        if (availableFiles.length === 0) {
+            console.log(`ℹ️ Đã gửi hết file ${fileNamePattern}, reset và gửi lại từ đầu`);
+            // Reset danh sách đã gửi cho loại này
+            if (mediaType === 'image') {
+                memory.user_profile.sent_gallery_images = memory.user_profile.sent_gallery_images.filter(f => !f.startsWith(fileNamePattern));
+            } else {
+                memory.user_profile.sent_video_files = memory.user_profile.sent_video_files.filter(f => !f.startsWith(fileNamePattern));
+            }
+            selectedFile = matchingFiles[Math.floor(Math.random() * matchingFiles.length)];
+        } else {
+            // Chọn file ngẫu nhiên từ danh sách chưa gửi
+            selectedFile = availableFiles[Math.floor(Math.random() * availableFiles.length)];
+        }
+        
+        // Tạo URL cho file
+        const relativePath = mediaType === 'image'
+            ? `/gallery/${charFolder}/${topic}/${selectedFile}`
+            : `/videos/${charFolder}/${topic}/${selectedFile}`;
+        
+        // Lưu vào danh sách đã gửi
+        if (mediaType === 'image') {
+            if (!memory.user_profile.sent_gallery_images) memory.user_profile.sent_gallery_images = [];
+            memory.user_profile.sent_gallery_images.push(selectedFile);
+        } else {
+            if (!memory.user_profile.sent_video_files) memory.user_profile.sent_video_files = [];
+            memory.user_profile.sent_video_files.push(selectedFile);
+        }
+        
+        console.log(`✅ Đã chọn ${mediaType}: ${selectedFile} từ ${folderPath}`);
+        
+        return {
+            success: true,
+            mediaUrl: relativePath,
+            mediaType: mediaType,
+            updatedMemory: memory
+        };
+        
+    } catch (error) {
+        console.error("❌ Lỗi trong sendMediaFile:", error);
+        return { success: false, message: "Lỗi khi tìm media" };
+    }
+}
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 app.listen(port, () => { console.log(`🚀 Server đang chạy tại cổng ${port}`); });

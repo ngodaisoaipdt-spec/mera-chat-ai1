@@ -61,6 +61,7 @@ body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; backgroun
 .send-btn img { width: 32px; height: 32px; }
 .mic-btn:disabled, #sendBtn:disabled { opacity: .5; cursor: not-allowed; }
 .chat-image { max-width: 100%; border-radius: 15px; margin-top: 10px; cursor: pointer; }
+.chat-video { max-width: 100%; border-radius: 15px; margin-top: 10px; max-height: 400px; }
 .lightbox { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, .85); display: none; justify-content: center; align-items: center; opacity: 0; transition: opacity .3s; }
 body.lightbox-active .lightbox { display: flex; opacity: 1; }
 .lightbox-content { max-width: 90%; max-height: 90%; }
