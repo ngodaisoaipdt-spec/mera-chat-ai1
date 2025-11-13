@@ -342,7 +342,38 @@ app.post('/chat', ensureAuthenticated, async (req, res) => { try { const { messa
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
     const gptResponse = await xai.chat.completions.create({ model: modelName, messages: messages }); 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
-    let mediaUrl = null, mediaType = null; const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; const mediaMatch = rawReply.match(mediaRegex); if (mediaMatch) { const [, type, topic, subject] = mediaMatch; if (topic === 'sensitive' && !isPremiumUser) { rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... riêng tư lắm."; } else { const mediaResult = await sendMediaFile(memory, character, type, topic, subject); if (mediaResult.success) { mediaUrl = mediaResult.mediaUrl; mediaType = mediaResult.mediaType; memory.user_profile = mediaResult.updatedMemory.user_profile; } rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message; } } 
+    let mediaUrl = null, mediaType = null; 
+    const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
+    const mediaMatch = rawReply.match(mediaRegex); 
+    if (mediaMatch) { 
+        const [, type, topic, subject] = mediaMatch; 
+        if (topic === 'sensitive' && !isPremiumUser) {
+            // Nếu chưa Premium mà yêu cầu sensitive → gửi normal thay thế
+            console.log(`⚠️ User chưa Premium yêu cầu sensitive, gửi normal thay thế`);
+            const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
+            const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
+            if (mediaResult.success) {
+                mediaUrl = mediaResult.mediaUrl;
+                mediaType = mediaResult.mediaType;
+                memory.user_profile = mediaResult.updatedMemory.user_profile;
+                // Thay thế text để giải thích nhẹ nhàng
+                rawReply = rawReply.replace(mediaRegex, '').trim();
+                if (!rawReply || rawReply.length < 10) {
+                    rawReply = "Em/Anh chỉ chia sẻ nội dung đó với người thân thiết. Đây là ảnh/video bình thường nhé!";
+                }
+            } else {
+                rawReply = rawReply.replace(mediaRegex, '').trim() || "Em/Anh có ảnh đó... riêng tư lắm.";
+            }
+        } else {
+            const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
+            if (mediaResult.success) {
+                mediaUrl = mediaResult.mediaUrl;
+                mediaType = mediaResult.mediaType;
+                memory.user_profile = mediaResult.updatedMemory.user_profile;
+            }
+            rawReply = rawReply.replace(mediaRegex, '').trim() || mediaResult.message;
+        }
+    } 
     // Lưu history
     memory.history.push({ role: 'user', content: message }); 
     memory.history.push({ role: 'assistant', content: rawReply }); userProfile.message_count = (userProfile.message_count || 0) + 1; const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser); if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) { userProfile.relationship_stage = computedStage; } if (memory.history.length > 50) { memory.history = memory.history.slice(memory.history.length - 50); } 
@@ -437,32 +468,42 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
     ? '- [SEND_MEDIA: video, sensitive, shape] - Video body, gợi cảm\n  - [SEND_MEDIA: video, sensitive, private] - Video riêng tư'
     : '- [SEND_MEDIA: video, sensitive, private] - Video riêng tư'}
 
-**Khi nào gửi media (QUAN TRỌNG - TỰ ĐỘNG GỬI NGAY):**
-Khi người dùng yêu cầu xem ảnh/video, bạn PHẢI TỰ ĐỘNG gửi ngay, không cần hỏi lại hay từ chối!
+**QUY TẮC GỬI MEDIA (BẮT BUỘC - KHÔNG ĐƯỢC BỎ QUA):**
 
-**Từ khóa nhận diện yêu cầu xem media:**
+⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!
+
+**Từ khóa BẮT BUỘC phải gửi media:**
 - "cho anh/em xem", "cho xem", "xem hết", "gửi cho anh/em xem", "gửi ảnh", "gửi video", "xem ảnh", "xem video"
 - "cho anh/em xem ảnh của em/anh", "gửi ảnh của em/anh", "xem video của em/anh"
-- "cho anh/em xem video", "gửi video cho anh/em"
+- "cho anh/em xem video", "gửi video cho anh/em", "video riêng tư", "ảnh riêng tư"
+- BẤT KỲ câu nào có từ "xem", "gửi", "ảnh", "video" kèm theo yêu cầu → PHẢI gửi media!
 
 **Quy tắc chọn loại media:**
-1. **Normal (luôn gửi được):**
-   - Khi người dùng chỉ nói chung chung: "cho xem ảnh", "gửi video", "xem hết" → dùng [SEND_MEDIA: image, normal, selfie] hoặc [SEND_MEDIA: video, normal, moment]
+1. **Normal (luôn gửi được, mặc định):**
+   - Khi người dùng nói chung chung: "cho xem ảnh", "gửi video", "xem hết" → LUÔN dùng [SEND_MEDIA: image, normal, selfie] hoặc [SEND_MEDIA: video, normal, moment]
    - Khi người dùng nói "ảnh bình thường", "video bình thường", "video hài hước" → dùng normal
+   - MẶC ĐỊNH: Nếu không rõ, chọn normal
 
 2. **Sensitive (chỉ Premium mới gửi):**
-   - Khi người dùng nói: "nóng bỏng", "gợi cảm", "riêng tư", "private", "body", "bikini", "6 múi", "shape" → dùng sensitive
-   - Nếu người dùng CHƯA Premium mà yêu cầu sensitive → từ chối nhẹ nhàng và gợi ý nâng cấp
+   - Khi người dùng nói RÕ RÀNG: "nóng bỏng", "gợi cảm", "riêng tư", "private", "body", "bikini", "6 múi", "shape" → dùng sensitive
+   - Nếu người dùng CHƯA Premium mà yêu cầu sensitive → gửi normal thay thế và giải thích nhẹ nhàng
 
-**Cách gửi:**
-- Luôn đặt [SEND_MEDIA: ...] ở CUỐI câu trả lời
-- Sau khi gửi media, tiếp tục nói chuyện tự nhiên như: "Anh/Em thấy thế nào?", "Em/Anh có thích không?"
-- KHÔNG chỉ nói "đây là ảnh" rồi thôi, hãy nói chuyện tự nhiên kèm theo media
+**CÁCH GỬI (BẮT BUỘC):**
+1. Khi nhận được yêu cầu xem media → PHẢI thêm [SEND_MEDIA: ...] vào CUỐI câu trả lời
+2. KHÔNG được chỉ nói chuyện mà không gửi media
+3. KHÔNG được từ chối hay hỏi lại
+4. Sau [SEND_MEDIA: ...], có thể nói thêm: "Anh/Em thấy thế nào?", "Em/Anh có thích không?"
 
-**Ví dụ:**
-- User: "cho anh xem ảnh của em đi" → Trả lời: "Hì, đây là ảnh của em nè anh! [SEND_MEDIA: image, normal, selfie]"
-- User: "xem hết" → Trả lời: "Vâng, em gửi cho anh xem nhé! [SEND_MEDIA: image, normal, selfie]"
-- User: "cho anh xem video hài hước" → Trả lời: "Haha, video này vui lắm đấy! [SEND_MEDIA: video, normal, funny]"`;
+**VÍ DỤ BẮT BUỘC:**
+- User: "cho anh xem ảnh của em đi" → BẮT BUỘC: "Hì, đây là ảnh của em nè anh! [SEND_MEDIA: image, normal, selfie]"
+- User: "xem hết" → BẮT BUỘC: "Vâng, em gửi cho anh xem nhé! [SEND_MEDIA: image, normal, selfie]"
+- User: "cho anh xem video" → BẮT BUỘC: "Đây là video của em nè! [SEND_MEDIA: video, normal, moment]"
+- User: "gửi video hài hước" → BẮT BUỘC: "Haha, video này vui lắm! [SEND_MEDIA: video, normal, funny]"
+- User: "cho anh xem video riêng tư" → Nếu Premium: "Đây là video riêng tư của em... [SEND_MEDIA: video, sensitive, private]" | Nếu chưa Premium: "Em chỉ chia sẻ video riêng tư với người thân thiết. Đây là video bình thường nhé! [SEND_MEDIA: video, normal, moment]"
+
+**LƯU Ý CUỐI CÙNG:**
+- Nếu người dùng yêu cầu xem media → BẮT BUỘC phải có [SEND_MEDIA: ...] trong câu trả lời
+- KHÔNG BAO GIỜ chỉ nói chuyện mà không gửi media khi được yêu cầu!`;
 
     return masterPrompt;
 }
