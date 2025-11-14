@@ -245,22 +245,40 @@ app.post('/api/sepay-webhook', async (req, res) => {
     }
 });
 
-// Endpoint xác nhận thủ công (dùng khi cần test nếu webhook chậm)
-app.post('/api/confirm-payment', ensureAuthenticated, async (req, res) => {
+// Endpoint kiểm tra trạng thái thanh toán (KHÔNG tự động xác nhận - chỉ webhook mới được xác nhận)
+// Endpoint này chỉ để check status, không được dùng để tự động mở Premium
+app.post('/api/check-payment-status', ensureAuthenticated, async (req, res) => {
     try {
         const { orderCode } = req.body;
         if (!orderCode) return res.status(400).json({ success: false, message: 'Thiếu orderCode' });
         const transaction = await Transaction.findOne({ orderCode, userId: req.user.id });
         if (!transaction) return res.status(404).json({ success: false, message: 'Không tìm thấy giao dịch' });
-        if (transaction.status === 'success') return res.json({ success: true, message: 'Đã xác nhận trước đó' });
-        transaction.status = 'success';
-        await transaction.save();
-        await User.findByIdAndUpdate(transaction.userId, { isPremium: true });
-        return res.json({ success: true });
+        
+        // Chỉ trả về status hiện tại, KHÔNG tự động set success
+        // Chỉ webhook mới được phép set status = 'success'
+        return res.json({ 
+            success: true, 
+            status: transaction.status,
+            message: transaction.status === 'success' 
+                ? 'Thanh toán đã được xác nhận' 
+                : transaction.status === 'expired'
+                ? 'Giao dịch đã hết hạn'
+                : 'Đang chờ xác nhận thanh toán từ ngân hàng. Vui lòng đợi vài phút.'
+        });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ success: false });
+        res.status(500).json({ success: false, message: 'Lỗi server' });
     }
+});
+
+// Endpoint xác nhận thủ công - ĐÃ VÔ HIỆU HÓA VÌ LỖ HỔNG BẢO MẬT
+// Chỉ webhook từ ngân hàng mới được phép xác nhận thanh toán
+// Nếu cần xác nhận thủ công, phải qua admin hoặc tích hợp API ngân hàng
+app.post('/api/confirm-payment', ensureAuthenticated, async (req, res) => {
+    return res.status(403).json({ 
+        success: false, 
+        message: 'Xác nhận thủ công đã bị vô hiệu hóa vì lý do bảo mật. Hệ thống sẽ tự động xác nhận khi nhận được thông báo từ ngân hàng. Vui lòng đợi vài phút sau khi chuyển khoản.' 
+    });
 });
 
 app.get('/api/vnpay-return', async (req, res) => {

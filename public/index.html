@@ -89,12 +89,13 @@
                 </p>
             </div>
             <div id="manualConfirmArea" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; display: none;">
-                <p style="margin-bottom: 10px; font-weight: 600; color: #555;">Đã chuyển khoản? Xác nhận thủ công:</p>
+                <p style="margin-bottom: 10px; font-weight: 600; color: #555;">Đã chuyển khoản? Kiểm tra trạng thái:</p>
+                <p style="margin-bottom: 10px; font-size: 0.9em; color: #666; font-style: italic;">⚠️ Hệ thống sẽ tự động xác nhận khi nhận được thông báo từ ngân hàng (thường trong 1-5 phút). Bạn có thể kiểm tra trạng thái bên dưới.</p>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="manualOrderCodeInput" placeholder="Nhập nội dung chuyển khoản (MERACHAT...)" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 0.95em;">
-                    <button id="confirmPaymentBtn" style="padding: 10px 20px; background: linear-gradient(45deg, #d63384, #e91e63); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; white-space: nowrap;">Xác nhận</button>
+                    <button id="confirmPaymentBtn" style="padding: 10px 20px; background: linear-gradient(45deg, #ff9800, #f57c00); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; white-space: nowrap;">Kiểm tra trạng thái</button>
                 </div>
-                <p id="manualConfirmError" style="color: red; margin-top: 8px; font-size: 0.9em; display: none;"></p>
+                <p id="manualConfirmError" style="color: #ff9800; margin-top: 8px; font-size: 0.9em; display: none;"></p>
             </div>
             <p id="paymentError" style="color: red; margin-top: 10px;"></p>
             <p class="payment-instructions" id="paymentInstructions">Dùng App Ngân hàng hoặc Ví điện tử để quét mã QR</p>

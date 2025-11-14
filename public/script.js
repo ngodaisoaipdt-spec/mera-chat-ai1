@@ -607,11 +607,12 @@ function initializeChatApp() {
             }
             
             confirmPaymentBtn.disabled = true;
-            confirmPaymentBtn.textContent = 'Đang xác nhận...';
+            confirmPaymentBtn.textContent = 'Đang kiểm tra...';
             if (manualConfirmError) manualConfirmError.style.display = 'none';
             
             try {
-                const response = await fetch('/api/confirm-payment', {
+                // Chỉ kiểm tra trạng thái, KHÔNG tự động xác nhận
+                const response = await fetch('/api/check-payment-status', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ orderCode: orderCode })
@@ -619,8 +620,8 @@ function initializeChatApp() {
                 
                 const data = await response.json();
                 
-                if (data.success) {
-                    // Thanh toán thành công
+                if (data.success && data.status === 'success') {
+                    // Thanh toán đã được webhook xác nhận
                     if (paymentCheckInterval) clearInterval(paymentCheckInterval);
                     if (countdownInterval) clearInterval(countdownInterval);
                     document.getElementById('paymentScreen').classList.remove('active');
@@ -631,22 +632,23 @@ function initializeChatApp() {
                     if (userResponse.ok) currentUser = await userResponse.json();
                     await loadChatData();
                 } else {
-                    // Lỗi xác nhận
+                    // Chưa được xác nhận - hiển thị thông báo
                     if (manualConfirmError) {
-                        manualConfirmError.textContent = data.message || 'Không thể xác nhận thanh toán. Vui lòng kiểm tra lại nội dung chuyển khoản.';
+                        manualConfirmError.textContent = data.message || 'Hệ thống đang chờ xác nhận từ ngân hàng. Vui lòng đợi vài phút sau khi chuyển khoản. Hệ thống sẽ tự động cập nhật khi nhận được thông báo.';
                         manualConfirmError.style.display = 'block';
+                        manualConfirmError.style.color = '#ff9800'; // Màu cam để cảnh báo
                     }
                     confirmPaymentBtn.disabled = false;
-                    confirmPaymentBtn.textContent = 'Xác nhận';
+                    confirmPaymentBtn.textContent = 'Kiểm tra lại';
                 }
             } catch (error) {
-                console.error("Lỗi xác nhận thanh toán:", error);
+                console.error("Lỗi kiểm tra thanh toán:", error);
                 if (manualConfirmError) {
                     manualConfirmError.textContent = 'Lỗi kết nối đến server. Vui lòng thử lại.';
                     manualConfirmError.style.display = 'block';
                 }
                 confirmPaymentBtn.disabled = false;
-                confirmPaymentBtn.textContent = 'Xác nhận';
+                confirmPaymentBtn.textContent = 'Kiểm tra lại';
             }
         });
         
