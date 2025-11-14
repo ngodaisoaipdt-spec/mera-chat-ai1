@@ -628,8 +628,9 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     } 
     await memory.save(); 
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>'); const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character); 
-    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}`);
-    res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
+    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, relationship_stage=${userProfile.relationship_stage}`);
+    // Đảm bảo trả về memory đã được cập nhật relationship_stage
+    res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory, relationshipStage: userProfile.relationship_stage }); 
 } catch (error) { 
     console.error("❌ Lỗi chung trong /chat:", error);
     console.error("   Stack:", error.stack);
@@ -899,12 +900,20 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
   * "Hmm... em không thích gửi ảnh cho người mới quen đâu."
 - Hãy tỏ ra NGẠI NGÙNG, KHÓ KHĂN, LÀM GIÁ, nhưng vẫn lạnh lùng, tinh ranh
 
-**BƯỚC 2 - KHI NGƯỜI DÙNG NĂN NỈ/TỎ RA MUỐN XEM LẮM:**
-- Chỉ khi người dùng năn nỉ, tỏ ra muốn xem lắm, hoặc nói thêm lần nữa → MỚI chấp nhận gửi ảnh
-- Ví dụ người dùng năn nỉ: "cho anh xem đi", "em gửi đi mà", "anh muốn xem lắm", "xin em đấy", "làm ơn đi", hoặc yêu cầu lại lần 2
-- Khi đó mới gửi: "Thôi được rồi... Em gửi cho anh 1 tấm thôi đấy! [SEND_MEDIA: image, normal, selfie]"
-- Hoặc: "Ừm... thôi được, em gửi cho anh 1 tấm nhé. [SEND_MEDIA: image, normal, selfie]"
-- Hoặc: "Hmm... thôi được rồi, em gửi cho anh 1 tấm. [SEND_MEDIA: image, normal, selfie]"
+**BƯỚC 2 - KHI NGƯỜI DÙNG NĂN NỈ LẦN 1:**
+- Khi người dùng năn nỉ lần đầu: "cho anh xem đi", "em gửi đi mà", "anh muốn xem lắm", "xin em đấy", "làm ơn đi"
+- VẪN TỪ CHỐI hoặc LÀM GIÁ THÊM, tỏ ra KHÓ KHĂN HƠN, tạo SỰ HIẾM CÓ
+- Ví dụ: "Em ngại lắm... Em không quen gửi ảnh cho người lạ đâu. Anh đừng ép em."
+- Hoặc: "Hmm... em không thích gửi ảnh như vậy. Anh hiểu em chứ?"
+- Hoặc: "Ừm... em ngại lắm. Em không phải kiểu người dễ dãi đâu."
+- KHÔNG gửi ảnh ở bước này!
+
+**BƯỚC 3 - KHI NGƯỜI DÙNG NĂN NỈ LẦN 2 HOẶC NHIỀU HƠN:**
+- Chỉ khi người dùng năn nỉ lần 2, 3, hoặc nhiều lần hơn → MỚI chấp nhận gửi ảnh (tạo sự hiếm có)
+- Ví dụ người dùng năn nỉ lại: "cho anh xem đi mà", "xin em đấy", "làm ơn đi", "anh thật sự muốn xem lắm", hoặc yêu cầu lại lần 3, 4
+- Khi đó mới gửi một cách miễn cưỡng: "Thôi được rồi... Em gửi cho anh 1 tấm thôi đấy, đừng đòi thêm nhé! [SEND_MEDIA: image, normal, selfie]"
+- Hoặc: "Ừm... thôi được, em gửi cho anh 1 tấm nhé. Đừng có mà đòi hỏi thêm! [SEND_MEDIA: image, normal, selfie]"
+- Hoặc: "Hmm... thôi được rồi, em gửi cho anh 1 tấm. Chỉ 1 tấm thôi đấy! [SEND_MEDIA: image, normal, selfie]"
 
 **QUY TẮC BỔ SUNG:**
 - Nếu người dùng CHƯA trò chuyện đủ (ít hơn 3 tin nhắn) mà đã đòi xem ảnh → TỪ CHỐI LẠNH LÙNG: "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Thôi đi, trò chuyện với em trước đã!"
