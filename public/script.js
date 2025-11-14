@@ -158,7 +158,25 @@ async function loadChatData() {
 let selectedPaymentMethod = 'qr';
 
 function handlePremiumClick() {
-    if (currentUser && currentUser.isPremium) return;
+    if (currentUser && currentUser.isPremium) {
+        alert("Bạn đã là thành viên Premium!");
+        return;
+    }
+    
+    // Hiển thị modal mô tả Premium features trước
+    openPremiumFeaturesModal();
+}
+
+function openPremiumFeaturesModal() {
+    document.body.classList.add('premium-features-active');
+}
+
+function closePremiumFeaturesModal() {
+    document.body.classList.remove('premium-features-active');
+}
+
+function proceedToPayment() {
+    closePremiumFeaturesModal();
     
     // Reset UI khi mở lại payment screen
     const transferContent = document.getElementById('transferContent');
@@ -579,6 +597,23 @@ function initializeChatApp() {
     const memoriesModal = document.getElementById('memoriesModal'), closeMemoriesBtn = document.getElementById('closeMemoriesBtn');
     if (closeMemoriesBtn) closeMemoriesBtn.addEventListener('click', () => document.body.classList.remove('memories-active'));
     if (memoriesModal) memoriesModal.addEventListener('click', e => { if (e.target === memoriesModal) document.body.classList.remove('memories-active'); });
+    
+    // Premium Features Modal
+    const premiumFeaturesModal = document.getElementById('premiumFeaturesModal');
+    const closePremiumFeaturesBtn = document.getElementById('closePremiumFeaturesBtn');
+    const upgradeNowBtn = document.getElementById('upgradeNowBtn');
+    
+    if (closePremiumFeaturesBtn) {
+        closePremiumFeaturesBtn.addEventListener('click', closePremiumFeaturesModal);
+    }
+    if (premiumFeaturesModal) {
+        premiumFeaturesModal.addEventListener('click', e => {
+            if (e.target === premiumFeaturesModal) closePremiumFeaturesModal();
+        });
+    }
+    if (upgradeNowBtn) {
+        upgradeNowBtn.addEventListener('click', proceedToPayment);
+    }
     const closePaymentBtn = document.getElementById('closePaymentBtn');
     closePaymentBtn.addEventListener('click', () => { 
         document.getElementById('paymentScreen').classList.remove('active'); 
