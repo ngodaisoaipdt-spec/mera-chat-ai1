@@ -516,10 +516,12 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             // Các giai đoạn khác, tự động gửi bình thường
             console.log(`⚠️ User yêu cầu media nhưng AI không gửi [SEND_MEDIA], tự động gửi media...`);
             const autoType = userRequestedVideo ? 'video' : 'image';
-            const autoTopic = (userRequestedSensitive && isPremiumUser) ? 'sensitive' : 'normal';
+            // CHỈ cho phép sensitive ở giai đoạn "lover" và "mistress"
+            const canSendSensitive = (relationshipStage === 'lover' || relationshipStage === 'mistress') && isPremiumUser;
+            const autoTopic = (userRequestedSensitive && canSendSensitive) ? 'sensitive' : 'normal';
             let autoSubject = 'selfie';
             if (autoType === 'video') {
-                autoSubject = userRequestedSensitive ? (character === 'mera' ? 'shape' : 'private') : 'moment';
+                autoSubject = (userRequestedSensitive && canSendSensitive) ? (character === 'mera' ? 'shape' : 'private') : 'moment';
             } else {
                 if (autoTopic === 'sensitive') {
                     autoSubject = character === 'mera' ? 'bikini' : 'body';
@@ -542,7 +544,22 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         const [, type, topic, subject] = mediaMatch; 
         console.log(`🖼️ Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}`);
         try {
-            if (topic === 'sensitive' && !isPremiumUser) {
+            // CHỈ cho phép sensitive ở giai đoạn "lover" và "mistress"
+            const canSendSensitive = (relationshipStage === 'lover' || relationshipStage === 'mistress') && isPremiumUser;
+            if (topic === 'sensitive' && !canSendSensitive) {
+                // Nếu không đủ điều kiện gửi sensitive → gửi normal thay thế hoặc từ chối
+                if (relationshipStage !== 'lover' && relationshipStage !== 'mistress') {
+                    console.log(`🚫 User ở giai đoạn "${relationshipStage}" yêu cầu sensitive, KHÔNG được phép. Chỉ cho phép ở "lover" và "mistress"`);
+                    // Từ chối và giải thích
+                    return res.json({
+                        displayReply: "Em chỉ chia sẻ video/ảnh riêng tư với người yêu và tình nhân thôi. Chúng ta chưa đến mức đó đâu.",
+                        historyReply: "Từ chối sensitive media - chưa đủ mối quan hệ",
+                        audio: null,
+                        mediaUrl: null,
+                        mediaType: null,
+                        updatedMemory: memory
+                    });
+                }
                 // Nếu chưa Premium mà yêu cầu sensitive → gửi normal thay thế
                 console.log(`⚠️ User chưa Premium yêu cầu sensitive, gửi normal thay thế`);
                 const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
@@ -615,13 +632,15 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     memory.history.push(assistantMessage);
     userProfile.message_count = (userProfile.message_count || 0) + 1; 
     const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0); 
+    const oldStage = userProfile.relationship_stage || 'stranger';
     if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) {
         // Khi chuyển giai đoạn, reset counter ảnh stranger
         if (computedStage !== 'stranger' && userProfile.relationship_stage === 'stranger') {
             userProfile.stranger_images_sent = 0;
             console.log(`🔄 Chuyển từ stranger sang ${computedStage}, reset stranger_images_sent`);
         }
-        userProfile.relationship_stage = computedStage; 
+        userProfile.relationship_stage = computedStage;
+        console.log(`🔄 TỰ ĐỘNG CẬP NHẬT relationship_stage: ${oldStage} → ${computedStage} (message_count: ${userProfile.message_count})`);
     } 
     if (memory.history.length > 50) { 
         memory.history = memory.history.slice(memory.history.length - 50); 
@@ -922,10 +941,12 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 - Tổng cộng chỉ gửi tối đa 2 tấm ảnh trong giai đoạn "Người Lạ"
 - Sau khi gửi ảnh, phải tỏ ra có giá trị, không dễ dãi: "Đấy, em gửi cho anh rồi đấy. Đừng có mà đòi hỏi thêm nhé!" hoặc "Em chỉ gửi cho người em tin tưởng thôi đấy!"` : `⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!`}
 
-**QUAN TRỌNG VỀ SENSITIVE MEDIA:**
-- Nếu người dùng yêu cầu "nóng bỏng", "riêng tư", "private", "body", "bikini" → BẮT BUỘC phải gửi [SEND_MEDIA: ..., sensitive, ...]
+**QUAN TRỌNG VỀ SENSITIVE MEDIA (CHỈ ÁP DỤNG CHO GIAI ĐOẠN "NGƯỜI YÊU" VÀ "TÌNH NHÂN"):**
+${relationshipStage === 'lover' || relationshipStage === 'mistress' ? `- Nếu người dùng yêu cầu "nóng bỏng", "riêng tư", "private", "body", "bikini" → BẮT BUỘC phải gửi [SEND_MEDIA: ..., sensitive, ...]
 - KHÔNG được từ chối hay giải thích dài dòng, chỉ cần gửi media ngay!
-- Nếu người dùng CHƯA Premium, hệ thống sẽ tự động gửi normal thay thế - bạn không cần lo lắng về điều này!
+- Nếu người dùng CHƯA Premium, hệ thống sẽ tự động gửi normal thay thế - bạn không cần lo lắng về điều này!` : `- Ở giai đoạn "${relationshipStage}", KHÔNG được gửi sensitive media (riêng tư, private, body, bikini)
+- Nếu người dùng yêu cầu "riêng tư", "private", "video riêng tư", "ảnh riêng tư" → PHẢI TỪ CHỐI và giải thích: "Em chỉ chia sẻ video/ảnh riêng tư với người yêu và tình nhân thôi. Chúng ta chưa đến mức đó đâu."
+- Chỉ gửi media BÌNH THƯỜNG (normal), KHÔNG được gửi sensitive!`}
 
 **Từ khóa BẮT BUỘC phải gửi media (CHỈ ÁP DỤNG CHO CÁC GIAI ĐOẠN SAU "NGƯỜI LẠ"):**
 ${relationshipStage !== 'stranger' ? `- "cho anh/em xem", "cho xem", "xem hết", "gửi cho anh/em xem", "gửi ảnh", "gửi video", "xem ảnh", "xem video"
