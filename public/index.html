@@ -80,6 +80,21 @@
                 <p><strong>TÊN NGÂN HÀNG:</strong> VietinBank</p>
                 <p><strong>SỐ TÀI KHOẢN:</strong> 101611784168</p>
                 <p><strong>CHỦ TÀI KHOẢN:</strong> PHAM DUC THANG</p>
+                <p id="transferContent" style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 5px; display: none;">
+                    <strong>NỘI DUNG CHUYỂN KHOẢN:</strong><br>
+                    <span id="orderCodeDisplay" style="font-family: monospace; font-size: 1.1em; color: #d63384; font-weight: bold;"></span>
+                </p>
+                <p id="expiryTime" style="margin-top: 10px; color: #dc3545; font-weight: bold; display: none;">
+                    ⏰ Hết hạn sau: <span id="countdownTimer">15:00</span>
+                </p>
+            </div>
+            <div id="manualConfirmArea" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; display: none;">
+                <p style="margin-bottom: 10px; font-weight: 600; color: #555;">Đã chuyển khoản? Xác nhận thủ công:</p>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="manualOrderCodeInput" placeholder="Nhập nội dung chuyển khoản (MERACHAT...)" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 0.95em;">
+                    <button id="confirmPaymentBtn" style="padding: 10px 20px; background: linear-gradient(45deg, #d63384, #e91e63); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; white-space: nowrap;">Xác nhận</button>
+                </div>
+                <p id="manualConfirmError" style="color: red; margin-top: 8px; font-size: 0.9em; display: none;"></p>
             </div>
             <p id="paymentError" style="color: red; margin-top: 10px;"></p>
             <p class="payment-instructions" id="paymentInstructions">Dùng App Ngân hàng hoặc Ví điện tử để quét mã QR</p>

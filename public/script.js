@@ -159,6 +159,29 @@ let selectedPaymentMethod = 'qr';
 
 function handlePremiumClick() {
     if (currentUser && currentUser.isPremium) return;
+    
+    // Reset UI khi mở lại payment screen
+    const transferContent = document.getElementById('transferContent');
+    const expiryTime = document.getElementById('expiryTime');
+    const manualConfirmArea = document.getElementById('manualConfirmArea');
+    const manualOrderCodeInput = document.getElementById('manualOrderCodeInput');
+    const manualConfirmError = document.getElementById('manualConfirmError');
+    const paymentError = document.getElementById('paymentError');
+    
+    if (transferContent) transferContent.style.display = 'none';
+    if (expiryTime) expiryTime.style.display = 'none';
+    if (manualConfirmArea) manualConfirmArea.style.display = 'none';
+    if (manualOrderCodeInput) manualOrderCodeInput.value = '';
+    if (manualConfirmError) {
+        manualConfirmError.style.display = 'none';
+        manualConfirmError.textContent = '';
+    }
+    if (paymentError) paymentError.textContent = '';
+    
+    // Clear intervals nếu có
+    if (paymentCheckInterval) clearInterval(paymentCheckInterval);
+    if (countdownInterval) clearInterval(countdownInterval);
+    
     document.getElementById('paymentScreen').classList.add('active');
     selectedPaymentMethod = 'qr';
     updatePaymentMethodUI();
@@ -249,7 +272,35 @@ async function initiatePayment() {
             qrCodeImage.src = url;
             qrCodeImage.style.display = 'block';
             qrLoadingText.style.display = 'none';
-            startCheckingPaymentStatus(data.orderCode);
+            
+            // Hiển thị nội dung chuyển khoản
+            const transferContent = document.getElementById('transferContent');
+            const orderCodeDisplay = document.getElementById('orderCodeDisplay');
+            const expiryTime = document.getElementById('expiryTime');
+            const manualConfirmArea = document.getElementById('manualConfirmArea');
+            
+            if (transferContent && orderCodeDisplay) {
+                orderCodeDisplay.textContent = data.orderCode;
+                transferContent.style.display = 'block';
+            }
+            
+            // Hiển thị countdown timer
+            if (data.expiresAt && expiryTime) {
+                expiryTime.style.display = 'block';
+                startCountdownTimer(data.expiresAt);
+            }
+            
+            // Hiển thị form xác nhận thủ công
+            if (manualConfirmArea) {
+                manualConfirmArea.style.display = 'block';
+                // Set orderCode vào input để người dùng dễ copy
+                const manualInput = document.getElementById('manualOrderCodeInput');
+                if (manualInput) {
+                    manualInput.value = data.orderCode;
+                }
+            }
+            
+            startCheckingPaymentStatus(data.orderCode, data.expiresAt);
         } else {
             qrLoadingText.style.display = 'none';
             paymentError.textContent = data.message || "Lỗi khi lấy thông tin thanh toán.";
@@ -261,19 +312,60 @@ async function initiatePayment() {
     }
 }
 
-function startCheckingPaymentStatus(orderCode) {
+let countdownInterval = null;
+
+function startCountdownTimer(expiresAtISO) {
+    if (countdownInterval) clearInterval(countdownInterval);
+    const expiresAt = new Date(expiresAtISO);
+    
+    function updateCountdown() {
+        const now = new Date();
+        const diff = expiresAt - now;
+        
+        if (diff <= 0) {
+            const countdownTimer = document.getElementById('countdownTimer');
+            if (countdownTimer) {
+                countdownTimer.textContent = 'Đã hết hạn';
+                countdownTimer.style.color = '#dc3545';
+            }
+            clearInterval(countdownInterval);
+            return;
+        }
+        
+        const minutes = Math.floor(diff / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        const countdownTimer = document.getElementById('countdownTimer');
+        if (countdownTimer) {
+            countdownTimer.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+    }
+    
+    updateCountdown();
+    countdownInterval = setInterval(updateCountdown, 1000);
+}
+
+function startCheckingPaymentStatus(orderCode, expiresAtISO) {
     if (paymentCheckInterval) clearInterval(paymentCheckInterval);
     paymentCheckInterval = setInterval(async () => {
         try {
             const response = await fetch(`/api/payment-status/${orderCode}`);
             const data = await response.json();
+            
             if (data.status === 'success') {
                 clearInterval(paymentCheckInterval);
+                if (countdownInterval) clearInterval(countdownInterval);
                 document.getElementById('paymentScreen').classList.remove('active');
                 alert("Thanh toán thành công! Chào mừng bạn đến với Premium.");
                 const userResponse = await fetch('/api/current_user');
                 if (userResponse.ok) currentUser = await userResponse.json();
                 await loadChatData();
+            } else if (data.status === 'expired') {
+                clearInterval(paymentCheckInterval);
+                if (countdownInterval) clearInterval(countdownInterval);
+                const paymentError = document.getElementById('paymentError');
+                if (paymentError) {
+                    paymentError.textContent = 'Giao dịch đã hết hạn. Vui lòng tạo giao dịch mới.';
+                }
             }
         } catch (error) { console.error("Lỗi kiểm tra trạng thái thanh toán:", error); }
     }, 3000);
@@ -483,7 +575,90 @@ function initializeChatApp() {
     if (closeMemoriesBtn) closeMemoriesBtn.addEventListener('click', () => document.body.classList.remove('memories-active'));
     if (memoriesModal) memoriesModal.addEventListener('click', e => { if (e.target === memoriesModal) document.body.classList.remove('memories-active'); });
     const closePaymentBtn = document.getElementById('closePaymentBtn');
-    closePaymentBtn.addEventListener('click', () => { document.getElementById('paymentScreen').classList.remove('active'); if (paymentCheckInterval) clearInterval(paymentCheckInterval); });
+    closePaymentBtn.addEventListener('click', () => { 
+        document.getElementById('paymentScreen').classList.remove('active'); 
+        if (paymentCheckInterval) clearInterval(paymentCheckInterval);
+        if (countdownInterval) clearInterval(countdownInterval);
+    });
+    
+    // Xử lý xác nhận thanh toán thủ công
+    const confirmPaymentBtn = document.getElementById('confirmPaymentBtn');
+    const manualOrderCodeInput = document.getElementById('manualOrderCodeInput');
+    const manualConfirmError = document.getElementById('manualConfirmError');
+    
+    if (confirmPaymentBtn && manualOrderCodeInput) {
+        confirmPaymentBtn.addEventListener('click', async () => {
+            const orderCode = manualOrderCodeInput.value.trim();
+            if (!orderCode) {
+                if (manualConfirmError) {
+                    manualConfirmError.textContent = 'Vui lòng nhập nội dung chuyển khoản';
+                    manualConfirmError.style.display = 'block';
+                }
+                return;
+            }
+            
+            // Validate format
+            if (!orderCode.match(/^MERACHAT\d+$/i)) {
+                if (manualConfirmError) {
+                    manualConfirmError.textContent = 'Nội dung chuyển khoản không hợp lệ. Vui lòng nhập đúng định dạng MERACHAT...';
+                    manualConfirmError.style.display = 'block';
+                }
+                return;
+            }
+            
+            confirmPaymentBtn.disabled = true;
+            confirmPaymentBtn.textContent = 'Đang xác nhận...';
+            if (manualConfirmError) manualConfirmError.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/confirm-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderCode: orderCode })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Thanh toán thành công
+                    if (paymentCheckInterval) clearInterval(paymentCheckInterval);
+                    if (countdownInterval) clearInterval(countdownInterval);
+                    document.getElementById('paymentScreen').classList.remove('active');
+                    alert("Thanh toán thành công! Chào mừng bạn đến với Premium.");
+                    
+                    // Reload user data
+                    const userResponse = await fetch('/api/current_user');
+                    if (userResponse.ok) currentUser = await userResponse.json();
+                    await loadChatData();
+                } else {
+                    // Lỗi xác nhận
+                    if (manualConfirmError) {
+                        manualConfirmError.textContent = data.message || 'Không thể xác nhận thanh toán. Vui lòng kiểm tra lại nội dung chuyển khoản.';
+                        manualConfirmError.style.display = 'block';
+                    }
+                    confirmPaymentBtn.disabled = false;
+                    confirmPaymentBtn.textContent = 'Xác nhận';
+                }
+            } catch (error) {
+                console.error("Lỗi xác nhận thanh toán:", error);
+                if (manualConfirmError) {
+                    manualConfirmError.textContent = 'Lỗi kết nối đến server. Vui lòng thử lại.';
+                    manualConfirmError.style.display = 'block';
+                }
+                confirmPaymentBtn.disabled = false;
+                confirmPaymentBtn.textContent = 'Xác nhận';
+            }
+        });
+        
+        // Cho phép nhấn Enter để xác nhận
+        if (manualOrderCodeInput) {
+            manualOrderCodeInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    confirmPaymentBtn.click();
+                }
+            });
+        }
+    }
     
     const qrPaymentBtn = document.getElementById('qrPaymentBtn');
     const vnpayPaymentBtn = document.getElementById('vnpayPaymentBtn');
@@ -515,20 +690,7 @@ function sendMessageFromInput() {
     const loadingId = addMessage(DOMElements.chatBox, currentCharacter, "💭 Đang suy nghĩ...", null, true); 
     sendMessageToServer(message, loadingId); 
 }
-async function sendMessageToServer(messageText, loadingId) { setProcessing(true); try { const response = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: messageText, character: currentCharacter }) }); if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`); const data = await response.json(); if (data.updatedMemory) {
-            const oldStage = currentMemory?.user_profile?.relationship_stage || 'stranger';
-            currentMemory = data.updatedMemory;
-            const newStage = currentMemory?.user_profile?.relationship_stage || 'stranger';
-            // Tự động cập nhật relationship status khi stage thay đổi
-            if (oldStage !== newStage) {
-                console.log(`🔄 Relationship stage changed: ${oldStage} → ${newStage}`);
-                updateRelationshipStatus();
-                if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
-            }
-        }
-        removeMessage(loadingId);
-        updateRelationshipStatus();
-        if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu(); const messages = data.displayReply.split('<NEXT_MESSAGE>').filter(m => m.trim().length > 0); for (let i = 0; i < messages.length; i++) { const msg = messages[i].trim(); addMessage(DOMElements.chatBox, currentCharacter, msg, (i === 0) ? data.audio : null, false, null, (i === messages.length - 1) ? data.mediaUrl : null, (i === messages.length - 1) ? data.mediaType : null); if (i < messages.length - 1) await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30)); } } catch (error) { console.error("Lỗi gửi tin nhắn:", error); if (loadingId) removeMessage(loadingId); addMessage(DOMElements.chatBox, currentCharacter, "Xin lỗi, có lỗi kết nối mất rồi!"); } finally { setProcessing(false); } }
+async function sendMessageToServer(messageText, loadingId) { setProcessing(true); try { const response = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: messageText, character: currentCharacter }) }); if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`); const data = await response.json(); if (data.updatedMemory) currentMemory = data.updatedMemory; removeMessage(loadingId); updateRelationshipStatus(); if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu(); const messages = data.displayReply.split('<NEXT_MESSAGE>').filter(m => m.trim().length > 0); for (let i = 0; i < messages.length; i++) { const msg = messages[i].trim(); addMessage(DOMElements.chatBox, currentCharacter, msg, (i === 0) ? data.audio : null, false, null, (i === messages.length - 1) ? data.mediaUrl : null, (i === messages.length - 1) ? data.mediaType : null); if (i < messages.length - 1) await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30)); } } catch (error) { console.error("Lỗi gửi tin nhắn:", error); if (loadingId) removeMessage(loadingId); addMessage(DOMElements.chatBox, currentCharacter, "Xin lỗi, có lỗi kết nối mất rồi!"); } finally { setProcessing(false); } }
 function setProcessing(state) { isProcessing = state;[DOMElements.userInput, DOMElements.sendBtn, DOMElements.micBtnText].forEach(el => { if (el) el.disabled = state; }); }
 function updateRelationshipStatus() {
     const stage = currentMemory?.user_profile?.relationship_stage || 'stranger';
