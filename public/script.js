@@ -281,6 +281,11 @@ async function initiatePayment() {
             
             if (transferContent && orderCodeDisplay) {
                 orderCodeDisplay.textContent = data.orderCode;
+                // Hiển thị format đầy đủ cho chuyển khoản thủ công
+                const orderCodeForManual = document.getElementById('orderCodeForManual');
+                if (orderCodeForManual) {
+                    orderCodeForManual.textContent = data.orderCode;
+                }
                 transferContent.style.display = 'block';
             }
             

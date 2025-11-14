@@ -201,9 +201,31 @@ app.post('/api/sepay-webhook', async (req, res) => {
         ].filter(v => typeof v === 'string');
 
         let memo = possibleMemoFields.find(Boolean) || '';
-        // Trích xuất MERACHATxxxx nếu có
+        console.log("📝 Memo nhận được từ webhook:", memo);
+        
+        // Trích xuất MERACHATxxxx - hỗ trợ cả 2 format:
+        // 1. "SEVQR MERACHAT123456" (từ QR code)
+        // 2. "MERACHAT123456" (chuyển khoản thủ công)
+        // 3. Có thể có khoảng trắng hoặc ký tự khác
         const matched = memo.match(/MERACHAT\d+/i);
-        const orderCode = matched ? matched[0] : memo;
+        let orderCode = matched ? matched[0] : null;
+        
+        // Nếu không tìm thấy MERACHAT, thử tìm trong toàn bộ memo
+        // (một số ngân hàng có thể format khác)
+        if (!orderCode && memo) {
+            // Thử tìm pattern MERACHAT trong bất kỳ đâu
+            const allMatches = memo.match(/MERACHAT\d+/gi);
+            if (allMatches && allMatches.length > 0) {
+                orderCode = allMatches[0].toUpperCase();
+            }
+        }
+        
+        // Log để debug
+        if (orderCode) {
+            console.log(`✅ Tìm thấy orderCode: ${orderCode}`);
+        } else {
+            console.warn(`⚠️ Không tìm thấy orderCode trong memo: "${memo}"`);
+        }
 
         // Hỗ trợ nhiều trạng thái thành công
         const statusRaw = String(payload.status || payload.data?.status || payload.result || payload.event || '').toUpperCase();
@@ -220,6 +242,7 @@ app.post('/api/sepay-webhook', async (req, res) => {
 
         if (!orderCode) {
             console.warn('⚠️ Webhook không có orderCode/memo hợp lệ.');
+            console.warn('📋 Toàn bộ payload:', JSON.stringify(payload, null, 2));
             return res.status(200).send('NO_ORDER_CODE');
         }
 
