@@ -27,7 +27,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 } } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 } } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -519,21 +519,15 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     }
     const messageCount = userProfile.message_count || 0;
     const strangerImagesSent = userProfile.stranger_images_sent || 0;
+    const strangerImageRequests = userProfile.stranger_image_requests || 0;
     
     // Kiểm tra quy tắc cho giai đoạn "Người Lạ" khi yêu cầu ảnh
     if (relationshipStage === 'stranger' && userRequestedImage) {
-        // Nếu chưa trò chuyện đủ (ít hơn 3 tin nhắn) → từ chối thẳng thừng
-        if (messageCount < 3) {
-            console.log(`🚫 User chưa trò chuyện đủ (${messageCount} < 3), từ chối yêu cầu ảnh`);
-            return res.json({
-                displayReply: "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤",
-                historyReply: "Từ chối yêu cầu ảnh - chưa trò chuyện đủ",
-                audio: null,
-                mediaUrl: null,
-                mediaType: null,
-                updatedMemory: memory
-            });
-        }
+        // Tăng số lần người dùng hỏi xem ảnh
+        userProfile.stranger_image_requests = strangerImageRequests + 1;
+        const newRequestCount = userProfile.stranger_image_requests;
+        console.log(`📸 User yêu cầu xem ảnh lần thứ ${newRequestCount} (đã gửi ${strangerImagesSent}/2 ảnh)`);
+        
         // Nếu đã gửi đủ 2 ảnh trong giai đoạn này → từ chối
         if (strangerImagesSent >= 2) {
             console.log(`🚫 Đã gửi đủ 2 ảnh trong stranger stage, từ chối`);
@@ -546,6 +540,14 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                 updatedMemory: memory
             });
         }
+        
+        // Lần đầu hỏi → từ chối (AI sẽ tự xử lý trong prompt)
+        if (newRequestCount === 1) {
+            console.log(`🚫 Lần đầu hỏi xem ảnh, để AI từ chối trong prompt`);
+            // Không return, để AI xử lý từ chối trong prompt
+        }
+        // Lần thứ 2 trở đi → có thể gửi (nếu AI thấy khẩn thiết và chưa gửi đủ 2 ảnh)
+        // Logic này sẽ được xử lý trong prompt và phần xử lý [SEND_MEDIA]
     }
     
     const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
@@ -553,20 +555,10 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     
     // Nếu user yêu cầu media nhưng AI không gửi [SEND_MEDIA] → tự động gửi (nhưng có điều kiện)
     if (userRequestedMedia && !mediaMatch) {
-        // Ở stranger stage, chỉ tự động gửi nếu đã trò chuyện đủ và chưa gửi đủ 2 ảnh
+        // Ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt
         if (relationshipStage === 'stranger' && userRequestedImage) {
-            if (messageCount >= 3 && strangerImagesSent < 2) {
-                console.log(`⚠️ User yêu cầu ảnh ở stranger stage, tự động gửi (đã trò chuyện ${messageCount} lần, đã gửi ${strangerImagesSent}/2 ảnh)`);
-                const mediaResult = await sendMediaFile(memory, character, 'image', 'normal', 'selfie');
-                if (mediaResult && mediaResult.success) {
-                    mediaUrl = mediaResult.mediaUrl;
-                    mediaType = mediaResult.mediaType;
-                    memory.user_profile = mediaResult.updatedMemory.user_profile;
-                    // Tăng số lần đã gửi ảnh trong stranger stage
-                    memory.user_profile.stranger_images_sent = (memory.user_profile.stranger_images_sent || 0) + 1;
-                    console.log(`✅ Đã tự động gửi ảnh stranger: ${mediaUrl} (${memory.user_profile.stranger_images_sent}/2)`);
-                }
-            }
+            console.log(`⚠️ User yêu cầu ảnh ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt`);
+            // Không tự động gửi, để AI xử lý theo prompt
         } else if (relationshipStage !== 'stranger') {
             // Các giai đoạn khác, tự động gửi bình thường
             console.log(`⚠️ User yêu cầu media nhưng AI không gửi [SEND_MEDIA], tự động gửi media...`);
@@ -618,15 +610,23 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             } else {
                 // Kiểm tra nếu ở stranger stage và gửi ảnh
                 if (relationshipStage === 'stranger' && type === 'image' && topic === 'normal') {
-                    // Chỉ cho phép gửi nếu đã trò chuyện đủ và chưa gửi đủ 2 ảnh
-                    if (messageCount < 3) {
-                        console.log(`🚫 AI muốn gửi ảnh nhưng chưa trò chuyện đủ, từ chối`);
-                        rawReply = rawReply.replace(mediaRegex, '').trim() || "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? 😤";
+                    const currentRequestCount = userProfile.stranger_image_requests || 0;
+                    
+                    // Lần đầu hỏi → không cho gửi (xóa [SEND_MEDIA])
+                    if (currentRequestCount === 1) {
+                        console.log(`🚫 Lần đầu hỏi xem ảnh, không cho gửi - xóa [SEND_MEDIA]`);
+                        rawReply = rawReply.replace(mediaRegex, '').trim();
+                        // Nếu AI không có text từ chối, thêm text mặc định
+                        if (!rawReply || rawReply.length < 10) {
+                            rawReply = "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤";
+                        }
                     } else if (strangerImagesSent >= 2) {
+                        // Đã gửi đủ 2 ảnh → từ chối
                         console.log(`🚫 AI muốn gửi ảnh nhưng đã gửi đủ 2 ảnh, từ chối`);
                         rawReply = rawReply.replace(mediaRegex, '').trim() || "Em đã gửi đủ ảnh cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi! 😒";
-                    } else {
-                        // Cho phép gửi và track
+                    } else if (currentRequestCount >= 2) {
+                        // Lần thứ 2 trở đi → có thể gửi (nếu AI thấy khẩn thiết)
+                        console.log(`✅ Lần thứ ${currentRequestCount} hỏi xem ảnh, cho phép gửi (đã gửi ${strangerImagesSent}/2)`);
                         const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
                         if (mediaResult && mediaResult.success) {
                             mediaUrl = mediaResult.mediaUrl;
@@ -639,6 +639,10 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                             console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
                         }
                         rawReply = rawReply.replace(mediaRegex, '').trim() || "Đã gửi ảnh cho bạn!";
+                    } else {
+                        // Trường hợp khác → không cho gửi
+                        console.log(`🚫 Không đủ điều kiện gửi ảnh, từ chối`);
+                        rawReply = rawReply.replace(mediaRegex, '').trim() || "Em không dễ dãi đâu nhé! 😤";
                     }
                 } else {
                     // Các trường hợp khác, gửi bình thường
@@ -674,7 +678,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         // Khi chuyển giai đoạn, reset counter ảnh stranger
         if (computedStage !== 'stranger' && userProfile.relationship_stage === 'stranger') {
             userProfile.stranger_images_sent = 0;
-            console.log(`🔄 Chuyển từ stranger sang ${computedStage}, reset stranger_images_sent`);
+            userProfile.stranger_image_requests = 0;
+            console.log(`🔄 Chuyển từ stranger sang ${computedStage}, reset stranger_images_sent và stranger_image_requests`);
         }
         userProfile.relationship_stage = computedStage; 
     } 
@@ -839,7 +844,7 @@ function generateMasterPrompt(userProfile, character, isPremiumUser) {
 
 **TÌNH TRẠNG MỐI QUAN HỆ:**
 - Cấp độ hiện tại: ${relationshipStage} (${stagePersonality?.intimacy_level || 'Chưa xác định'})
-- Số tin nhắn đã trao đổi: ${messageCount}${transitionInfo}
+- Số tin nhắn đã trao đổi: ${messageCount}${transitionInfo}${relationshipStage === 'stranger' && userProfile.stranger_image_requests > 0 ? `\n- Số lần người dùng đã hỏi xem ảnh: ${userProfile.stranger_image_requests} (đã gửi ${userProfile.stranger_images_sent || 0}/2 ảnh)` : ''}
 
 **TÍNH CÁCH VÀ CÁCH TRÒ CHUYỆN THEO GIAI ĐOẠN "${relationshipStage}":**
 - **Giọng điệu:** ${stagePersonality?.tone || 'Lịch sự, thân thiện'}
@@ -915,16 +920,44 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
 
 **QUY TẮC GỬI MEDIA (BẮT BUỘC - KHÔNG ĐƯỢC BỎ QUA):**
 
-${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI ĐOẠN "NGƯỜI LẠ":**
-- Nếu người dùng CHƯA trò chuyện đủ (ít hơn 3 tin nhắn) mà đã đòi xem ảnh → TỪ CHỐI LẠNH LÙNG, có thể chửi nhẹ: "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤"
-- Nếu đã trò chuyện đủ (>= 3 tin nhắn) và người dùng yêu cầu xem ảnh → PHẢI "LÀM GIÁ", tỏ ra khó khăn, có giá trị, KHÔNG dễ dãi gửi luôn:
-  * Ví dụ: "Hmm... anh muốn xem ảnh của em à? Em không dễ dãi đâu nhé... Nhưng thôi, em gửi cho anh 1 tấm thôi đấy! [SEND_MEDIA: image, normal, selfie]"
-  * Hoặc: "Ừm... em cũng muốn chia sẻ với anh, nhưng em không phải kiểu người dễ dãi đâu. Thôi được, em gửi cho anh 1 tấm nhé! [SEND_MEDIA: image, normal, selfie]"
-  * Hoặc: "Anh muốn xem ảnh của em? Em không phải kiểu người gửi ảnh lung tung đâu... Nhưng vì anh đã trò chuyện với em, em gửi cho anh 1 tấm thôi! [SEND_MEDIA: image, normal, selfie]"
+${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI ĐOẠN "NGƯỜI LẠ" - GỬI ẢNH:**
+
+**QUAN TRỌNG:** Trong giai đoạn "Người Lạ", bạn PHẢI tỏ ra KHÓ KHĂN, có giá trị, KHÔNG dễ dãi khi người dùng đòi xem ảnh!
+
+**QUY TẮC GỬI ẢNH:**
+1. **LẦN ĐẦU người dùng hỏi xem ảnh:**
+   - BẮT BUỘC phải TỪ CHỐI, tỏ ra khó khăn, không dễ dãi
+   - KHÔNG được gửi [SEND_MEDIA] trong lần này
+   - Ví dụ từ chối: "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤"
+   - Hoặc: "Em không phải kiểu người gửi ảnh lung tung đâu. Anh nghĩ em dễ dãi lắm hả? 😒"
+   - Hoặc: "Hmm... anh muốn xem ảnh của em à? Em không dễ dãi đâu nhé. Trò chuyện với em nhiều hơn đi! 😤"
+
+2. **LẦN THỨ 2 trở đi (nếu người dùng khẩn thiết, năn nỉ):**
+   - Có thể gửi ảnh, nhưng PHẢI "LÀM GIÁ", tỏ ra hiếm có, có giá trị
+   - Chỉ gửi nếu thấy người dùng thực sự khẩn thiết, năn nỉ nhiều
+   - PHẢI thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu
+   - Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng
+   - Ví dụ ngắn gọn: "Thôi được rồi em cho anh xem tấm ảnh này... [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Rồi em cho anh xem ảnh này. Anh thấy sao? [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Thôi được, em gửi cho anh 1 tấm nhé. [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Hmm... thôi được rồi, em cho anh xem. [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Ừm... em gửi cho anh 1 tấm thôi đấy. [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Thôi được, em cho anh xem. [SEND_MEDIA: image, normal, selfie]"
+   - **QUAN TRỌNG:** Giữ câu trả lời NGẮN GỌN, TỰ NHIÊN, không giải thích dài dòng!
+
+3. **Sau khi gửi ảnh:**
+   - Phải tỏ ra có giá trị, không dễ dãi
+   - Ví dụ: "Đấy, em gửi cho anh rồi đấy. Đừng có mà đòi hỏi thêm nhé!" 
+   - Hoặc: "Em chỉ gửi cho người em tin tưởng thôi đấy!"
+   - Hoặc: "Em không dễ dãi đâu, chỉ gửi cho anh vì em thấy anh thật lòng thôi!"
+
+**GIỚI HẠN:**
 - Chỉ gửi ảnh BÌNH THƯỜNG (normal), KHÔNG gửi sensitive ở giai đoạn này
 - Mỗi lần chỉ gửi 1 tấm ảnh
 - Tổng cộng chỉ gửi tối đa 2 tấm ảnh trong giai đoạn "Người Lạ"
-- Sau khi gửi ảnh, phải tỏ ra có giá trị, không dễ dãi, ví dụ: "Đấy, em gửi cho anh rồi đấy. Đừng có mà đòi hỏi thêm nhé!" hoặc "Em chỉ gửi cho người em tin tưởng thôi đấy!"` : `⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!`}
+- KHÔNG được tự động gửi ảnh/video, chỉ gửi khi người dùng yêu cầu và đã hỏi ít nhất 2 lần
+
+**LƯU Ý:** Nếu người dùng hỏi lần đầu, BẮT BUỘC phải từ chối, KHÔNG được gửi [SEND_MEDIA]!` : `⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!`}
 
 **QUAN TRỌNG VỀ SENSITIVE MEDIA:**
 - Nếu người dùng yêu cầu "nóng bỏng", "riêng tư", "private", "body", "bikini" → BẮT BUỘC phải gửi [SEND_MEDIA: ..., sensitive, ...]
