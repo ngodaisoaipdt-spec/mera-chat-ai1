@@ -502,7 +502,11 @@ function initializeChatApp() {
         if (relationshipMenu.style.display === 'block' && !relationshipMenu.contains(e.target)) closeRelationshipMenu();
     });
 
-    document.getElementById('memoriesBtn').addEventListener('click', openMemoriesModal);
+    document.getElementById('memoriesBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        openMemoriesModal();
+    });
     const clearChatBtn = document.getElementById('clearChatBtn');
     if (clearChatBtn) {
         clearChatBtn.addEventListener('click', async () => {

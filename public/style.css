@@ -67,7 +67,7 @@ body.lightbox-active .lightbox { display: flex; opacity: 1; }
 .lightbox-content { max-width: 90%; max-height: 90%; }
 .lightbox-close { position: absolute; top: 15px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: 700; cursor: pointer; }
 .modal { position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, .6); display: none; justify-content: center; align-items: center; opacity: 0; transition: opacity .3s; }
-body.memories-active .modal { display:flex; opacity: 1; }
+body.memories-active .modal#memoriesModal { display:flex; opacity: 1; }
 body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity: 1; }
 .modal-content { background: #fff; width: 95vw; max-width: 600px; max-height: 80vh; border-radius: 15px; box-shadow: 0 5px 25px rgba(0, 0, 0, .2); display: flex; flex-direction: column; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #eee; flex-shrink: 0; }
