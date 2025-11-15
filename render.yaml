@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: mera-chat
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Các biến môi trường khác cần được thêm trong Render Dashboard:
+      # - XAI_API_KEY
+      # - MONGODB_URI
+      # - SESSION_SECRET
+      # - GOOGLE_CLIENT_ID
+      # - GOOGLE_CLIENT_SECRET
+      # - SEPAY_ACCOUNT_NO
+      # - SEPAY_ACCOUNT_NAME
+      # - SEPAY_BANK_BIN
+      # - VNPAY_TMN_CODE (nếu dùng VNPay)
+      # - VNPAY_HASH_SECRET (nếu dùng VNPay)
+      # - VNPAY_URL (nếu dùng VNPay)
+      # - VIETTEL_AI_TOKEN (nếu dùng TTS)
+
