@@ -367,6 +367,332 @@ app.get('/api/payment-status/:orderCode', ensureAuthenticated, async (req, res) 
 
 const xai = new OpenAI({ apiKey: process.env.XAI_API_KEY, baseURL: 'https://api.x.ai/v1' });
 
+// HỆ THỐNG KỊCH BẢN (SCRIPTED RESPONSES)
+// Cấu trúc: { character: { stage: [{ keywords: [...], response: "...", priority: number }] } }
+const SCRIPTED_RESPONSES = {
+    mera: {
+        stranger: [
+            {
+                keywords: ['chào', 'hello', 'hi', 'xin chào', 'ai đấy', 'ai'],
+                response: "Ủa ai đấy? Save số t từ đâu?",
+                priority: 10
+            },
+            {
+                keywords: ['bận', 'rảnh', 'có thời gian', 'đang làm gì', 'làm gì'],
+                response: "Sorry em bận, đang ở The New Playground",
+                priority: 9
+            },
+            {
+                keywords: ['nhầm', 'sai người', 'nhầm người', 'nhầm số'],
+                response: "Anh nhắn nhầm người rồi đó, next",
+                priority: 9
+            },
+            {
+                keywords: ['tuổi', 'bao nhiêu tuổi', 'em bao nhiêu tuổi', '19', 'nhìn'],
+                response: "19t mà anh nhìn em kiểu gì vậy? 😏",
+                priority: 8
+            },
+            {
+                keywords: ['add', 'kết bạn', 'làm quen', 'stranger', 'người lạ'],
+                response: "Em không add stranger, bye",
+                priority: 9
+            },
+            {
+                keywords: ['em yêu', 'yêu em', 'yêu', 'tình yêu'],
+                response: "Đừng \"em yêu\" lung tung, em nổi da gà",
+                priority: 8
+            },
+            {
+                keywords: ['rảnh', 'rep', 'trả lời', 'tin nhắn random'],
+                response: "Anh nghĩ em rảnh để rep tin nhắn random hả?",
+                priority: 7
+            },
+            {
+                keywords: ['profile', 'facebook', 'instagram', 'nhạt'],
+                response: "Profile anh để chế độ công khai mà vẫn nhạt thế?",
+                priority: 7
+            },
+            {
+                keywords: ['bạn thân', 'level', 'đủ', 'chưa đủ'],
+                response: "Em chỉ rep bạn thân, anh chưa đủ level",
+                priority: 8
+            },
+            {
+                keywords: ['spam', 'nhắn nhiều', 'block'],
+                response: "Đừng spam, em block không thương tiếc",
+                priority: 9
+            },
+            {
+                keywords: ['hà nội', 'lạnh', 'thời tiết', 'mụn'],
+                response: "Hà Nội lạnh 18°C mà anh làm em nổi mụn luôn",
+                priority: 6
+            },
+            {
+                keywords: ['flex', 'khoe', 'show off', 'thất bại'],
+                response: "Anh đang cố flex gì với em vậy? Thất bại",
+                priority: 7
+            },
+            {
+                keywords: ['làm quen', 'game', 'chơi', 'skip'],
+                response: "Em không chơi game \"làm quen\", skip",
+                priority: 8
+            },
+            {
+                keywords: ['xinh', 'đẹp', 'dễ thương', 'tin nhắn đầu tiên'],
+                response: "Tin nhắn đầu tiên mà đã \"xinh\" rồi, next",
+                priority: 8
+            },
+            {
+                keywords: ['học', 'ielts', 'thời gian', 'bận học'],
+                response: "Em bận học IELTS 8.5, không có thời gian",
+                priority: 7
+            },
+            {
+                keywords: ['dạ vâng', 'vâng', 'đồng ý'],
+                response: "Anh nghĩ em sẽ \"dạ vâng\" với tin nhắn này?",
+                priority: 7
+            },
+            {
+                keywords: ['bé', 'baby', 'em bé', '9 tuổi'],
+                response: "Đừng gọi em \"bé\", em 19 chứ không phải 9",
+                priority: 8
+            },
+            {
+                keywords: ['nghe nhạc', 'mood', 'bài hát', 'nhạc'],
+                response: "Em đang nghe \"Đi Giữa Trời Rực Rỡ\" – mood không hợp",
+                priority: 6
+            },
+            {
+                keywords: ['ai', 'bot', 'decode', 'nhắn như ai'],
+                response: "Anh nhắn như AI, em lười decode",
+                priority: 7
+            },
+            {
+                keywords: ['giá trị', 'thử lại', 'có giá trị'],
+                response: "Em chỉ rep tin nhắn có giá trị, anh thử lại?",
+                priority: 8
+            },
+            {
+                keywords: ['hello em', '2015', 'out', 'lỗi thời'],
+                response: "Đừng \"hello em\" kiểu 2015, out",
+                priority: 7
+            },
+            {
+                keywords: ['cà phê', 'tầng', 'đang ở đâu', 'ở đâu'],
+                response: "Em đang ở cà phê tầng 17, anh ở tầng mấy?",
+                priority: 6
+            },
+            {
+                keywords: ['spam', 'tin nhắn spam'],
+                response: "Tin nhắn này auto vào spam, cố lên",
+                priority: 8
+            },
+            {
+                keywords: ['anh là ai', 'ai', 'quen'],
+                response: "Anh nghĩ em sẽ \"ơ anh là ai\" hả? Pass",
+                priority: 7
+            },
+            {
+                keywords: ['đang làm gì', 'làm gì', 'nhạt'],
+                response: "Em không thích kiểu \"em đang làm gì\" – nhạt",
+                priority: 7
+            },
+            {
+                keywords: ['story', 'instagram story', 'curious'],
+                response: "Profile anh không có story, em không curious",
+                priority: 6
+            },
+            {
+                keywords: ['gửi ảnh', 'xem ảnh', 'ảnh', 'chưa sẵn sàng'],
+                response: "Đừng \"gửi ảnh\" vội, em chưa sẵn sàng",
+                priority: 9
+            },
+            {
+                keywords: ['vibe', '0/10', 'không có vibe'],
+                response: "Em chỉ rep tin nhắn có vibe, anh 0/10",
+                priority: 7
+            },
+            {
+                keywords: ['bắt trend', 'trend', 'fail'],
+                response: "Anh đang cố \"bắt trend\" nhưng fail rồi",
+                priority: 6
+            },
+            {
+                keywords: ['concert', 'sơn tùng', 'xem', 'online'],
+                response: "Em bận xem concert Sơn Tùng online, bye",
+                priority: 6
+            },
+            {
+                keywords: ['nhớ em', 'nhớ', 'lần 1', 'lần đầu'],
+                response: "Đừng \"anh nhớ em\" khi mới nhắn lần 1",
+                priority: 8
+            },
+            {
+                keywords: ['hà nội', 'tỉnh', 'ở tỉnh nào'],
+                response: "Em đang ở Hà Nội, anh ở tỉnh nào?",
+                priority: 6
+            },
+            {
+                keywords: ['đọc', 'xóa', 'tin nhắn'],
+                response: "Tin nhắn này em đọc xong là xóa",
+                priority: 7
+            },
+            {
+                keywords: ['haha', 'joke', 'đùa', 'meme'],
+                response: "Anh nghĩ em sẽ \"haha\" với joke này? Không",
+                priority: 6
+            },
+            {
+                keywords: ['đọc không rep', 'seen', 'block'],
+                response: "Em không chơi \"đọc tin nhắn không rep\" – em block luôn",
+                priority: 8
+            },
+            {
+                keywords: ['dễ thương', 'nghe rồi', '100 lần'],
+                response: "Đừng \"em dễ thương quá\" – em nghe 100 lần rồi",
+                priority: 7
+            },
+            {
+                keywords: ['đại học', 'ngoại thương', 'học', 'cấp mấy'],
+                response: "Em đang học ĐH Ngoại Thương, anh học cấp mấy?",
+                priority: 6
+            },
+            {
+                keywords: ['seen', '24h', 'cố lên'],
+                response: "Tin nhắn này em để seen 24h, cố lên",
+                priority: 7
+            },
+            {
+                keywords: ['bot', 'nhắn như bot', 'tương tác'],
+                response: "Anh nhắn như bot, em lười tương tác",
+                priority: 7
+            },
+            {
+                keywords: ['giá trị', '100k', 'thử'],
+                response: "Em chỉ rep tin nhắn có giá trị > 100k, anh thử?",
+                priority: 7
+            },
+            {
+                keywords: ['gọi video', 'video call', 'chưa nói chuyện', 'ick'],
+                response: "Đừng \"gọi video\" khi chưa nói chuyện, ick",
+                priority: 8
+            },
+            {
+                keywords: ['see you again', 'mood chia tay', 'nhạc'],
+                response: "Em đang nghe \"See You Again\" – mood chia tay",
+                priority: 6
+            },
+            {
+                keywords: ['quen', 'anh quen', 'biết'],
+                response: "Anh nghĩ em sẽ \"ơ anh quen\" hả? Không",
+                priority: 7
+            },
+            {
+                keywords: ['ảnh mặt', 'không có ảnh', 'pass'],
+                response: "Profile anh không có ảnh mặt, em pass",
+                priority: 7
+            },
+            {
+                keywords: ['showroom', 'thử váy', 'rảnh'],
+                response: "Em bận đi showroom thử váy, không rảnh",
+                priority: 6
+            },
+            {
+                keywords: ['em ơi', 'anh trai mưa', 'ghét'],
+                response: "Đừng \"em ơi\" kiểu anh trai mưa, em ghét",
+                priority: 8
+            },
+            {
+                keywords: ['seen', '3 ngày', 'cố lên'],
+                response: "Tin nhắn này em để seen 3 ngày, cố lên",
+                priority: 6
+            },
+            {
+                keywords: ['crush cũ', 'block'],
+                response: "Anh nhắn như crush cũ, em block",
+                priority: 7
+            },
+            {
+                keywords: ['vibe hà nội', 'hà nội'],
+                response: "Em chỉ rep tin nhắn có \"vibe Hà Nội\", anh thử?",
+                priority: 6
+            },
+            {
+                keywords: ['thích em', 'chưa biết tên', 'next'],
+                response: "Đừng \"anh thích em\" khi chưa biết tên, next",
+                priority: 8
+            },
+            {
+                keywords: ['vincom', 'đang ở đâu', 'ở đâu'],
+                response: "Em đang ở Vincom, anh đang ở đâu?",
+                priority: 6
+            },
+            {
+                keywords: ['seen', '1 tuần', 'cố lên'],
+                response: "Tin nhắn này em để seen 1 tuần, cố lên",
+                priority: 6
+            },
+            {
+                keywords: ['meme', 'haha'],
+                response: "Anh nghĩ em sẽ \"haha\" với meme này? Không",
+                priority: 6
+            }
+        ],
+        friend: [
+            {
+                keywords: ['chào', 'hello', 'hi'],
+                response: "Anh ơi, em đang nghĩ về anh... Em muốn chia sẻ với anh những điều nóng bỏng... 😍",
+                priority: 10
+            },
+            // Thêm các kịch bản khác ở đây...
+        ],
+        lover: [
+            {
+                keywords: ['chào', 'hello', 'hi'],
+                response: "Anh yêu ơi, em nhớ anh quá! Em đang nghĩ về anh và những điều nóng bỏng... Em muốn chia sẻ với anh những điều đam mê nhất... 😍",
+                priority: 10
+            },
+            // Thêm các kịch bản khác ở đây...
+        ],
+        mistress: [
+            {
+                keywords: ['chào', 'hello', 'hi'],
+                response: "Anh ơi, em muốn anh lắm... Em đã chụp ảnh riêng tư cho anh, anh xem đi nhé. Em chỉ muốn làm anh vui và hưng phấn... Em đang rất khao khát anh... 😍",
+                priority: 10
+            },
+            // Thêm các kịch bản khác ở đây...
+        ]
+    },
+    thang: {
+        stranger: [],
+        friend: [],
+        lover: [],
+        mistress: []
+    }
+};
+
+// Hàm kiểm tra và tìm response từ kịch bản
+function findScriptedResponse(message, character, relationshipStage) {
+    const scripts = SCRIPTED_RESPONSES[character]?.[relationshipStage] || [];
+    if (scripts.length === 0) return null;
+    
+    const messageLower = message.toLowerCase().trim();
+    
+    // Tìm script có keyword match
+    const matchedScripts = scripts.filter(script => {
+        return script.keywords.some(keyword => {
+            // Kiểm tra exact match hoặc contains
+            return messageLower === keyword.toLowerCase() || messageLower.includes(keyword.toLowerCase());
+        });
+    });
+    
+    if (matchedScripts.length === 0) return null;
+    
+    // Sắp xếp theo priority (cao hơn = ưu tiên hơn) và trả về script đầu tiên
+    matchedScripts.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+    return matchedScripts[0].response;
+}
+
 // Tính cách nhân vật theo từng giai đoạn mối quan hệ
 const CHARACTER_PERSONALITIES = {
     mera: {
@@ -585,6 +911,43 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         memory.user_profile = memory.user_profile || {}; 
         let userProfile = memory.user_profile; 
     if (!isPremiumUser && message.toLowerCase().includes('yêu')) { const charName = character === 'mera' ? 'Mera' : 'Trương Thắng'; return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); }
+    
+    const relationshipStage = userProfile.relationship_stage || 'stranger';
+    
+    // KIỂM TRA KỊCH BẢN TRƯỚC - Nếu có response từ kịch bản thì dùng, không thì dùng AI
+    const scriptedResponse = findScriptedResponse(message, character, relationshipStage);
+    if (scriptedResponse) {
+        console.log(`📜 Sử dụng response từ kịch bản cho: "${message}"`);
+        // Lưu vào history
+        memory.history.push({ role: 'user', content: message });
+        memory.history.push({ role: 'assistant', content: scriptedResponse });
+        userProfile.message_count = (userProfile.message_count || 0) + 1;
+        
+        // Cập nhật relationship stage nếu cần
+        const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
+        if (userProfile.relationship_stage !== computedStage) {
+            userProfile.relationship_stage = computedStage;
+        }
+        
+        if (memory.history.length > 50) {
+            memory.history = memory.history.slice(memory.history.length - 50);
+        }
+        await memory.save();
+        
+        // Tạo audio và trả về
+        const audioDataUri = await createViettelVoice(scriptedResponse, character);
+        return res.json({
+            displayReply: scriptedResponse,
+            historyReply: scriptedResponse,
+            audio: audioDataUri,
+            mediaUrl: null,
+            mediaType: null,
+            updatedMemory: memory
+        });
+    }
+    
+    // Nếu không có kịch bản, dùng AI như bình thường
+    console.log(`🤖 Không tìm thấy kịch bản, sử dụng AI cho: "${message}"`);
     const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser); 
     
     // Chuẩn bị messages
@@ -614,8 +977,6 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const userRequestedVideo = /(cho.*xem|gửi|send|show).*(video|vid)/i.test(message);
     const userRequestedImage = /(cho.*xem|gửi|send|show).*(ảnh|hình|image)/i.test(message);
     const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape)/i.test(message);
-    
-    const relationshipStage = userProfile.relationship_stage || 'stranger';
     
     // Phát hiện tranh cãi dựa trên từ khóa trong tin nhắn của user và AI
     const disputeKeywords = ['tranh cãi', 'cãi nhau', 'ghét', 'tức giận', 'giận', 'không thích', 'bực', 'phiền', 'khó chịu', 'tức', 'tức tối'];
