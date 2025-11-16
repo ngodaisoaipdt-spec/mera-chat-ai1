@@ -1969,6 +1969,12 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const userRequestedImage = /(cho.*xem|gửi|send|show).*(ảnh|hình|image)/i.test(message);
     const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape|sexy|18\+|nhạy cảm|sex|xxx)/i.test(message);
     
+    // TEXT-FIRST GUARD: Lover/Mistress không tự gợi ý media nếu user không yêu cầu
+    if ((relationshipStage === 'lover' || relationshipStage === 'mistress') && !userRequestedMedia) {
+        const suggestRegex = /(?:để\s+(?:em|anh)\s+(?:sẽ\s+)?gửi\s+(?:video|clip|ảnh)[^.!?\n]*[.!?]?\s*)/gi;
+        rawReply = rawReply.replace(suggestRegex, '').replace(/\[SEND_MEDIA:[^\]]+\]/gi, '').trim();
+    }
+    
     // Phát hiện tranh cãi dựa trên từ khóa trong tin nhắn của user và AI
     const disputeKeywords = ['tranh cãi', 'cãi nhau', 'ghét', 'tức giận', 'giận', 'không thích', 'bực', 'phiền', 'khó chịu', 'tức', 'tức tối'];
     const userMessageLower = message.toLowerCase();
