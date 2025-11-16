@@ -2656,6 +2656,13 @@ ${(relationshipStage === 'lover' || relationshipStage === 'mistress')
         const loverStyleGuide = getLoverStyleGuideExamples(detectedTopic);
         if (loverStyleGuide) {
             masterPrompt += loverStyleGuide;
+            // Tăng “độ mặn” khi là các chủ đề 18+ và có consent
+            const strong18Topics = new Set(['18+ playful','18+ mạnh','18+ rên','18+ khiêu gợi','18+ đụ & xuất tinh','18+ hỏi “sướng không”','Mera sướng và rên']);
+            const msgLower = (userMessage || '').toLowerCase();
+            const hasConsent = /(đồng ý|ok|oke|okela|cho xem|gửi đi|xem đi|yes|yep|ok em|ok anh)/i.test(msgLower);
+            if (strong18Topics.has(detectedTopic)) {
+                masterPrompt += `\n\n=== QUY TẮC CƯỜNG ĐỘ 18+ ===\n- Nếu người dùng dùng từ 18+ mạnh hoặc đã đồng ý (${hasConsent ? 'ĐÃ' : 'chưa'}) consent:\n  - Giọng điệu: ${hasConsent ? 'cuồng nhiệt, dâm dãng rõ rệt' : 'gợi mở, e ngại nhẹ'}\n  - Câu ngắn 10–18 từ, có thể 2–3 bong bóng bằng <NEXT_MESSAGE> liên tiếp, giảm vòng vo.\n  - Từ vựng gợi hình, nhưng tự nhiên; tránh lặp từ.\n  - Luôn tôn trọng ranh giới: nếu người dùng đổi ý → hạ mức ngay.\n- Khi gửi sensitive media: chỉ gửi sau khi người dùng đồng ý rõ ràng ở tin NHƯ HIỆN TẠI hoặc ngay trước đó.`;
+            }
         } else if (relationshipStage === 'stranger') {
             const styleGuide = getStyleGuideExamples(character, relationshipStage, detectedTopic);
             if (styleGuide) masterPrompt += styleGuide;
