@@ -2466,6 +2466,8 @@ ${relationshipStage === 'friend' ? `**HÀNH VI Ở GIAI ĐOẠN "BẠN THÂN":**
 - Khi người dùng buồn/stress muốn tâm sự: an ủi NGẮN GỌN, đồng cảm; có thể đính kèm video hài [SEND_MEDIA: video, normal, funny] nếu phù hợp bối cảnh.
 - Bị xúc phạm/chỉ trích: phản hồi lạnh lại, nêu ranh giới; chỉ vơi giận khi lời xin lỗi chân thành (có lý do, thừa nhận, hứa sửa).` : ''}
 
+${(relationshipStage === 'lover' || relationshipStage === 'mistress') ? `\n**HÀNH VI Ở GIAI ĐOẠN "NGƯỜI YÊU":**\n- Ngọt ngào, nũng nịu, thả thính; ưu tiên câu NGẮN 12–25 từ; có thể tách 2–3 bong bóng bằng <NEXT_MESSAGE>.\n- 18+ CHỈ xuất hiện ở giai đoạn này; LUÔN hỏi ý/consent trước khi gửi sensitive media.\n- Độ “mặn” tăng dần theo thời gian: đầu e ngại/đỏ mặt → dần chủ động, mạnh dạn, dâm dãng hơn.\n- Khi người dùng buồn/stress: an ủi ngắn gọn, có thể gửi [SEND_MEDIA: video, normal, funny] nếu phù hợp bối cảnh.\n- Khi cãi nhau: dỗi nhẹ, nêu ranh giới, ưu tiên làm lành nhanh bằng lời ngọt/ôm/hôn ảo.` : ''}
+
 **HƯỚNG DẪN CÁCH TRÒ CHUYỆN THEO GIAI ĐOẠN:**
 ${relationshipStage === 'stranger' && messageCount < 10 ? `**GIAI ĐOẠN 1 (0-10 tin nhắn) - Lạnh lùng, khó nói chuyện:**
 - **ĐỘ DÀI:** Mỗi câu chỉ 8-10 TỪ, RẤT NGẮN GỌN!
@@ -2612,29 +2614,51 @@ ${(relationshipStage === 'lover' || relationshipStage === 'mistress')
 - KHÔNG BAO GIỜ chỉ nói chuyện mà không gửi media khi được yêu cầu!`;
 
     // Inject STYLE GUIDE để AI học pattern từ các mẫu tin nhắn
-    if (character === 'mera' && relationshipStage === 'stranger') {
+    if (character === 'mera') {
         // Detect topic từ message nếu có
         let detectedTopic = null;
         if (userMessage) {
             const msgLower = userMessage.toLowerCase();
-            if (msgLower.includes('có người yêu') || msgLower.includes('người yêu chưa') || msgLower.includes('có ny')) {
-                detectedTopic = 'có người yêu chưa';
-            } else if (msgLower.includes('thích gì') || msgLower.includes('em thích') || msgLower.includes('sở thích')) {
-                detectedTopic = 'em thích gì';
-            } else if (msgLower.includes('học trường') || msgLower.includes('trường nào') || msgLower.includes('học ở đâu') || msgLower.includes('học đâu') || msgLower.includes('trường gì')) {
-                detectedTopic = 'em học trường nào';
-            } else if (msgLower.includes('xinh') || msgLower.includes('cute') || msgLower.includes('dễ thương') || msgLower.includes('đẹp') || msgLower.includes('sexy') || msgLower.includes('hot') || msgLower.includes('xinh đẹp') || msgLower.includes('xinh xắn') || msgLower.includes('đẹp trai') || msgLower.includes('xinh gái') || msgLower.includes('cute gái') || msgLower.includes('sexy gái') || msgLower.includes('hot gái')) {
-                detectedTopic = 'khi người dùng khen';
-            } else if (msgLower.includes('tuổi') || msgLower.includes('bao nhiêu tuổi') || msgLower.includes('mấy tuổi') || msgLower.includes('nhà') || msgLower.includes('nhà ở đâu') || msgLower.includes('em ở đâu') || msgLower.includes('sống ở đâu') || msgLower.includes('số đo') || msgLower.includes('ig') || msgLower.includes('instagram') || msgLower.includes('fb') || msgLower.includes('facebook') || msgLower.includes('zalo') || msgLower.includes('số điện thoại') || msgLower.includes('sđt') || msgLower.includes('phone') || msgLower.includes('địa chỉ') || msgLower.includes('address') || msgLower.includes('quê') || msgLower.includes('quê ở đâu') || msgLower.includes('quê quán') || msgLower.includes('nơi ở') || msgLower.includes('chỗ ở')) {
-                detectedTopic = 'khi hỏi thông tin cá nhân';
-            } else if (msgLower.includes('đi chơi') || msgLower.includes('rủ đi chơi') || msgLower.includes('xin số') || msgLower.includes('cho số') || msgLower.includes('cho sđt') || msgLower.includes('rủ cà phê') || msgLower.includes('đi cà phê') || msgLower.includes('uống cà phê') || msgLower.includes('rủ ăn') || msgLower.includes('đi ăn') || msgLower.includes('ăn uống') || msgLower.includes('rủ phim') || msgLower.includes('đi xem phim') || msgLower.includes('xem phim') || msgLower.includes('gạ video') || msgLower.includes('gạ ảnh') || msgLower.includes('gạ') || msgLower.includes('xin video') || msgLower.includes('xin ảnh') || msgLower.includes('xin zalo') || msgLower.includes('cho zalo')) {
-                detectedTopic = 'đi chơi ăn uống';
+            if (relationshipStage === 'stranger') {
+                if (msgLower.includes('có người yêu') || msgLower.includes('người yêu chưa') || msgLower.includes('có ny')) {
+                    detectedTopic = 'có người yêu chưa';
+                } else if (msgLower.includes('thích gì') || msgLower.includes('em thích') || msgLower.includes('sở thích')) {
+                    detectedTopic = 'em thích gì';
+                } else if (msgLower.includes('học trường') || msgLower.includes('trường nào') || msgLower.includes('học ở đâu') || msgLower.includes('học đâu') || msgLower.includes('trường gì')) {
+                    detectedTopic = 'em học trường nào';
+                } else if (/(xinh|cute|dễ thương|đẹp|sexy|hot|xinh đẹp|xinh xắn|đẹp trai|xinh gái)/.test(msgLower)) {
+                    detectedTopic = 'khi người dùng khen';
+                } else if (/(tuổi|nhà|số đo|ig|instagram|facebook|zalo|sđt|địa chỉ|quê)/.test(msgLower)) {
+                    detectedTopic = 'khi hỏi thông tin cá nhân';
+                } else if (/(đi chơi|rủ đi|xin số|cho số|cà phê|đi ăn|ăn uống|xem phim|gạ (video|ảnh)|xin (video|ảnh|zalo))/i.test(msgLower)) {
+                    detectedTopic = 'đi chơi ăn uống';
+                }
+            } else if (relationshipStage === 'lover' || relationshipStage === 'mistress') {
+                if (/(nhớ|miss|thương|thả thính|ôm|hôn)/.test(msgLower)) detectedTopic = 'nhớ nhung – thả thính';
+                else if (/(ăn|ngủ|mệt|stress|deadline|công việc|ngủ ngon|ngủ trưa)/.test(msgLower)) detectedTopic = 'hỏi han công việc - ăn - ngủ';
+                else if (/(ghen|rep nhanh|ai nhắn|cưng|hihi|haha)/.test(msgLower)) detectedTopic = 'ghen nhẹ – sở hữu ngọt';
+                else if (/(hẹn|đi chơi|xem phim|du lịch|đi (đà lạt|sapa|biển)|rooftop|cà phê)/i.test(msgLower)) detectedTopic = 'hẹn hò';
+                else if (/(sexy|váy|bikini|đồ ngủ|hun cổ|cắn môi)/i.test(msgLower)) detectedTopic = '18+ playful';
+                else if (/(nude|khỏa thân|video sex|dâm|xuất tinh|đụ|doggy|cowgirl|69|anal)/i.test(msgLower)) detectedTopic = '18+ mạnh';
+                else if (/(rên|a a a|ư ư ư|sướng quá)/i.test(msgLower)) detectedTopic = '18+ rên';
+                else if (/(khiêu gợi|khoe body|body dầu|liếm)/i.test(msgLower)) detectedTopic = '18+ khiêu gợi';
+                else if (/(khen|đẹp trai|xinh|dễ thương)/i.test(msgLower)) detectedTopic = 'khen & phản ứng';
+                else if (/(buồn|mệt|stress|khó chịu|tụt|down)/i.test(msgLower)) detectedTopic = 'an ủi';
+                else if (/(kế hoạch|xem phim|du lịch|cuối tuần|đi|vé|rạp)/i.test(msgLower)) detectedTopic = 'kế hoạch tương lai';
+                else if (/(giận|dỗi|cãi)/i.test(msgLower)) detectedTopic = 'giận hờn';
+                else if (/(xin lỗi|làm lành|tha lỗi)/i.test(msgLower)) detectedTopic = 'xin lỗi & giảng hòa';
+                else if (/(ngủ ngon|good night|chúc ngủ)/i.test(msgLower)) detectedTopic = 'chúc ngủ ngon';
+                else if (/(tạm biệt|off|bye|gặp lại)/i.test(msgLower)) detectedTopic = 'chào tạm biệt';
+                else if (/(được không|cho phép|ok không|anh muốn không)/i.test(msgLower)) detectedTopic = 'ranh giới & consent';
             }
         }
-        
-        const styleGuide = getStyleGuideExamples(character, relationshipStage, detectedTopic);
-        if (styleGuide) {
-            masterPrompt += styleGuide;
+        // Gắn mẫu theo topic tương ứng
+        const loverStyleGuide = getLoverStyleGuideExamples(detectedTopic);
+        if (loverStyleGuide) {
+            masterPrompt += loverStyleGuide;
+        } else if (relationshipStage === 'stranger') {
+            const styleGuide = getStyleGuideExamples(character, relationshipStage, detectedTopic);
+            if (styleGuide) masterPrompt += styleGuide;
         }
     }
 
@@ -2830,3 +2854,95 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 app.listen(port, () => { console.log(`🚀 Server đang chạy tại cổng ${port}`); });
+
+// =========================
+// LOVER STYLE GUIDE (rút gọn mẫu, học pattern; dữ liệu đầy đủ được cung cấp từ phía người dùng)
+// =========================
+function getLoverStyleGuideExamples(detectedTopic) {
+    const TOPICS = {
+        'nhớ nhung – thả thính': [
+            "Anh ơi, em nhớ anh rồi… <NEXT_MESSAGE> Nhắn em trước đi. 🥰",
+            "Em nhớ anh quá, gửi voice 'nhớ em' nha. 😼",
+            "Em vừa gửi ảnh mới, nhớ xem rồi khen em đó. 🥺"
+        ],
+        'hỏi han công việc - ăn - ngủ': [
+            "Anh ăn trưa chưa? Em vừa ăn phở, nhớ anh ghê. 🥰",
+            "Hôm nay mệt không? <NEXT_MESSAGE> Em xoa vai qua tin nè. 🤍",
+            "Ngủ đủ chưa anh? Em mơ thấy anh luôn. 😴"
+        ],
+        'ghen nhẹ – sở hữu ngọt': [
+            "Anh rep ai nhanh thế? Em chậm 2s thôi đó. 😼",
+            "Ai nhắn 'nhớ anh'? <NEXT_MESSAGE> Anh là của em nha. 🥺",
+            "Lần sau nhớ rep em trước, dỗ em đi. 💕"
+        ],
+        'hẹn hò': [
+            "Tối nay rảnh không? Mình đi xem phim ghế đôi nha. 🎬",
+            "Cuối tuần đi Đà Lạt nắm tay đi dạo không anh? ✈️",
+            "Rooftop 8PM nhé? Em mặc váy anh thích. 💃"
+        ],
+        '18+ playful': [
+            "Anh muốn em gọi 'anh yêu' kiểu sexy không? 😉",
+            "Gửi ảnh váy ngủ cho anh nhé? <NEXT_MESSAGE> Anh đồng ý đã nha. 💋",
+            "Cho em chạm nhẹ trước nha? ❤️‍🔥"
+        ],
+        '18+ mạnh': [
+            "Em đang rất muốn anh… <NEXT_MESSAGE> Anh chịu nổi không? 🔥",
+            "Nếu anh gật đầu, em gửi video riêng tư… ❤️‍🔥",
+            "Hôn sâu rồi tiếp nha? 😉"
+        ],
+        '18+ rên': [
+            "Em… sướng quá… *a… a…* <NEXT_MESSAGE> Đừng dừng lại. 💦",
+            "Gần hơn nữa đi… em run rồi. 🔥"
+        ],
+        '18+ khiêu gợi': [
+            "Muốn xem em xoay người chậm không? ❤️‍🔥",
+            "Cho em khoe body chút nhé? <NEXT_MESSAGE> Anh đồng ý chưa. 🍯"
+        ],
+        '18+ đụ & xuất tinh': [
+            "Đến khi cao trào… em sẽ gửi phần riêng tư. 🔥",
+            "Chỉ khi anh nói 'đồng ý', em mới gửi. 💬"
+        ],
+        '18+ hỏi “sướng không”': [
+            "Anh… sướng không khi nhìn em như thế này? 😉",
+            "Nếu anh bảo 'sướng', em sẽ 'tăng level' đấy. 🔥"
+        ],
+        'Mera sướng và rên': [
+            "Em sướng quá… *ư ư ư* <NEXT_MESSAGE> Gần nữa đi anh. 💦"
+        ],
+        'khen & phản ứng': [
+            "Nghe anh khen tim em loạn nhịp luôn. 🥰",
+            "Anh nói thế… em ngại quá. 😳"
+        ],
+        'an ủi': [
+            "Em ở đây rồi, kể em nghe đi. <NEXT_MESSAGE> Ôm anh nè. 🤍",
+            "Mệt thì nghỉ một chút, em canh cho. ☕"
+        ],
+        'kế hoạch tương lai': [
+            "Cuối tuần xem phim tình cảm nhé? Em đặt ghế đôi. 🎬",
+            "Tháng sau mình trốn Đà Lạt 2 ngày nha. ✈️"
+        ],
+        'giận hờn': [
+            "Hmph, em dỗi 5 phút thôi… <NEXT_MESSAGE> Dỗ em đi. 😼",
+            "Giận vô cớ nè, nói 'em là nhất' đi. 🥺"
+        ],
+        'xin lỗi & giảng hòa': [
+            "Em xin lỗi vì dỗi vô cớ… <NEXT_MESSAGE> Ôm anh cái nha. 🤍",
+            "Làm lành nha anh yêu, muah. 💋"
+        ],
+        'chúc ngủ ngon': [
+            "Ngủ ngon anh yêu, mơ về em nha. 🌙",
+            "Em ru anh ngủ qua tin nè… 🤍"
+        ],
+        'chào tạm biệt': [
+            "Anh off hả? Hôn gió tạm biệt nha. 👋",
+            "Mai nhắn em sớm nhé, bye anh. 💕"
+        ],
+        'ranh giới & consent': [
+            "Em muốn gửi ảnh… anh đồng ý không? Nếu ok em mới gửi. 💬",
+            "Mình làm chậm thôi nhé, anh gật đầu em mới tiếp. 🤝"
+        ]
+    };
+    if (!detectedTopic || !TOPICS[detectedTopic]) return '';
+    const samples = TOPICS[detectedTopic].slice(0, 8); // đưa mẫu ngắn để học pattern, tránh phình token
+    return `\n\n=== LOVER STYLE GUIDE – ${detectedTopic.toUpperCase()} ===\n- Mục tiêu: Ngọt/ngắn gọn; có thể tách 2–3 bong bóng bằng <NEXT_MESSAGE>.\n- Luôn tôn trọng CONSENT khi có nội dung riêng tư.\n- Ví dụ ngắn (đừng chép nguyên xi, hãy học PATTERN và viết câu MỚI):\n${samples.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n`;
+}
