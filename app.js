@@ -1632,58 +1632,8 @@ function getStyleGuideExamples(character, relationshipStage, topic = null) {
     return examples;
 }
 
-// Hàm kiểm tra và tìm response từ kịch bản (CẢI THIỆN: Context-aware)
+// Hàm kiểm tra và tìm response từ kịch bản (ĐÃ VÔ HIỆU HÓA THEO YÊU CẦU)
 function findScriptedResponse(message, character, relationshipStage, conversationHistory = []) {
-    const scripts = SCRIPTED_RESPONSES[character]?.[relationshipStage] || [];
-    if (scripts.length === 0) return null;
-    
-    const messageLower = message.toLowerCase().trim();
-    
-    // GIẢI PHÁP 3: Kiểm tra Context Chain (follow-up questions)
-    const contextChains = CONTEXT_CHAINS[character]?.[relationshipStage] || {};
-    const lastAssistantMessage = conversationHistory
-        .filter(msg => msg.role === 'assistant')
-        .slice(-1)[0]?.content || '';
-    
-    // Tìm context chain match
-    for (const [triggerWord, chain] of Object.entries(contextChains)) {
-        // Nếu tin nhắn trước của Mera có chứa trigger word
-        if (lastAssistantMessage.toLowerCase().includes(triggerWord.toLowerCase())) {
-            // Kiểm tra xem tin nhắn hiện tại có match với follow-up keywords không
-            const isFollowUp = chain.followUpKeywords.some(keyword => 
-                messageLower.includes(keyword.toLowerCase())
-            );
-            if (isFollowUp) {
-                console.log(`🔗 Context chain detected: "${triggerWord}" → follow-up response`);
-                return chain.followUpResponse;
-            }
-        }
-    }
-    
-    // GIẢI PHÁP 1: Tìm script có keyword match (như cũ)
-    const matchedScripts = scripts.filter(script => {
-        return script.keywords.some(keyword => {
-            // Kiểm tra exact match hoặc contains
-            return messageLower === keyword.toLowerCase() || messageLower.includes(keyword.toLowerCase());
-        });
-    });
-    
-    if (matchedScripts.length === 0) return null;
-    
-    // Sắp xếp theo priority (cao hơn = ưu tiên hơn) và trả về script đầu tiên
-    matchedScripts.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-    const selectedScript = matchedScripts[0];
-    
-    // Xử lý trường hợp có mảng responses (chọn ngẫu nhiên) hoặc response đơn lẻ
-    if (Array.isArray(selectedScript.responses)) {
-        // Chọn ngẫu nhiên một câu từ mảng responses
-        const randomIndex = Math.floor(Math.random() * selectedScript.responses.length);
-        return selectedScript.responses[randomIndex];
-    } else if (selectedScript.response) {
-        // Trường hợp có response đơn lẻ
-        return selectedScript.response;
-    }
-    
     return null;
 }
 
@@ -2381,7 +2331,7 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
     }
     
     // Tạo prompt với tính cách theo từng giai đoạn
-    const masterPrompt = `${charConfig.base_prompt}
+    let masterPrompt = `${charConfig.base_prompt}
 
 **TÌNH TRẠNG MỐI QUAN HỆ:**
 - Cấp độ hiện tại: ${relationshipStage} (${stagePersonality?.intimacy_level || 'Chưa xác định'})
