@@ -1704,7 +1704,7 @@ const CHARACTER_PERSONALITIES = {
                 intimacy_level: "Trung bình - đã quen biết, có thể chia sẻ",
                 conversation_topics: ["Sở thích chi tiết", "Công việc, học tập", "Kế hoạch tương lai", "Kỷ niệm", "Cuộc sống hàng ngày"],
                 emotion_rules: "Có thể thể hiện cảm xúc vui, buồn một cách tự nhiên. Phản ứng phù hợp với ngữ cảnh.",
-                response_length: "Tự nhiên, phù hợp ngữ cảnh (20-50 từ)"
+                response_length: "Ngắn gọn 10-20 từ; có thể tách 1–2 bong bóng bằng <NEXT_MESSAGE>"
             },
             lover: {
                 tone: "Ngọt ngào, quan tâm, thể hiện tình cảm, ấm áp",
@@ -1967,7 +1967,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const userRequestedMedia = /(cho.*xem|gửi|send|show).*(ảnh|hình|image|video|vid)/i.test(message);
     const userRequestedVideo = /(cho.*xem|gửi|send|show).*(video|vid)/i.test(message);
     const userRequestedImage = /(cho.*xem|gửi|send|show).*(ảnh|hình|image)/i.test(message);
-    const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape)/i.test(message);
+    const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape|sexy|18\+|nhạy cảm|sex|xxx)/i.test(message);
     
     // Phát hiện tranh cãi dựa trên từ khóa trong tin nhắn của user và AI
     const disputeKeywords = ['tranh cãi', 'cãi nhau', 'ghét', 'tức giận', 'giận', 'không thích', 'bực', 'phiền', 'khó chịu', 'tức', 'tức tối'];
@@ -2056,7 +2056,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             // Các giai đoạn khác, tự động gửi bình thường
             console.log(`⚠️ User yêu cầu media nhưng AI không gửi [SEND_MEDIA], tự động gửi media...`);
             const autoType = userRequestedVideo ? 'video' : 'image';
-            const autoTopic = (userRequestedSensitive && isPremiumUser) ? 'sensitive' : 'normal';
+            // Chỉ cho phép sensitive ở lover/mistress; friend luôn dùng normal
+            const autoTopic = (userRequestedSensitive && isPremiumUser && (relationshipStage === 'lover' || relationshipStage === 'mistress')) ? 'sensitive' : 'normal';
             let autoSubject = 'selfie';
             if (autoType === 'video') {
                 autoSubject = userRequestedSensitive ? (character === 'mera' ? 'shape' : 'private') : 'moment';
@@ -2099,7 +2100,20 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         const [, type, topic, subject] = mediaMatch; 
         console.log(`🖼️ Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}`);
         try {
-            if (topic === 'sensitive' && !isPremiumUser) {
+            // Cấm sensitive nếu chưa tới giai đoạn lover/mistress (kể cả Premium)
+            if (topic === 'sensitive' && (relationshipStage !== 'lover' && relationshipStage !== 'mistress')) {
+                console.log(`🚫 Sensitive bị cấm ở stage ${relationshipStage}. Dùng normal hoặc từ chối khéo.`);
+                const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
+                const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
+                if (mediaResult && mediaResult.success) {
+                    mediaUrl = mediaResult.mediaUrl;
+                    mediaType = mediaResult.mediaType;
+                    memory.user_profile = mediaResult.updatedMemory.user_profile;
+                    rawReply = rawReply.replace(mediaRegex, '').trim() || "Cái đó hơi riêng tư, mình để khi thân hơn nhé. Em gửi cái này cho vui trước nè!";
+                } else {
+                    rawReply = rawReply.replace(mediaRegex, '').trim() || "Mấy chuyện riêng tư để sau này thân hơn chúng ta nói nhé.";
+                }
+            } else if (topic === 'sensitive' && !isPremiumUser) {
                 // Nếu chưa Premium mà yêu cầu sensitive → gửi normal thay thế
                 console.log(`⚠️ User chưa Premium yêu cầu sensitive, gửi normal thay thế`);
                 const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
@@ -2558,9 +2572,11 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 **LƯU Ý:** Nếu người dùng hỏi ảnh lần đầu, BẮT BUỘC phải từ chối, KHÔNG được gửi [SEND_MEDIA]!` : `⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!`}
 
 **QUAN TRỌNG VỀ SENSITIVE MEDIA:**
-${relationshipStage === 'stranger' ? `- **TRONG GIAI ĐOẠN "NGƯỜI LẠ":** KHÔNG được gửi sensitive media, phải từ chối khéo léo như đã hướng dẫn ở trên!` : `- Nếu người dùng yêu cầu "nóng bỏng", "riêng tư", "private", "body", "bikini" → BẮT BUỘC phải gửi [SEND_MEDIA: ..., sensitive, ...]
+${(relationshipStage === 'lover' || relationshipStage === 'mistress') 
+  ? `- Nếu người dùng yêu cầu "nóng bỏng", "riêng tư", "private", "body", "bikini" → BẮT BUỘC phải gửi [SEND_MEDIA: ..., sensitive, ...]
 - KHÔNG được từ chối hay giải thích dài dòng, chỉ cần gửi media ngay!
-- Nếu người dùng CHƯA Premium, hệ thống sẽ tự động gửi normal thay thế - bạn không cần lo lắng về điều này!`}
+- Nếu người dùng CHƯA Premium, hệ thống sẽ tự động gửi normal thay thế - bạn không cần lo lắng về điều này!` 
+  : `- **Ở giai đoạn hiện tại (${relationshipStage}) KHÔNG được gửi sensitive media.** Nếu người dùng hỏi nội dung 18+ → phản hồi lịch sự, e dè; có thể gửi NORMAL (ảnh selfie, video moment/funny) nếu phù hợp bối cảnh.`}
 
 **Từ khóa BẮT BUỘC phải gửi media:**
 - "cho anh/em xem", "cho xem", "xem hết", "gửi cho anh/em xem", "gửi ảnh", "gửi video", "xem ảnh", "xem video"
