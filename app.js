@@ -1901,15 +1901,52 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     // Sử dụng grok-3-mini (linh hoạt hơn, dễ gửi media hơn)
     const modelName = 'grok-3-mini';
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
-    let gptResponse;
-    try {
-        gptResponse = await Promise.race([
-            xai.chat.completions.create({ model: modelName, messages: messages }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout after 30s')), 30000))
+    // Gọi API với timeout dài hơn và thử lại 1 lần khi lỗi timeout
+    const timeoutMs = Number(process.env.XAI_TIMEOUT_MS || 45000);
+    async function callXaiOnce() {
+        return await Promise.race([
+            xai.chat.completions.create({ model: modelName, messages }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`API timeout after ${timeoutMs}ms`)), timeoutMs))
         ]);
-    } catch (apiError) {
-        console.error("❌ Lỗi khi gọi xAI API:", apiError.message);
-        throw new Error(`Lỗi kết nối đến AI: ${apiError.message}`);
+    }
+    let gptResponse = null;
+    try {
+        gptResponse = await callXaiOnce();
+    } catch (firstErr) {
+        console.warn("⚠️ XAI lỗi lần 1:", firstErr.message);
+        try {
+            gptResponse = await callXaiOnce();
+        } catch (secondErr) {
+            console.error("❌ XAI lỗi lần 2:", secondErr.message);
+            gptResponse = null;
+        }
+    }
+    // Nếu vẫn không có phản hồi từ AI → tạo câu trả lời fallback, tránh hiển thị 'lỗi kết nối'
+    if (!gptResponse) {
+        const fallbackByStage = {
+            stranger: "Hmm... mạng em hơi lag một chút. Em đang ổn, vẫn bận học với chụp ảnh thôi.",
+            friend: "Ôi mạng hơi chập chờn nên trả lời chậm xíu. Hôm nay em ổn, đi cà phê và nghe nhạc.",
+            lover: "Mạng hơi chậm một chút nên em rep chậm. Hôm nay em nhớ anh và vẫn ổn nè. 🥰",
+            mistress: "Mạng hơi chậm nên em trả lời chậm xíu. Em vẫn ổn và đang nghĩ về anh. 💕"
+        };
+        const fallback = fallbackByStage[relationshipStage] || "Mạng em hơi chậm nên em trả lời chậm xíu, nhưng em vẫn ổn nè.";
+        // Lưu vào lịch sử để cuộc trò chuyện liền mạch
+        memory.history.push({ role: 'user', content: message });
+        memory.history.push({ role: 'assistant', content: fallback });
+        userProfile.message_count = (userProfile.message_count || 0) + 1;
+        const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
+        if (userProfile.relationship_stage !== computedStage) userProfile.relationship_stage = computedStage;
+        if (memory.history.length > 50) memory.history = memory.history.slice(memory.history.length - 50);
+        await memory.save();
+        const audioDataUri = await createViettelVoice(fallback, character);
+        return res.json({
+            displayReply: fallback,
+            historyReply: fallback,
+            audio: audioDataUri,
+            mediaUrl: null,
+            mediaType: null,
+            updatedMemory: memory
+        });
     } 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     console.log(`📝 AI reply (raw): ${rawReply.substring(0, 500)}...`);
