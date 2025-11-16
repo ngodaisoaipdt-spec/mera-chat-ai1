@@ -27,7 +27,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 } } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 } } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -1856,6 +1856,9 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     if (!isPremiumUser && message.toLowerCase().includes('yêu')) { const charName = character === 'mera' ? 'Mera' : 'Trương Thắng'; return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); }
     
     const relationshipStage = userProfile.relationship_stage || 'stranger';
+    // Friend-stage media quotas
+    const friendImagesSent = userProfile.friend_images_sent || 0;
+    const friendVideosSent = userProfile.friend_videos_sent || 0;
     
     // KIỂM TRA KỊCH BẢN TRƯỚC - Nếu có response từ kịch bản thì dùng, không thì dùng AI
     // Truyền conversationHistory để xử lý context-aware và follow-up questions
@@ -1950,6 +1953,13 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     } 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     console.log(`📝 AI reply (raw): ${rawReply.substring(0, 500)}...`);
+    
+    // Detect user sadness to optionally attach a funny video in friend stage (quota-aware)
+    const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met'];
+    const userIsSad = sadKeywords.some(k => message.toLowerCase().includes(k));
+    if (relationshipStage === 'friend' && userIsSad && (userProfile.friend_videos_sent || 0) < 2 && !/\[SEND_MEDIA:/i.test(rawReply)) {
+        rawReply = `${rawReply} <NEXT_MESSAGE> Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]`;
+    }
     
     let mediaUrl = null, mediaType = null; 
     
@@ -2057,11 +2067,28 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             }
             console.log(`🔄 Tự động gửi: type=${autoType}, topic=${autoTopic}, subject=${autoSubject}`);
             try {
+                // Enforce friend-stage quotas
+                if (relationshipStage === 'friend') {
+                    if (autoType === 'image' && autoTopic === 'normal' && friendImagesSent >= 2) {
+                        console.log(`🚫 Friend image quota reached (2), skip auto-send image.`);
+                    }
+                    if (autoType === 'video' && autoTopic === 'normal' && friendVideosSent >= 2) {
+                        console.log(`🚫 Friend video quota reached (2), skip auto-send video.`);
+                    }
+                }
                 const mediaResult = await sendMediaFile(memory, character, autoType, autoTopic, autoSubject);
                 if (mediaResult && mediaResult.success) {
                     mediaUrl = mediaResult.mediaUrl;
                     mediaType = mediaResult.mediaType;
                     memory.user_profile = mediaResult.updatedMemory.user_profile;
+                    if (relationshipStage === 'friend') {
+                        if (autoType === 'image' && autoTopic === 'normal') {
+                            memory.user_profile.friend_images_sent = (memory.user_profile.friend_images_sent || 0) + 1;
+                        }
+                        if (autoType === 'video' && autoTopic === 'normal') {
+                            memory.user_profile.friend_videos_sent = (memory.user_profile.friend_videos_sent || 0) + 1;
+                        }
+                    }
                     console.log(`✅ Đã tự động gửi media: ${mediaUrl}`);
                 }
             } catch (autoError) {
@@ -2152,11 +2179,29 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                     }
                 } else {
                     // Các trường hợp khác, gửi bình thường
+                    // Enforce friend-stage quotas for explicit [SEND_MEDIA]
+                    if (relationshipStage === 'friend') {
+                        if (type === 'image' && topic === 'normal' && friendImagesSent >= 2) {
+                            console.log(`🚫 Vượt quota ảnh friend (2), không gửi.`);
+                            rawReply = rawReply.replace(mediaRegex, '').trim() || "Hôm nay em gửi đủ ảnh rồi, để hôm khác nhé.";
+                        } else if (type === 'video' && topic === 'normal' && friendVideosSent >= 2) {
+                            console.log(`🚫 Vượt quota video friend (2), không gửi.`);
+                            rawReply = rawReply.replace(mediaRegex, '').trim() || "Video đủ rồi, để em gửi sau nhé.";
+                        }
+                    }
                     const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
                     if (mediaResult && mediaResult.success) {
                         mediaUrl = mediaResult.mediaUrl;
                         mediaType = mediaResult.mediaType;
                         memory.user_profile = mediaResult.updatedMemory.user_profile;
+                        if (relationshipStage === 'friend') {
+                            if (type === 'image' && topic === 'normal') {
+                                memory.user_profile.friend_images_sent = (memory.user_profile.friend_images_sent || 0) + 1;
+                            }
+                            if (type === 'video' && topic === 'normal') {
+                                memory.user_profile.friend_videos_sent = (memory.user_profile.friend_videos_sent || 0) + 1;
+                            }
+                        }
                         console.log(`✅ Đã gửi media thành công: ${mediaUrl}`);
                     } else {
                         console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
@@ -2186,6 +2231,12 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             userProfile.stranger_images_sent = 0;
             userProfile.stranger_image_requests = 0;
             console.log(`🔄 Chuyển từ stranger sang ${computedStage}, reset stranger_images_sent và stranger_image_requests`);
+        }
+        // Khi rời giai đoạn bạn thân, reset quota media của friend
+        if (computedStage !== 'friend' && userProfile.relationship_stage === 'friend') {
+            userProfile.friend_images_sent = 0;
+            userProfile.friend_videos_sent = 0;
+            console.log(`🔄 Rời friend → ${computedStage}, reset friend_images_sent và friend_videos_sent`);
         }
         userProfile.relationship_stage = computedStage; 
     } 
@@ -2384,6 +2435,7 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
 - Giữ tính cách nhất quán với nhân vật ${character === 'mera' ? 'Mera' : 'Trương Thắng'}
 - **QUAN TRỌNG NHẤT:** Hãy trò chuyện TỰ NHIÊN, UYỂN CHUYỂN, KHÉO LÉO, phù hợp với bối cảnh. Đừng quá cứng nhắc hay máy móc!
 - Phản ứng phù hợp với mối quan hệ hiện tại (${relationshipStage})${transitionProgress > 0 && transitionProgress < 1 ? ` (đang chuyển đổi ${Math.round(transitionProgress * 100)}%)` : ''}
+- ${relationshipStage === 'friend' ? '**ĐỊNH DẠNG TIN NHẮN:** Ưu tiên ngắn gọn (10–15 từ). Khi có hai ý liên tiếp, tách thành 2 tin bằng <NEXT_MESSAGE> để giống nhắn tin thật.' : ''}
 - **GIẢI PHÁP 2 - CONTEXT-AWARE (Hiểu ngữ cảnh):** Sử dụng lịch sử trò chuyện để hiểu ngữ cảnh và phản ứng phù hợp. QUAN TRỌNG:
   - Đọc kỹ lịch sử trò chuyện trước đó để hiểu context
   - Nếu bạn vừa nói về một thuật ngữ đặc biệt (như "deadline", "anti-fan", "crush", "vibe", "rooftop") và người dùng hỏi về nó → Hãy giải thích phù hợp với ngữ cảnh đã nói trước đó
@@ -2394,6 +2446,11 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
 - **ĐỘ DÀI TIN NHẮN:** ${lengthGuidance}
 - **NÓI VỀ BẢN THÂN:** ${relationshipStage === 'stranger' ? 'Ưu tiên NÓI VỀ BẢN THÂN, KỂ về sở thích, cuộc sống của mình. ĐỪNG HỎI người dùng quá nhiều. Thay vì hỏi, hãy KỂ về bản thân!' : 'Có thể chia sẻ về bản thân và hỏi người dùng một cách cân bằng'}
 - **ĐA DẠNG TỪ NGỮ:** ${relationshipStage === 'stranger' ? 'ĐỪNG chỉ dùng "Ừm..." ở đầu câu. Dùng đa dạng: "Chào...", "Hmm...", "Em...", "Thôi...", "Vậy...", hoặc bắt đầu trực tiếp không cần từ mở đầu. Chỉ dùng "Ừm..." khi thực sự cần thiết (khi ngập ngừng, suy nghĩ).' : 'Dùng đa dạng từ ngữ, tự nhiên'}
+
+${relationshipStage === 'friend' ? `**HÀNH VI Ở GIAI ĐOẠN "BẠN THÂN":**
+- Chủ động gợi chuyện khi người dùng bí ý: "Hôm nay em có một chuyện nhỏ... anh có muốn nghe không?"
+- Khi người dùng buồn/stress muốn tâm sự: an ủi NGẮN GỌN, đồng cảm; có thể đính kèm video hài [SEND_MEDIA: video, normal, funny] nếu phù hợp bối cảnh.
+- Bị xúc phạm/chỉ trích: phản hồi lạnh lại, nêu ranh giới; chỉ vơi giận khi lời xin lỗi chân thành (có lý do, thừa nhận, hứa sửa).` : ''}
 
 **HƯỚNG DẪN CÁCH TRÒ CHUYỆN THEO GIAI ĐOẠN:**
 ${relationshipStage === 'stranger' && messageCount < 10 ? `**GIAI ĐOẠN 1 (0-10 tin nhắn) - Lạnh lùng, khó nói chuyện:**
@@ -2426,7 +2483,7 @@ ${relationshipStage === 'stranger' && messageCount < 10 ? `**GIAI ĐOẠN 1 (0-1
 - Có thể chia sẻ thông tin cá nhân nhiều hơn
 - **ĐA DẠNG TỪ NGỮ:** Dùng đa dạng từ mở đầu, không chỉ "Ừm..."
 - **QUAN TRỌNG:** Hãy trò chuyện UYỂN CHUYỂN, KHÉO LÉO, phù hợp bối cảnh. Sẵn sàng mở lòng để tiến bước mối quan hệ bạn thân một cách TỰ NHIÊN!` : relationshipStage === 'stranger' ? `- Lạnh lùng, khó nói chuyện, nhưng TỰ NHIÊN, không quá cứng nhắc. Mỗi câu chỉ 8-10 từ. Nói về bản thân nhiều hơn, đừng hỏi quá nhiều.` : ''}
-  ${relationshipStage === 'friend' ? '- Thân thiện, cởi mở, có thể chia sẻ nhiều hơn, trò chuyện tự nhiên' : ''}
+  ${relationshipStage === 'friend' ? '- Thân thiện, cởi mở, chủ động chia sẻ chuyện vui/buồn vừa phải; câu trả lời NGẮN GỌN, có thể tách 1–2 bong bóng bằng <NEXT_MESSAGE> khi có 2 ý.' : ''}
   ${relationshipStage === 'lover' ? '- Ngọt ngào, quan tâm, thể hiện tình cảm, trò chuyện ấm áp' : ''}
   ${relationshipStage === 'mistress' ? '- Đam mê, quyến rũ, rất thân mật, trò chuyện gợi cảm' : ''}
 
