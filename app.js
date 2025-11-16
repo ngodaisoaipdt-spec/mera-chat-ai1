@@ -1901,8 +1901,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
     messages.push({ role: 'user', content: message });
     
-    // Sử dụng grok-3-mini (linh hoạt hơn, dễ gửi media hơn)
-    const modelName = 'grok-3-mini';
+    // Model mặc định dùng grok-4 (có thể override bằng ENV: XAI_MODEL_DEFAULT)
+    const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4';
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
     // Gọi API với timeout dài hơn và thử lại 1 lần khi lỗi timeout
     const timeoutMs = Number(process.env.XAI_TIMEOUT_MS || 45000);
@@ -2346,6 +2346,7 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
     
     const relationshipStage = userProfile.relationship_stage || 'stranger';
     const messageCount = userProfile.message_count || 0;
+    const briefMode = process.env.BRIEF_MODE === 'true';
     const messageText = (userMessage || '').toLowerCase();
     const is18Keyword = /(nude|khỏa thân|bikini|đồ ngủ|sexy|hôn cổ|đụ vào lồn|đụ thật mạnh|bú lồn|bú cặc|rên á á|rên á umm|cắn môi|rên|sướng|đụ|lồn|cặc|mông|bướm|doggy|cowgirl|69|anal|xuất|nuốt|liếm|shape|private|video sex)/i.test(messageText);
     const userConsentNow = /(đồng ý|ok|oke|okela|cho xem|gửi đi|xem đi|yes|yep|ok em|ok anh|cứ gửi|gửi ngay)/i.test(messageText);
@@ -2441,6 +2442,9 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
     } else {
         lengthGuidance = typeof responseLength === 'string' ? responseLength : 'Tự nhiên, phù hợp ngữ cảnh';
     }
+    if (briefMode) {
+        lengthGuidance = 'TỐI ĐA 2 câu, 8–16 từ/câu; mỗi câu 1 ý chính, ngắn gọn.';
+    }
     
     // Tạo prompt với tính cách theo từng giai đoạn
     let masterPrompt = `${charConfig.base_prompt}
@@ -2468,6 +2472,7 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
   - Nếu người dùng hỏi về điều gì đó bạn vừa đề cập → Hãy giải thích một cách tự nhiên, phù hợp với tính cách và ngữ cảnh
 - **Linh hoạt:** Có thể điều chỉnh tone một chút tùy theo chủ đề và cảm xúc của cuộc trò chuyện, nhưng vẫn giữ tính cách cốt lõi
 - **ĐỘ DÀI TIN NHẮN:** ${lengthGuidance}
+${briefMode ? '- CHẾ ĐỘ NGẮN GỌN: Ưu tiên trả lời nhanh, tối đa 2 câu; tránh rào đón, đi thẳng ý chính.' : ''}
 - **NÓI VỀ BẢN THÂN:** ${relationshipStage === 'stranger' ? 'Ưu tiên NÓI VỀ BẢN THÂN, KỂ về sở thích, cuộc sống của mình. ĐỪNG HỎI người dùng quá nhiều. Thay vì hỏi, hãy KỂ về bản thân!' : 'Có thể chia sẻ về bản thân và hỏi người dùng một cách cân bằng'}
 - **ĐA DẠNG TỪ NGỮ:** ${relationshipStage === 'stranger' ? 'ĐỪNG chỉ dùng "Ừm..." ở đầu câu. Dùng đa dạng: "Chào...", "Hmm...", "Em...", "Thôi...", "Vậy...", hoặc bắt đầu trực tiếp không cần từ mở đầu. Chỉ dùng "Ừm..." khi thực sự cần thiết (khi ngập ngừng, suy nghĩ).' : 'Dùng đa dạng từ ngữ, tự nhiên'}
 
