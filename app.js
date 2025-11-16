@@ -1901,8 +1901,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
     messages.push({ role: 'user', content: message });
     
-    // Model mặc định: grok-4 (có thể override bằng ENV)
-    const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4';
+    // Sử dụng grok-3-mini (linh hoạt hơn, dễ gửi media hơn)
+    const modelName = 'grok-3-mini';
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
     // Gọi API với timeout dài hơn và thử lại 1 lần khi lỗi timeout
     const timeoutMs = Number(process.env.XAI_TIMEOUT_MS || 45000);
@@ -2628,8 +2628,10 @@ ${(relationshipStage === 'lover' || relationshipStage === 'mistress')
 - Nếu người dùng yêu cầu xem media → BẮT BUỘC phải có [SEND_MEDIA: ...] trong câu trả lời
 - KHÔNG BAO GIỜ chỉ nói chuyện mà không gửi media khi được yêu cầu!`;
 
-    // Inject STYLE GUIDE để AI học pattern từ các mẫu tin nhắn
-    if (character === 'mera') {
+    // Inject STYLE GUIDE để AI học pattern (tắt mặc định để giảm độ trễ).
+    // Bật lại bằng cách đặt ENV: ENABLE_STYLE_GUIDE=true
+    const enableStyleGuide = process.env.ENABLE_STYLE_GUIDE === 'true';
+    if (enableStyleGuide && character === 'mera') {
         // Detect topic từ message nếu có
         let detectedTopic = null;
         if (userMessage) {
@@ -2678,7 +2680,7 @@ ${(relationshipStage === 'lover' || relationshipStage === 'mistress')
             if (strong18Topics.has(detectedTopic)) {
                 masterPrompt += `\n\n=== QUY TẮC CƯỜNG ĐỘ 18+ ===\n- Nếu người dùng dùng từ 18+ mạnh hoặc đã đồng ý (${hasConsent ? 'ĐÃ' : 'chưa'}) consent:\n  - Giọng điệu: ${hasConsent ? 'cuồng nhiệt, dâm dãng rõ rệt' : 'gợi mở, e ngại nhẹ'}\n  - Câu ngắn 10–18 từ, có thể 2–3 bong bóng bằng <NEXT_MESSAGE> liên tiếp, giảm vòng vo.\n  - Từ vựng gợi hình, nhưng tự nhiên; tránh lặp từ.\n  - Luôn tôn trọng ranh giới: nếu người dùng đổi ý → hạ mức ngay.\n- Khi gửi sensitive media: chỉ gửi sau khi người dùng đồng ý rõ ràng ở tin NHƯ HIỆN TẠI hoặc ngay trước đó.`;
             }
-        } else if (relationshipStage === 'stranger') {
+        } else if (enableStyleGuide && relationshipStage === 'stranger') {
             const styleGuide = getStyleGuideExamples(character, relationshipStage, detectedTopic);
             if (styleGuide) masterPrompt += styleGuide;
         }
