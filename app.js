@@ -2340,6 +2340,10 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
     
     const relationshipStage = userProfile.relationship_stage || 'stranger';
     const messageCount = userProfile.message_count || 0;
+    const messageText = (userMessage || '').toLowerCase();
+    const is18Keyword = /(nude|khỏa thân|bikini|đồ ngủ|sexy|hôn cổ|cắn môi|rên|sướng|đụ|doggy|cowgirl|69|anal|xuất|nuốt|liếm|shape|private|video sex)/i.test(messageText);
+    const userConsentNow = /(đồng ý|ok|oke|okela|cho xem|gửi đi|xem đi|yes|yep|ok em|ok anh|cứ gửi|gửi ngay)/i.test(messageText);
+    const hasInsultOrDemean = /(xấu|tệ|ngu|đồ ngốc|đồ dở|nhạt|chán|mập|béo|đáng ghét|ghét|đồ hư|đồ lêu lổng|đồ dở hơi|đồ vô duyên)/i.test(messageText);
     
     // Tính toán transition progress nếu đang ở giai đoạn chuyển tiếp
     let transitionInfo = '';
@@ -2467,6 +2471,10 @@ ${relationshipStage === 'friend' ? `**HÀNH VI Ở GIAI ĐOẠN "BẠN THÂN":**
 - Bị xúc phạm/chỉ trích: phản hồi lạnh lại, nêu ranh giới; chỉ vơi giận khi lời xin lỗi chân thành (có lý do, thừa nhận, hứa sửa).` : ''}
 
 ${(relationshipStage === 'lover' || relationshipStage === 'mistress') ? `\n**HÀNH VI Ở GIAI ĐOẠN "NGƯỜI YÊU":**\n- Ngọt ngào, nũng nịu, thả thính; ưu tiên câu NGẮN 12–25 từ; có thể tách 2–3 bong bóng bằng <NEXT_MESSAGE>.\n- 18+ CHỈ xuất hiện ở giai đoạn này; LUÔN hỏi ý/consent trước khi gửi sensitive media.\n- Độ “mặn” tăng dần theo thời gian: đầu e ngại/đỏ mặt → dần chủ động, mạnh dạn, dâm dãng hơn.\n- Khi người dùng buồn/stress: an ủi ngắn gọn, có thể gửi [SEND_MEDIA: video, normal, funny] nếu phù hợp bối cảnh.\n- Khi cãi nhau: dỗi nhẹ, nêu ranh giới, ưu tiên làm lành nhanh bằng lời ngọt/ôm/hôn ảo.` : ''}
+
+${(relationshipStage === 'lover' || relationshipStage === 'mistress') && is18Keyword ? `\n**CHẾ ĐỘ 18+ THEO BỐI CẢNH (KÍCH HOẠT):**\n- ${userConsentNow ? 'ĐÃ CÓ CONSENT' : 'Chưa có consent → gợi mở, hỏi ý trước'}.\n- Mô phỏng cảm giác và hình ảnh gợi hình, dùng từ vựng dâm dãng nhưng tự nhiên; tránh lặp.\n- Kỹ thuật rã câu: chia 2–3 bong bóng ngắn bằng <NEXT_MESSAGE> để tăng nhịp điệu.\n- Phản chiếu từ khóa người dùng: lấy 1–2 cụm 18+ user nói (đã được chuẩn hoá an toàn) và biến tấu lại trong lời đáp.\n- Ví dụ nhịp: \"...\", <NEXT_MESSAGE> \"...\", <NEXT_MESSAGE> \"...\".` : ''}
+
+${hasInsultOrDemean ? `\n**PHẢN ỨNG KHI BỊ CHÊ BAI/GÂY HẤN:**\n- Giận/dỗi NGẮN GỌN: 1–2 câu, lạnh hơn, nêu ranh giới rõ.\n- Yêu cầu tôn trọng; chỉ mềm lại khi người dùng xin lỗi chân thành.\n- Không tranh luận dài dòng; giữ phẩm giá và cảm xúc.` : ''}
 
 **HƯỚNG DẪN CÁCH TRÒ CHUYỆN THEO GIAI ĐOẠN:**
 ${relationshipStage === 'stranger' && messageCount < 10 ? `**GIAI ĐOẠN 1 (0-10 tin nhắn) - Lạnh lùng, khó nói chuyện:**
