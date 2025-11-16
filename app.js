@@ -1901,8 +1901,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
     messages.push({ role: 'user', content: message });
     
-    // Sử dụng grok-3-mini (linh hoạt hơn, dễ gửi media hơn)
-    const modelName = 'grok-3-mini';
+    // Model mặc định: grok-4 (có thể override bằng ENV)
+    const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4';
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
     // Gọi API với timeout dài hơn và thử lại 1 lần khi lỗi timeout
     const timeoutMs = Number(process.env.XAI_TIMEOUT_MS || 45000);
