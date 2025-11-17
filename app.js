@@ -2487,19 +2487,51 @@ async function createViettelVoice(textToSpeak, character) {
     } catch (error) {
         console.error("❌ Lỗi tạo giọng nói Viettel:", error.message);
         if (error.response) {
-            console.error("   Status:", error.response.status);
-            // Nếu response là JSON error
-            if (error.response.data && typeof error.response.data === 'object') {
-                console.error("   Error Data:", JSON.stringify(error.response.data));
-            } else if (error.response.data) {
+            const status = error.response.status;
+            console.error("   Trạng thái:", status);
+            
+            // Xử lý lỗi 403 (quota hết)
+            if (status === 403) {
                 try {
-                    const errorText = Buffer.from(error.response.data).toString('utf-8');
-                    console.error("   Error Text:", errorText);
+                    let errorMessage = '';
+                    if (error.response.data) {
+                        if (typeof error.response.data === 'object') {
+                            errorMessage = JSON.stringify(error.response.data);
+                        } else {
+                            const errorText = Buffer.from(error.response.data).toString('utf-8');
+                            errorMessage = errorText;
+                            // Thử parse JSON nếu có
+                            try {
+                                const errorJson = JSON.parse(errorText);
+                                if (errorJson.vi_message) {
+                                    console.error("   ⚠️ LỖI QUOTA: " + errorJson.vi_message);
+                                    console.error("   💡 Giải pháp: Nâng cấp gói Viettel AI để tiếp tục sử dụng TTS");
+                                } else if (errorJson.en_message) {
+                                    console.error("   ⚠️ QUOTA ERROR: " + errorJson.en_message);
+                                }
+                            } catch (e) {
+                                console.error("   Dữ liệu lỗi:", errorText);
+                            }
+                        }
+                    }
                 } catch (e) {
-                    console.error("   Error Data (binary):", error.response.data.length, "bytes");
+                    console.error("   Lỗi 403: Hạn mức Viettel AI đã hết");
+                }
+            } else {
+                // Xử lý các lỗi khác
+                if (error.response.data && typeof error.response.data === 'object') {
+                    console.error("   Dữ liệu lỗi:", JSON.stringify(error.response.data));
+                } else if (error.response.data) {
+                    try {
+                        const errorText = Buffer.from(error.response.data).toString('utf-8');
+                        console.error("   Dữ liệu lỗi:", errorText);
+                    } catch (e) {
+                        console.error("   Dữ liệu lỗi (binary):", error.response.data.length, "bytes");
+                    }
                 }
             }
         }
+        // Trả về null để tiếp tục hoạt động bình thường (không có âm thanh)
         return null;
     }
 }
