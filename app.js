@@ -1689,8 +1689,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
     messages.push({ role: 'user', content: message });
     
-    // Model mặc định dùng grok-4 (có thể override bằng ENV: XAI_MODEL_DEFAULT)
-    const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4';
+    // Model mặc định dùng grok-4-fast (có thể override bằng ENV: XAI_MODEL_DEFAULT)
+    const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4-fast';
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
     // Gọi API với timeout dài hơn và thử lại 1 lần khi lỗi timeout
     const timeoutMs = Number(process.env.XAI_TIMEOUT_MS || 60000); // Tăng từ 45s lên 60s
