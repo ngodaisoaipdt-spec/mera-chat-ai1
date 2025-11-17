@@ -2054,30 +2054,56 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     await memory.save(); 
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
     
-    // Gọi TTS với timeout tổng 40s để đảm bảo có đủ thời gian cho 3 lần retry (8s + 12s + 15s + delays)
-    let audioDataUri = null;
-    try {
-        const ttsPromise = createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character);
-        const timeoutPromise = new Promise((resolve) => {
-            setTimeout(() => {
-                console.warn("⏱️ TTS timeout tổng 40s, trả response không có âm thanh để tránh chậm");
-                resolve(null);
-            }, 40000); // 40 giây để đủ cho 3 lần retry (8s + 12s + 15s + delays)
-        });
-        audioDataUri = await Promise.race([ttsPromise, timeoutPromise]);
-    } catch (error) {
-        console.error("❌ Lỗi trong quá trình tạo TTS:", error.message);
-        // Vẫn cố gắng trả về null thay vì throw để không block response
-        audioDataUri = null;
-    }
+    // KHÔNG tạo TTS tự động để tiết kiệm quota - chỉ tạo khi user click nút play
+    // TTS sẽ được tạo on-demand qua endpoint /api/tts
+    const audioDataUri = null;
     
-    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=${audioDataUri ? 'có' : 'không'}`);
+    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=on-demand`);
     res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
 } catch (error) { 
     console.error("❌ Lỗi chung trong /chat:", error);
     console.error("   Stack:", error.stack);
     res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); 
 } });
+
+// Endpoint tạo TTS on-demand (chỉ khi user click nút play) để tiết kiệm quota
+app.post('/api/tts', ensureAuthenticated, async (req, res) => {
+    try {
+        const { text, character } = req.body;
+        if (!text || !character) {
+            return res.status(400).json({ success: false, message: 'Thiếu text hoặc character' });
+        }
+        
+        console.log(`🔊 Tạo TTS on-demand cho: "${text.substring(0, 50)}..." (character: ${character})`);
+        
+        // Tạo TTS với timeout tổng 40s
+        let audioDataUri = null;
+        try {
+            const ttsPromise = createViettelVoice(text, character);
+            const timeoutPromise = new Promise((resolve) => {
+                setTimeout(() => {
+                    console.warn("⏱️ TTS timeout tổng 40s");
+                    resolve(null);
+                }, 40000);
+            });
+            audioDataUri = await Promise.race([ttsPromise, timeoutPromise]);
+        } catch (error) {
+            console.error("❌ Lỗi trong quá trình tạo TTS:", error.message);
+            audioDataUri = null;
+        }
+        
+        if (audioDataUri) {
+            console.log(`✅ TTS on-demand thành công!`);
+            res.json({ success: true, audio: audioDataUri });
+        } else {
+            console.error("❌ TTS on-demand thất bại");
+            res.status(500).json({ success: false, message: 'Không thể tạo TTS' });
+        }
+    } catch (error) {
+        console.error("❌ Lỗi trong /api/tts:", error);
+        res.status(500).json({ success: false, message: 'Lỗi server' });
+    }
+});
 
 // Cập nhật tình trạng mối quan hệ
 app.post('/api/relationship', ensureAuthenticated, async (req, res) => {

@@ -748,7 +748,7 @@ function updateRelationshipStatus() {
 }
 function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
 
-function toggleAudio(messageId, audioBase64) {
+async function toggleAudio(messageId) {
     const btn = document.querySelector(`#${messageId} .replay-btn`);
     if (!btn) return;
     
@@ -760,7 +760,7 @@ function toggleAudio(messageId, audioBase64) {
             audio.pause();
             audio.currentTime = 0;
             btn.classList.remove('playing');
-            btn.title = 'Nghe lại';
+            btn.title = 'Nghe';
             delete activeAudios[messageId];
         } else {
             // Đã dừng -> Phát lại
@@ -769,27 +769,66 @@ function toggleAudio(messageId, audioBase64) {
             btn.title = 'Dừng';
         }
     } else {
-        // Chưa có audio -> Tạo mới và phát
-        const audio = new Audio(audioBase64);
-        activeAudios[messageId] = audio;
+        // Chưa có audio -> Tạo TTS on-demand
+        const text = btn.dataset.text;
+        const character = btn.dataset.character;
         
-        // Xử lý khi audio kết thúc
-        audio.onended = () => {
-            btn.classList.remove('playing');
-            btn.title = 'Nghe lại';
-            delete activeAudios[messageId];
-        };
+        if (!text || !character) {
+            console.error('Không có text hoặc character để tạo TTS');
+            return;
+        }
         
-        // Xử lý lỗi
-        audio.onerror = () => {
-            btn.classList.remove('playing');
-            btn.title = 'Nghe lại';
-            delete activeAudios[messageId];
-        };
+        // Disable button và hiển thị loading
+        btn.disabled = true;
+        btn.title = 'Đang tạo âm thanh...';
         
-        audio.play();
-        btn.classList.add('playing');
-        btn.title = 'Dừng';
+        try {
+            // Gọi API để tạo TTS
+            const response = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, character })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`TTS API trả về lỗi ${response.status}`);
+            }
+            
+            const data = await response.json();
+            if (!data.success || !data.audio) {
+                throw new Error('Không thể tạo TTS');
+            }
+            
+            // Tạo audio và phát
+            const audio = new Audio(data.audio);
+            activeAudios[messageId] = audio;
+            
+            // Xử lý khi audio kết thúc
+            audio.onended = () => {
+                btn.classList.remove('playing');
+                btn.title = 'Nghe';
+                btn.disabled = false;
+                delete activeAudios[messageId];
+            };
+            
+            // Xử lý lỗi
+            audio.onerror = () => {
+                btn.classList.remove('playing');
+                btn.title = 'Nghe';
+                btn.disabled = false;
+                delete activeAudios[messageId];
+                console.error('Lỗi phát audio');
+            };
+            
+            audio.play();
+            btn.classList.add('playing');
+            btn.title = 'Dừng';
+            btn.disabled = false;
+        } catch (error) {
+            console.error('Lỗi tạo TTS:', error);
+            btn.title = 'Lỗi, thử lại';
+            btn.disabled = false;
+        }
     }
 }
 
@@ -808,7 +847,8 @@ function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false
         return id; 
     } 
     
-    const audioBtn = (audioBase64 && !isLoading) ? `<button class="replay-btn" title="Nghe lại" onclick='toggleAudio("${id}", \`${audioBase64}\`)'><img src="${ICON_PATHS.speaker}" alt="Nghe lại"></button>` : ''; 
+    // Luôn hiển thị nút speaker cho tin nhắn từ AI (không phải loading) - TTS sẽ được tạo on-demand
+    const audioBtn = (sender !== "Bạn" && !isLoading) ? `<button class="replay-btn" title="Nghe" onclick='toggleAudio("${id}")' data-text="${text.replace(/"/g, '&quot;')}" data-character="${currentCharacter}"><img src="${ICON_PATHS.speaker}" alt="Nghe"></button>` : ''; 
     let mediaHtml = ''; 
     if (imageBase64) { 
         mediaHtml = `<img src="${imageBase64}" alt="Ảnh đã gửi" class="chat-image"/>`; 
