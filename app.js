@@ -2052,8 +2052,26 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         memory.history = memory.history.slice(memory.history.length - 50); 
     } 
     await memory.save(); 
-    const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>'); const audioDataUri = await createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character); 
-    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}`);
+    const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
+    
+    // Gọi TTS với timeout tổng 70s để đảm bảo có đủ thời gian cho 3 lần retry (25s + 20s + 15s + delays)
+    let audioDataUri = null;
+    try {
+        const ttsPromise = createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character);
+        const timeoutPromise = new Promise((resolve) => {
+            setTimeout(() => {
+                console.warn("⏱️ TTS timeout tổng 70s, trả response không có âm thanh để tránh chậm quá lâu");
+                resolve(null);
+            }, 70000); // 70 giây để đủ cho 3 lần retry
+        });
+        audioDataUri = await Promise.race([ttsPromise, timeoutPromise]);
+    } catch (error) {
+        console.error("❌ Lỗi trong quá trình tạo TTS:", error.message);
+        // Vẫn cố gắng trả về null thay vì throw để không block response
+        audioDataUri = null;
+    }
+    
+    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=${audioDataUri ? 'có' : 'không'}`);
     res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
 } catch (error) { 
     console.error("❌ Lỗi chung trong /chat:", error);
@@ -2456,15 +2474,61 @@ async function createViettelVoice(textToSpeak, character) {
         
         console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, text length: ${trimmed.length}`);
         
-        // Gọi API - response trả về binary audio data
-        const response = await axios.post(ttsUrl, payload, {
+        // Hàm gọi API với timeout - tăng lên 25s để đảm bảo thành công
+        const makeRequest = (timeoutMs = 25000) => axios.post(ttsUrl, payload, {
             headers: {
                 'Content-Type': 'application/json',
                 'accept': '*/*'
             },
             responseType: 'arraybuffer', // Nhận binary data
-            timeout: 15000
+            timeout: timeoutMs
         });
+        
+        // Retry logic: thử tối đa 3 lần để đảm bảo có âm thanh
+        let response;
+        let lastError;
+        const maxRetries = 3;
+        const timeouts = [25000, 20000, 15000]; // Giảm dần timeout mỗi lần retry
+        
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                console.log(`🔄 TTS attempt ${attempt + 1}/${maxRetries} với timeout ${timeouts[attempt]}ms...`);
+                response = await makeRequest(timeouts[attempt]);
+                if (response && response.status === 200) {
+                    if (attempt > 0) {
+                        console.log(`✅ TTS thành công sau ${attempt + 1} lần thử!`);
+                    }
+                    break; // Thành công, thoát vòng lặp
+                }
+            } catch (error) {
+                lastError = error;
+                const isTimeoutOrNetwork = error.code === 'ECONNABORTED' || 
+                                         error.message.includes('timeout') || 
+                                         (!error.response && error.request);
+                
+                // Nếu là lỗi HTTP (403, 500, etc.) - không retry, throw ngay
+                if (error.response && error.response.status) {
+                    throw error;
+                }
+                
+                // Nếu là timeout/network và chưa hết số lần thử
+                if (isTimeoutOrNetwork && attempt < maxRetries - 1) {
+                    console.warn(`⚠️ TTS attempt ${attempt + 1} thất bại (${error.message}), thử lại...`);
+                    // Đợi 1s trước khi retry
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    continue;
+                } else if (attempt === maxRetries - 1) {
+                    // Đã hết số lần thử
+                    console.error(`❌ TTS thất bại sau ${maxRetries} lần thử:`, error.message);
+                    throw error;
+                }
+            }
+        }
+        
+        // Nếu không có response sau tất cả các lần thử
+        if (!response) {
+            throw lastError || new Error('TTS không trả về response sau nhiều lần thử');
+        }
         
         // Kiểm tra response status
         if (response.status === 200 && response.data) {
@@ -2485,6 +2549,13 @@ async function createViettelVoice(textToSpeak, character) {
             }
         }
     } catch (error) {
+        // Xử lý timeout riêng
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+            console.error("⏱️ TTS timeout: API không phản hồi kịp thời gian");
+            console.error("   💡 Đã thử retry nhưng vẫn timeout, bỏ qua TTS để trả response nhanh");
+            return null;
+        }
+        
         console.error("❌ Lỗi tạo giọng nói Viettel:", error.message);
         if (error.response) {
             const status = error.response.status;
@@ -2519,17 +2590,17 @@ async function createViettelVoice(textToSpeak, character) {
                 }
             } else {
                 // Xử lý các lỗi khác
-                if (error.response.data && typeof error.response.data === 'object') {
+            if (error.response.data && typeof error.response.data === 'object') {
                     console.error("   Dữ liệu lỗi:", JSON.stringify(error.response.data));
-                } else if (error.response.data) {
-                    try {
-                        const errorText = Buffer.from(error.response.data).toString('utf-8');
+            } else if (error.response.data) {
+                try {
+                    const errorText = Buffer.from(error.response.data).toString('utf-8');
                         console.error("   Dữ liệu lỗi:", errorText);
-                    } catch (e) {
+                } catch (e) {
                         console.error("   Dữ liệu lỗi (binary):", error.response.data.length, "bytes");
-                    }
                 }
             }
+        }
         }
         // Trả về null để tiếp tục hoạt động bình thường (không có âm thanh)
         return null;
