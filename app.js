@@ -1687,7 +1687,44 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     
     // Chuẩn bị messages
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
-    messages.push({ role: 'user', content: message });
+    
+    // Kiểm tra tin nhắn assistant cuối cùng có media không để thêm context
+    let enhancedMessage = message;
+    if (memory.history.length > 0) {
+        const lastAssistantMsg = memory.history[memory.history.length - 1];
+        if (lastAssistantMsg.role === 'assistant' && lastAssistantMsg.mediaUrl) {
+            const mediaType = lastAssistantMsg.mediaType || 'image';
+            const mediaTopic = lastAssistantMsg.mediaTopic || 'normal';
+            const mediaSubject = lastAssistantMsg.mediaSubject || 'selfie';
+            
+            // Tạo mô tả về ảnh vừa gửi
+            let mediaDescription = '';
+            if (mediaType === 'image') {
+                if (mediaTopic === 'sensitive') {
+                    if (mediaSubject === 'bikini') mediaDescription = 'ảnh bikini gợi cảm';
+                    else if (mediaSubject === 'private') mediaDescription = 'ảnh riêng tư, gợi cảm';
+                    else if (mediaSubject === 'body') mediaDescription = 'ảnh body, 6 múi';
+                } else {
+                    if (mediaSubject === 'selfie') mediaDescription = 'ảnh selfie bình thường';
+                }
+            } else if (mediaType === 'video') {
+                if (mediaTopic === 'sensitive') {
+                    if (mediaSubject === 'shape') mediaDescription = 'video body gợi cảm';
+                    else if (mediaSubject === 'private') mediaDescription = 'video riêng tư, gợi cảm';
+                } else {
+                    if (mediaSubject === 'funny') mediaDescription = 'video hài hước';
+                    else if (mediaSubject === 'moment') mediaDescription = 'video moment bình thường';
+                }
+            }
+            
+            if (mediaDescription) {
+                enhancedMessage = `[Lưu ý: Tin nhắn trước đó tôi đã gửi một ${mediaDescription} cho bạn. Nếu bạn nhận xét về ảnh/video đó, hãy đối đáp phù hợp với nội dung ${mediaDescription} đó.]\n\n${message}`;
+                console.log(`📸 Thêm context về media vừa gửi: ${mediaDescription}`);
+            }
+        }
+    }
+    
+    messages.push({ role: 'user', content: enhancedMessage });
     
     // Model mặc định dùng grok-4-fast (có thể override bằng ENV: XAI_MODEL_DEFAULT)
     const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4-fast';
@@ -1749,7 +1786,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         rawReply = `${rawReply} <NEXT_MESSAGE> Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]`;
     }
     
-    let mediaUrl = null, mediaType = null; 
+    let mediaUrl = null, mediaType = null, mediaTopic = null, mediaSubject = null; 
     
     // Kiểm tra xem user có yêu cầu media không
     const userRequestedMedia = /(cho.*xem|gửi|send|show).*(ảnh|hình|image|video|vid)/i.test(message);
@@ -1875,6 +1912,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                 if (mediaResult && mediaResult.success) {
                     mediaUrl = mediaResult.mediaUrl;
                     mediaType = mediaResult.mediaType;
+                    mediaTopic = autoTopic; // Lưu topic để AI biết loại ảnh
+                    mediaSubject = autoSubject; // Lưu subject để AI biết nội dung ảnh
                     memory.user_profile = mediaResult.updatedMemory.user_profile;
                     if (relationshipStage === 'friend') {
                         if (autoType === 'image' && autoTopic === 'normal') {
@@ -1933,7 +1972,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                         console.log(`🚫 AI muốn gửi video trong stranger stage, từ chối`);
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         if (!rawReply || rawReply.length < 10) {
-                            rawReply = "Hmm... video thì em chưa muốn chia sẻ đâu. Em chỉ chia sẻ video với người thân thiết thôi. Trò chuyện với em nhiều hơn đi nhé! 😊";
+                            rawReply = "Thôi đi anh đừng có mà đòi hỏi quá mức!";
                         }
                     }
                     // Chặn sensitive media (ảnh/video riêng tư)
@@ -1941,7 +1980,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                         console.log(`🚫 AI muốn gửi sensitive media trong stranger stage, từ chối`);
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         if (!rawReply || rawReply.length < 10) {
-                            rawReply = "Em chỉ chia sẻ những thứ đó với người thân thiết thôi. Chúng ta mới quen nhau, em chưa muốn chia sẻ như vậy đâu. Trò chuyện với em nhiều hơn đi nhé! 😊";
+                            rawReply = "Chỉ có người yêu của em mới được xem những cái đó thôi! Anh thì chưa đủ tầm đâu.";
                         }
                     }
                     // Chỉ cho phép ảnh bình thường (normal)
@@ -1967,10 +2006,12 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                             if (mediaResult && mediaResult.success) {
                                 mediaUrl = mediaResult.mediaUrl;
                                 mediaType = mediaResult.mediaType;
+                                mediaTopic = topic; // Lưu topic để AI biết loại ảnh
+                                mediaSubject = subject; // Lưu subject để AI biết nội dung ảnh
                                 memory.user_profile = mediaResult.updatedMemory.user_profile;
                                 // Tăng số lần đã gửi ảnh trong stranger stage
                                 memory.user_profile.stranger_images_sent = (memory.user_profile.stranger_images_sent || 0) + 1;
-                                console.log(`✅ Đã gửi ảnh stranger thành công: ${mediaUrl} (${memory.user_profile.stranger_images_sent}/2)`);
+                                console.log(`✅ Đã gửi ảnh stranger thành công: ${mediaUrl} (${memory.user_profile.stranger_images_sent}/2, topic: ${topic}, subject: ${subject})`);
                             } else {
                                 console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
                             }
@@ -2001,6 +2042,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                     if (mediaResult && mediaResult.success) {
                         mediaUrl = mediaResult.mediaUrl;
                         mediaType = mediaResult.mediaType;
+                        mediaTopic = topic; // Lưu topic để AI biết loại ảnh
+                        mediaSubject = subject; // Lưu subject để AI biết nội dung ảnh
                         memory.user_profile = mediaResult.updatedMemory.user_profile;
                         if (relationshipStage === 'friend') {
                             if (type === 'image' && topic === 'normal') {
@@ -2010,7 +2053,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                                 memory.user_profile.friend_videos_sent = (memory.user_profile.friend_videos_sent || 0) + 1;
                             }
                         }
-                        console.log(`✅ Đã gửi media thành công: ${mediaUrl}`);
+                        console.log(`✅ Đã gửi media thành công: ${mediaUrl} (topic: ${topic}, subject: ${subject})`);
                     } else {
                         console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
                     }
@@ -2022,13 +2065,15 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             rawReply = rawReply.replace(mediaRegex, '').trim() || "Xin lỗi, có lỗi khi gửi media!";
         }
     } 
-    // Lưu history - lưu cả mediaUrl và mediaType để hiển thị lại khi reload
+    // Lưu history - lưu cả mediaUrl, mediaType, topic, subject để AI biết nội dung ảnh
     memory.history.push({ role: 'user', content: message }); 
     const assistantMessage = { role: 'assistant', content: rawReply };
     if (mediaUrl && mediaType) {
         assistantMessage.mediaUrl = mediaUrl;
         assistantMessage.mediaType = mediaType;
-        console.log(`💾 Lưu media vào history: ${mediaUrl} (${mediaType})`);
+        if (mediaTopic) assistantMessage.mediaTopic = mediaTopic; // Lưu topic (normal/sensitive)
+        if (mediaSubject) assistantMessage.mediaSubject = mediaSubject; // Lưu subject (selfie/bikini/private/etc)
+        console.log(`💾 Lưu media vào history: ${mediaUrl} (${mediaType}, topic: ${mediaTopic}, subject: ${mediaSubject})`);
     }
     memory.history.push(assistantMessage);
     userProfile.message_count = (userProfile.message_count || 0) + 1; 
