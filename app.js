@@ -1632,11 +1632,6 @@ function getStyleGuideExamples(character, relationshipStage, topic = null) {
     return examples;
 }
 
-// Hàm kiểm tra và tìm response từ kịch bản (ĐÃ VÔ HIỆU HÓA THEO YÊU CẦU)
-function findScriptedResponse(message, character, relationshipStage, conversationHistory = []) {
-    return null;
-}
-
 // Tính cách nhân vật theo từng giai đoạn mối quan hệ
 const CHARACTER_PERSONALITIES = {
     mera: {
@@ -1860,41 +1855,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const friendImagesSent = userProfile.friend_images_sent || 0;
     const friendVideosSent = userProfile.friend_videos_sent || 0;
     
-    // KIỂM TRA KỊCH BẢN TRƯỚC - Nếu có response từ kịch bản thì dùng, không thì dùng AI
-    // Truyền conversationHistory để xử lý context-aware và follow-up questions
-    const scriptedResponse = findScriptedResponse(message, character, relationshipStage, memory.history || []);
-    if (scriptedResponse) {
-        console.log(`📜 Sử dụng response từ kịch bản cho: "${message}"`);
-        // Lưu vào history
-        memory.history.push({ role: 'user', content: message });
-        memory.history.push({ role: 'assistant', content: scriptedResponse });
-        userProfile.message_count = (userProfile.message_count || 0) + 1;
-        
-        // Cập nhật relationship stage nếu cần
-        const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
-        if (userProfile.relationship_stage !== computedStage) {
-            userProfile.relationship_stage = computedStage;
-        }
-        
-        if (memory.history.length > 50) {
-            memory.history = memory.history.slice(memory.history.length - 50);
-        }
-        await memory.save();
-        
-        // Tạo audio và trả về
-        const audioDataUri = await createViettelVoice(scriptedResponse, character);
-        return res.json({
-            displayReply: scriptedResponse,
-            historyReply: scriptedResponse,
-            audio: audioDataUri,
-            mediaUrl: null,
-            mediaType: null,
-            updatedMemory: memory
-        });
-    }
-    
-    // Nếu không có kịch bản, dùng AI như bình thường
-    console.log(`🤖 Không tìm thấy kịch bản, sử dụng AI cho: "${message}"`);
+    // Sử dụng AI để tạo phản hồi
+    console.log(`🤖 Sử dụng AI cho: "${message}"`);
     const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser, message, memory.history || []); 
     
     // Chuẩn bị messages
@@ -1905,7 +1867,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4';
     console.log(`🚀 Đang sử dụng model: ${modelName}`);
     // Gọi API với timeout dài hơn và thử lại 1 lần khi lỗi timeout
-    const timeoutMs = Number(process.env.XAI_TIMEOUT_MS || 45000);
+    const timeoutMs = Number(process.env.XAI_TIMEOUT_MS || 60000); // Tăng từ 45s lên 60s
     async function callXaiOnce() {
         return await Promise.race([
             xai.chat.completions.create({ model: modelName, messages }),
@@ -2338,110 +2300,6 @@ function calculateTransitionProgress(messageCount, currentStage, nextStage) {
     return Math.min(1, Math.max(0, progress));
 }
 
-// Phân tích patterns từ conversation history để học cách trò chuyện
-function analyzeConversationPatterns(conversationHistory = []) {
-    if (!conversationHistory || conversationHistory.length < 4) {
-        return null; // Cần ít nhất 2 cặp user-assistant để học
-    }
-    
-    const patterns = {
-        user_style: {
-            message_length: [],
-            emoji_usage: 0,
-            avg_message_length: 0,
-            emoji_frequency: 0
-        },
-        preferred_responses: [],
-        conversation_flow: []
-    };
-    
-    let userMsgCount = 0;
-    let totalEmoji = 0;
-    
-    // Phân tích style của user
-    conversationHistory.forEach((msg, index) => {
-        if (msg.role === 'user') {
-            userMsgCount++;
-            const content = msg.content || '';
-            patterns.user_style.message_length.push(content.length);
-            
-            // Đếm emoji (các emoji phổ biến)
-            const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
-            const emojis = content.match(emojiRegex);
-            if (emojis) {
-                totalEmoji += emojis.length;
-            }
-        }
-        
-        // Phát hiện preferred responses: Nếu user reply ngay sau câu của Mera mà không phản đối
-        if (msg.role === 'assistant' && index > 0) {
-            const prevMsg = conversationHistory[index - 1];
-            if (prevMsg.role === 'user') {
-                // Lấy context xung quanh (3-5 tin nhắn trước)
-                const contextStart = Math.max(0, index - 4);
-                const context = conversationHistory.slice(contextStart, index + 1);
-                
-                patterns.preferred_responses.push({
-                    user_input: prevMsg.content.substring(0, 100), // Giới hạn độ dài
-                    mera_response: msg.content.substring(0, 150),
-                    context: context.map(m => `${m.role}: ${m.content.substring(0, 50)}`).join(' | ')
-                });
-            }
-        }
-    });
-    
-    // Tính toán statistics
-    if (patterns.user_style.message_length.length > 0) {
-        const sum = patterns.user_style.message_length.reduce((a, b) => a + b, 0);
-        patterns.user_style.avg_message_length = Math.round(sum / patterns.user_style.message_length.length);
-    }
-    
-    if (userMsgCount > 0) {
-        patterns.user_style.emoji_frequency = totalEmoji / userMsgCount;
-    }
-    
-    // Chỉ trả về nếu có đủ data
-    if (patterns.preferred_responses.length === 0 && patterns.user_style.avg_message_length === 0) {
-        return null;
-    }
-    
-    return patterns;
-}
-
-// Tạo learned rules từ patterns để inject vào prompt
-function generateLearnedRules(patterns) {
-    if (!patterns) return '';
-    
-    let rules = '\n\n**🧠 HỌC TỪ CUỘC TRÒ CHUYỆN (Implicit Learning):**\n';
-    
-    // Style adaptation
-    if (patterns.user_style.avg_message_length > 0) {
-        if (patterns.user_style.avg_message_length < 20) {
-            rules += '- User thích tin nhắn ngắn gọn. Hãy trả lời ngắn, 10-15 từ/câu.\n';
-        } else if (patterns.user_style.avg_message_length > 50) {
-            rules += '- User thích tin nhắn dài. Có thể trả lời dài hơn, 20-30 từ/câu.\n';
-        }
-    }
-    
-    if (patterns.user_style.emoji_frequency > 1.5) {
-        rules += '- User dùng emoji nhiều. Mera nên dùng emoji nhiều hơn để phù hợp.\n';
-    } else if (patterns.user_style.emoji_frequency < 0.3) {
-        rules += '- User ít dùng emoji. Mera nên dùng emoji vừa phải, không quá nhiều.\n';
-    }
-    
-    // Preferred responses (chỉ lấy 3-5 câu gần nhất)
-    if (patterns.preferred_responses.length > 0) {
-        rules += '\n**Các cách trả lời user đã thích (học từ lịch sử):**\n';
-        const recentResponses = patterns.preferred_responses.slice(-5); // Lấy 5 câu gần nhất
-        recentResponses.forEach((p, idx) => {
-            rules += `${idx + 1}. Khi user nói "${p.user_input}...", trả lời kiểu: "${p.mera_response}..."\n`;
-        });
-        rules += '→ Hãy áp dụng style tương tự khi gặp tình huống tương tự.\n';
-    }
-    
-    return rules;
-}
-
 function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage = null, conversationHistory = []) {
     const charConfig = characters[character];
     if (!charConfig) {
@@ -2792,18 +2650,6 @@ ${(relationshipStage === 'lover' || relationshipStage === 'mistress')
         } else if (enableStyleGuide && relationshipStage === 'stranger') {
             const styleGuide = getStyleGuideExamples(character, relationshipStage, detectedTopic);
             if (styleGuide) masterPrompt += styleGuide;
-        }
-    }
-    
-    // HỌC NGẦM TỪ LỊCH SỬ HỘI THOẠI (Implicit Learning)
-    if (conversationHistory && conversationHistory.length >= 4) {
-        const patterns = analyzeConversationPatterns(conversationHistory);
-        if (patterns) {
-            const learnedRules = generateLearnedRules(patterns);
-            if (learnedRules) {
-                masterPrompt += learnedRules;
-                console.log(`🧠 Đã học patterns từ ${conversationHistory.length} tin nhắn: avg_length=${patterns.user_style.avg_message_length}, emoji_freq=${patterns.user_style.emoji_frequency.toFixed(2)}, preferred_responses=${patterns.preferred_responses.length}`);
-            }
         }
     }
 
