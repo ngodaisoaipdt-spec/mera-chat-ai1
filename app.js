@@ -2054,15 +2054,15 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     await memory.save(); 
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
     
-    // Gọi TTS với timeout tổng 70s để đảm bảo có đủ thời gian cho 3 lần retry (25s + 20s + 15s + delays)
+    // Gọi TTS với timeout tổng 25s để đảm bảo có đủ thời gian cho 3 lần retry (5s + 8s + 10s + delays)
     let audioDataUri = null;
     try {
         const ttsPromise = createViettelVoice(rawReply.replace(/<NEXT_MESSAGE>/g, '... '), character);
         const timeoutPromise = new Promise((resolve) => {
             setTimeout(() => {
-                console.warn("⏱️ TTS timeout tổng 70s, trả response không có âm thanh để tránh chậm quá lâu");
+                console.warn("⏱️ TTS timeout tổng 25s, trả response không có âm thanh để tránh chậm");
                 resolve(null);
-            }, 70000); // 70 giây để đủ cho 3 lần retry
+            }, 25000); // 25 giây để đủ cho 3 lần retry (5s + 8s + 10s + delays)
         });
         audioDataUri = await Promise.race([ttsPromise, timeoutPromise]);
     } catch (error) {
@@ -2474,8 +2474,8 @@ async function createViettelVoice(textToSpeak, character) {
         
         console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, text length: ${trimmed.length}`);
         
-        // Hàm gọi API với timeout - tăng lên 25s để đảm bảo thành công
-        const makeRequest = (timeoutMs = 25000) => axios.post(ttsUrl, payload, {
+        // Hàm gọi API với timeout - dùng 5s cho nhanh, retry nếu cần
+        const makeRequest = (timeoutMs = 5000) => axios.post(ttsUrl, payload, {
             headers: {
                 'Content-Type': 'application/json',
                 'accept': '*/*'
@@ -2484,11 +2484,11 @@ async function createViettelVoice(textToSpeak, character) {
             timeout: timeoutMs
         });
         
-        // Retry logic: thử tối đa 3 lần để đảm bảo có âm thanh
+        // Retry logic: thử tối đa 3 lần với timeout ngắn để phản hồi nhanh
         let response;
         let lastError;
         const maxRetries = 3;
-        const timeouts = [25000, 20000, 15000]; // Giảm dần timeout mỗi lần retry
+        const timeouts = [5000, 8000, 10000]; // Tăng dần: 5s, 8s, 10s
         
         for (let attempt = 0; attempt < maxRetries; attempt++) {
             try {
