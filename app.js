@@ -1818,31 +1818,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     
     // Kiểm tra quy tắc cho giai đoạn "Người Lạ" khi yêu cầu media
     if (relationshipStage === 'stranger') {
-        // CHẶN VIDEO hoàn toàn trong stranger stage
-        if (userRequestedVideo) {
-            console.log(`🚫 User yêu cầu video trong stranger stage, từ chối`);
-            return res.json({
-                displayReply: "Hmm... video thì em chưa muốn chia sẻ đâu. Em chỉ chia sẻ video với người thân thiết thôi. Trò chuyện với em nhiều hơn đi nhé! 😊",
-                historyReply: "Từ chối video - stranger stage",
-                audio: null,
-                mediaUrl: null,
-                mediaType: null,
-                updatedMemory: memory
-            });
-        }
-        
-        // CHẶN SENSITIVE MEDIA (ảnh/video riêng tư) trong stranger stage
-        if (userRequestedSensitive) {
-            console.log(`🚫 User yêu cầu sensitive media trong stranger stage, từ chối`);
-            return res.json({
-                displayReply: "Em chỉ chia sẻ những thứ đó với người thân thiết thôi. Chúng ta mới quen nhau, em chưa muốn chia sẻ như vậy đâu. Trò chuyện với em nhiều hơn đi nhé! 😊",
-                historyReply: "Từ chối sensitive media - stranger stage",
-                audio: null,
-                mediaUrl: null,
-                mediaType: null,
-                updatedMemory: memory
-            });
-        }
+        // Lưu ý: Không hardcode response ở đây - để AI tự xử lý câu trả lời
+        // Chỉ chặn gửi media sensitive ở code level (xem phần sau)
         
         // Xử lý yêu cầu ảnh bình thường
         if (userRequestedImage) {
@@ -1967,38 +1944,32 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             } else {
                 // CHẶN VIDEO và SENSITIVE MEDIA trong stranger stage
                 if (relationshipStage === 'stranger') {
-                    // Chặn video hoàn toàn
+                    // Chặn video hoàn toàn - chỉ xóa [SEND_MEDIA], để AI tự xử lý câu trả lời
                     if (type === 'video') {
-                        console.log(`🚫 AI muốn gửi video trong stranger stage, từ chối`);
+                        console.log(`🚫 AI muốn gửi video trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
                         rawReply = rawReply.replace(mediaRegex, '').trim();
-                        if (!rawReply || rawReply.length < 10) {
-                            rawReply = "Thôi đi anh đừng có mà đòi hỏi quá mức!";
-                        }
+                        // Không hardcode response - để AI tự suy nghĩ và trả lời
                     }
-                    // Chặn sensitive media (ảnh/video riêng tư)
+                    // Chặn sensitive media (ảnh/video riêng tư) - chỉ xóa [SEND_MEDIA], để AI tự xử lý câu trả lời
                     else if (topic === 'sensitive') {
-                        console.log(`🚫 AI muốn gửi sensitive media trong stranger stage, từ chối`);
+                        console.log(`🚫 AI muốn gửi sensitive media trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
                         rawReply = rawReply.replace(mediaRegex, '').trim();
-                        if (!rawReply || rawReply.length < 10) {
-                            rawReply = "Chỉ có người yêu của em mới được xem những cái đó thôi! Anh thì chưa đủ tầm đâu.";
-                        }
+                        // Không hardcode response - để AI tự suy nghĩ và trả lời
                     }
                     // Chỉ cho phép ảnh bình thường (normal)
                     else if (type === 'image' && topic === 'normal') {
                         const currentRequestCount = userProfile.stranger_image_requests || 0;
                         
-                        // Lần đầu hỏi → không cho gửi (xóa [SEND_MEDIA])
+                        // Lần đầu hỏi → không cho gửi (xóa [SEND_MEDIA]), để AI tự xử lý câu trả lời
                         if (currentRequestCount === 1) {
-                            console.log(`🚫 Lần đầu hỏi xem ảnh, không cho gửi - xóa [SEND_MEDIA]`);
+                            console.log(`🚫 Lần đầu hỏi xem ảnh, không cho gửi - xóa [SEND_MEDIA], để AI tự xử lý`);
                             rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Nếu AI không có text từ chối, thêm text mặc định
-                            if (!rawReply || rawReply.length < 10) {
-                                rawReply = "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤";
-                            }
+                            // Không hardcode response - để AI tự suy nghĩ và trả lời
                         } else if (strangerImagesSent >= 2) {
-                            // Đã gửi đủ 2 ảnh → từ chối
-                            console.log(`🚫 AI muốn gửi ảnh nhưng đã gửi đủ 2 ảnh, từ chối`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim() || "Em đã gửi đủ ảnh cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi! 😒";
+                            // Đã gửi đủ 2 ảnh → chặn gửi, để AI tự xử lý câu trả lời
+                            console.log(`🚫 AI muốn gửi ảnh nhưng đã gửi đủ 2 ảnh, chặn gửi - để AI tự xử lý`);
+                            rawReply = rawReply.replace(mediaRegex, '').trim();
+                            // Không hardcode response - để AI tự suy nghĩ và trả lời
                         } else if (currentRequestCount >= 2) {
                             // Lần thứ 2 trở đi → có thể gửi (nếu AI thấy khẩn thiết)
                             console.log(`✅ Lần thứ ${currentRequestCount} hỏi xem ảnh, cho phép gửi (đã gửi ${strangerImagesSent}/2)`);
@@ -2015,16 +1986,19 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                             } else {
                                 console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
                             }
-                            rawReply = rawReply.replace(mediaRegex, '').trim() || "Đã gửi ảnh cho bạn!";
+                            rawReply = rawReply.replace(mediaRegex, '').trim();
+                            // Không hardcode response - để AI tự suy nghĩ và trả lời
                         } else {
-                            // Trường hợp khác → không cho gửi
-                            console.log(`🚫 Không đủ điều kiện gửi ảnh, từ chối`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim() || "Em không dễ dãi đâu nhé! 😤";
+                            // Trường hợp khác → không cho gửi, để AI tự xử lý
+                            console.log(`🚫 Không đủ điều kiện gửi ảnh, chặn gửi - để AI tự xử lý`);
+                            rawReply = rawReply.replace(mediaRegex, '').trim();
+                            // Không hardcode response - để AI tự suy nghĩ và trả lời
                         }
                     } else {
-                        // Các trường hợp khác trong stranger stage → không cho gửi
-                        console.log(`🚫 Không cho phép loại media này trong stranger stage`);
-                        rawReply = rawReply.replace(mediaRegex, '').trim() || "Em chưa muốn chia sẻ như vậy đâu. Trò chuyện với em nhiều hơn đi nhé! 😊";
+                        // Các trường hợp khác trong stranger stage → không cho gửi, để AI tự xử lý
+                        console.log(`🚫 Không cho phép loại media này trong stranger stage, chặn gửi - để AI tự xử lý`);
+                        rawReply = rawReply.replace(mediaRegex, '').trim();
+                        // Không hardcode response - để AI tự suy nghĩ và trả lời
                     }
                 } else {
                     // Các trường hợp khác, gửi bình thường
