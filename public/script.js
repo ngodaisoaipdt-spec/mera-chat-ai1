@@ -10,8 +10,7 @@ let activeAudios = {}; // Lưu trữ audio instances theo message ID
 const RELATIONSHIP_RULES_CONFIG = [
     { stage: 'stranger', emoji: '💔', label: 'Người Lạ', minMessages: 0, requiresPremium: false },
     { stage: 'friend', emoji: '🧡', label: 'Bạn Thân', minMessages: 30, requiresPremium: false },
-    { stage: 'lover', emoji: '💖', label: 'Người Yêu', minMessages: 60, requiresPremium: true },
-    { stage: 'mistress', emoji: '💘', label: 'Tình Nhân', minMessages: 100, requiresPremium: true }
+    { stage: 'lover', emoji: '💖', label: 'Người Yêu', minMessages: 60, requiresPremium: true }
 ];
 
 const ICON_PATHS = {
