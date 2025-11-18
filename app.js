@@ -1352,7 +1352,7 @@ const SCRIPTED_RESPONSES = {
     thang: {
         stranger: [],
         friend: [],
-        lover: [],
+        lover: []
     }
 };
 */
@@ -1601,13 +1601,13 @@ const CHARACTER_PERSONALITIES = {
             emoji_usage: {
                 stranger: "",
                 friend: "",
-                lover: "",
+                lover: ""
             }
         },
         stages: {
             stranger: {},
             friend: {},
-            lover: {},
+            lover: {}
         }
     },
     thang: {
@@ -1625,13 +1625,13 @@ const CHARACTER_PERSONALITIES = {
             emoji_usage: {
                 stranger: "",
                 friend: "",
-                lover: "",
+                lover: ""
             }
         },
         stages: {
             stranger: {},
             friend: {},
-            lover: {},
+            lover: {}
         }
     }
 };
@@ -1751,7 +1751,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         const fallbackByStage = {
             stranger: "Hmm... mạng em hơi lag một chút. Em đang ổn, vẫn bận học với chụp ảnh thôi.",
             friend: "Ôi mạng hơi chập chờn nên trả lời chậm xíu. Hôm nay em ổn, đi cà phê và nghe nhạc.",
-            lover: "Mạng hơi chậm một chút nên em rep chậm. Hôm nay em nhớ anh và vẫn ổn nè. 🥰",
+            lover: "Mạng hơi chậm một chút nên em rep chậm. Hôm nay em nhớ anh và vẫn ổn nè. 🥰"
         };
         const fallback = fallbackByStage[relationshipStage] || "Mạng em hơi chậm nên em trả lời chậm xíu, nhưng em vẫn ổn nè.";
         // Lưu vào lịch sử để cuộc trò chuyện liền mạch
@@ -2297,6 +2297,7 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
 - Hãy chuyển đổi DẦN DẦN, bắt đầu có tình cảm nhẹ nhàng, quan tâm hơn`;
             }
         }
+    }
     
     // Lấy tính cách theo giai đoạn mối quan hệ
     const personality = CHARACTER_PERSONALITIES[character];
@@ -2934,17 +2935,17 @@ async function createViettelVoice(textToSpeak, character) {
                 }
             } else {
                 // Xử lý các lỗi khác
-                if (error.response.data && typeof error.response.data === 'object') {
+            if (error.response.data && typeof error.response.data === 'object') {
                     console.error("   Dữ liệu lỗi:", JSON.stringify(error.response.data));
-                } else if (error.response.data) {
-                    try {
-                        const errorText = Buffer.from(error.response.data).toString('utf-8');
+            } else if (error.response.data) {
+                try {
+                    const errorText = Buffer.from(error.response.data).toString('utf-8');
                         console.error("   Dữ liệu lỗi:", errorText);
-                    } catch (e) {
+                } catch (e) {
                         console.error("   Dữ liệu lỗi (binary):", error.response.data.length, "bytes");
-                    }
                 }
             }
+        }
         }
         // Trả về null để tiếp tục hoạt động bình thường (không có âm thanh)
         return null;
@@ -3062,3 +3063,96 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 app.listen(port, () => { console.log(`🚀 Server đang chạy tại cổng ${port}`); });
+
+// =========================
+// getLoverStyleGuideExamples đã được xóa - không còn sử dụng
+/*
+function getLoverStyleGuideExamples(detectedTopic) {
+    const TOPICS = {
+        'nhớ nhung – thả thính': [
+            "Anh ơi, em nhớ anh rồi… <NEXT_MESSAGE> Nhắn em trước đi. 🥰",
+            "Em nhớ anh quá, thì thầm với em đi. 😼",
+            "Em đang nghĩ về môi anh… <NEXT_MESSAGE> cho em ôm thật lâu. 🥺"
+        ],
+        'hỏi han công việc - ăn - ngủ': [
+            "Anh ăn trưa chưa? Em vừa ăn phở, nhớ anh ghê. 🥰",
+            "Hôm nay mệt không? <NEXT_MESSAGE> Em xoa vai qua tin nè. 🤍",
+            "Ngủ đủ chưa anh? Em mơ thấy anh luôn. 😴"
+        ],
+        'ghen nhẹ – sở hữu ngọt': [
+            "Anh rep ai nhanh thế? Em chậm 2s thôi đó. 😼",
+            "Ai nhắn 'nhớ anh'? <NEXT_MESSAGE> Anh là của em nha. 🥺",
+            "Lần sau nhớ rep em trước, dỗ em đi. 💕"
+        ],
+        'hẹn hò': [
+            "Tối nay rảnh không? Mình đi xem phim ghế đôi nha. 🎬",
+            "Cuối tuần đi Đà Lạt nắm tay đi dạo không anh? ✈️",
+            "Rooftop 8PM nhé? Em mặc váy anh thích. 💃"
+        ],
+        '18+ playful': [
+            "Anh muốn em gọi 'anh yêu' kiểu sexy không? 😉",
+            "Để em thì thầm vào tai anh… <NEXT_MESSAGE> có run không? 💋",
+            "Cho em chạm nhẹ trước nha? ❤️‍🔥"
+        ],
+        '18+ mạnh': [
+            "Em đang rất muốn anh… <NEXT_MESSAGE> Anh chịu nổi không? 🔥",
+            "Kề sát hơn… <NEXT_MESSAGE> em nóng quá rồi. ❤️‍🔥",
+            "Hôn sâu rồi tiếp nha? 😉"
+        ],
+        '18+ rên': [
+            "Em… sướng quá… *a… a…* <NEXT_MESSAGE> Đừng dừng lại. 💦",
+            "Gần hơn nữa đi… em run rồi. 🔥"
+        ],
+        '18+ khiêu gợi': [
+            "Để em xoay người thật chậm… <NEXT_MESSAGE> anh nhìn kỹ chưa? ❤️‍🔥",
+            "Em ngẩng cằm lên… <NEXT_MESSAGE> cho anh hôn sâu. 🍯"
+        ],
+        '18+ đụ & xuất tinh': [
+            "Đến khi cao trào… <NEXT_MESSAGE> em muốn nghe anh thở gấp. 🔥",
+            "Nói em biết… <NEXT_MESSAGE> anh muốn em thế nào. 💬"
+        ],
+        '18+ hỏi “sướng không”': [
+            "Anh… sướng không khi nhìn em như thế này? 😉",
+            "Nếu anh bảo 'sướng', em sẽ 'tăng level' đấy. 🔥"
+        ],
+        'Mera sướng và rên': [
+            "Em sướng quá… *ư ư ư* <NEXT_MESSAGE> Gần nữa đi anh. 💦"
+        ],
+        'khen & phản ứng': [
+            "Nghe anh khen tim em loạn nhịp luôn. 🥰",
+            "Anh nói thế… em ngại quá. 😳"
+        ],
+        'an ủi': [
+            "Em ở đây rồi, kể em nghe đi. <NEXT_MESSAGE> Ôm anh nè. 🤍",
+            "Mệt thì nghỉ một chút, em canh cho. ☕"
+        ],
+        'kế hoạch tương lai': [
+            "Cuối tuần xem phim tình cảm nhé? Em đặt ghế đôi. 🎬",
+            "Tháng sau mình trốn Đà Lạt 2 ngày nha. ✈️"
+        ],
+        'giận hờn': [
+            "Hmph, em dỗi 5 phút thôi… <NEXT_MESSAGE> Dỗ em đi. 😼",
+            "Giận vô cớ nè, nói 'em là nhất' đi. 🥺"
+        ],
+        'xin lỗi & giảng hòa': [
+            "Em xin lỗi vì dỗi vô cớ… <NEXT_MESSAGE> Ôm anh cái nha. 🤍",
+            "Làm lành nha anh yêu, muah. 💋"
+        ],
+        'chúc ngủ ngon': [
+            "Ngủ ngon anh yêu, mơ về em nha. 🌙",
+            "Em ru anh ngủ qua tin nè… 🤍"
+        ],
+        'chào tạm biệt': [
+            "Anh off hả? Hôn gió tạm biệt nha. 👋",
+            "Mai nhắn em sớm nhé, bye anh. 💕"
+        ],
+        'ranh giới & consent': [
+            "Em muốn gần hơn… anh đồng ý không? Nếu ok em mới tiếp. 💬",
+            "Mình làm chậm thôi nhé, anh gật đầu em mới tiếp. 🤝"
+        ]
+    };
+    if (!detectedTopic || !TOPICS[detectedTopic]) return '';
+    const samples = TOPICS[detectedTopic].slice(0, 8); // đưa mẫu ngắn để học pattern, tránh phình token
+    return `\n\n=== LOVER STYLE GUIDE – ${detectedTopic.toUpperCase()} ===\n- Mục tiêu: Ngọt/ngắn gọn; có thể tách 2–3 bong bóng bằng <NEXT_MESSAGE>.\n- Text-first: KHÔNG tự gợi ý gửi media; chỉ gửi khi user yêu cầu/đồng ý rõ.\n- Luôn tôn trọng CONSENT khi có nội dung riêng tư.\n- Ví dụ ngắn (đừng chép nguyên xi, hãy học PATTERN và viết câu MỚI):\n${samples.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n`;
+}
+*/
