@@ -2072,9 +2072,14 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     } 
     await memory.save(); 
     
-    // Reload memory từ DB để đảm bảo có dữ liệu mới nhất (bao gồm relationship_stage đã cập nhật)
-    await memory.populate('userId');
-    const freshMemory = await Memory.findById(memory._id);
+    // Đảm bảo relationship_stage đã được cập nhật trước khi trả về
+    // Tính toán lại để chắc chắn
+    const finalComputedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
+    if (userProfile.relationship_stage !== finalComputedStage) {
+        userProfile.relationship_stage = finalComputedStage;
+        await memory.save();
+        console.log(`🔄 Đã cập nhật relationship_stage thành: ${finalComputedStage} (message_count: ${userProfile.message_count})`);
+    }
     
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
     
@@ -2082,11 +2087,15 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     // TTS sẽ được tạo on-demand qua endpoint /api/tts
     const audioDataUri = null;
     
-    // Trả về relationship_stage đã cập nhật để frontend tự động cập nhật UI
-    const updatedRelationshipStage = freshMemory.user_profile.relationship_stage || userProfile.relationship_stage || 'stranger';
+    // Trả về relationship_stage đã cập nhật - lấy trực tiếp từ userProfile sau khi save
+    const updatedRelationshipStage = userProfile.relationship_stage || 'stranger';
+    
+    // Convert memory thành plain object để đảm bảo serialize đúng
+    const memoryToSend = memory.toObject ? memory.toObject() : JSON.parse(JSON.stringify(memory));
     
     console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=on-demand`);
-    console.log(`📊 Relationship stage: ${updatedRelationshipStage} (message_count: ${freshMemory.user_profile.message_count || userProfile.message_count})`);
+    console.log(`📊 Relationship stage: ${updatedRelationshipStage} (message_count: ${userProfile.message_count})`);
+    console.log(`📊 Memory user_profile.relationship_stage: ${memoryToSend.user_profile?.relationship_stage || 'undefined'}`);
     
     res.json({ 
         displayReply, 
@@ -2094,7 +2103,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         audio: audioDataUri, 
         mediaUrl, 
         mediaType, 
-        updatedMemory: freshMemory || memory, 
+        updatedMemory: memoryToSend, 
         relationship_stage: updatedRelationshipStage 
     }); 
 } catch (error) { 
