@@ -41,18 +41,25 @@ const RELATIONSHIP_RULES = [
 
 function determineRelationshipStage(messageCount = 0, isPremiumUser = false, disputeCount = 0) {
     let currentStage = 'stranger';
+    
+    // Duyệt qua các rule theo thứ tự từ thấp đến cao
     for (const rule of RELATIONSHIP_RULES) {
         // Nếu là friend stage và có tranh cãi, tăng threshold lên 40
         let threshold = rule.minMessages;
         if (rule.stage === 'friend' && disputeCount > 0) {
             threshold = 40;
         }
+        
+        // Kiểm tra điều kiện: messageCount >= threshold và (không cần premium hoặc user là premium)
         if (messageCount >= threshold && (!rule.requiresPremium || isPremiumUser)) {
             currentStage = rule.stage;
         } else {
+            // Nếu không đạt điều kiện, dừng lại (vì các rule sau cần nhiều message hơn)
             break;
         }
     }
+    
+    console.log(`📊 determineRelationshipStage: messageCount=${messageCount}, isPremium=${isPremiumUser}, disputeCount=${disputeCount} → stage=${currentStage}`);
     return currentStage;
 }
 
@@ -2061,20 +2068,24 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     }
     memory.history.push(assistantMessage);
     // Tăng message_count
-    userProfile.message_count = (userProfile.message_count || 0) + 1; 
+    const oldMessageCount = userProfile.message_count || 0;
+    userProfile.message_count = oldMessageCount + 1; 
+    
+    console.log(`📊 Message count: ${oldMessageCount} → ${userProfile.message_count}`);
     
     // Tính toán relationship_stage mới dựa trên message_count
-    const newStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
     const oldStage = userProfile.relationship_stage || 'stranger';
+    const newStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
     
     // Nếu stage thay đổi, cập nhật và reset các counter liên quan
     if (oldStage !== newStage) {
         console.log(`🔄 Relationship stage thay đổi: ${oldStage} → ${newStage} (message_count: ${userProfile.message_count})`);
         
-        // Reset counter khi chuyển từ stranger
-        if (oldStage === 'stranger' && newStage !== 'stranger') {
+        // Reset counter khi chuyển từ stranger sang friend
+        if (oldStage === 'stranger' && newStage === 'friend') {
             userProfile.stranger_images_sent = 0;
             userProfile.stranger_image_requests = 0;
+            console.log(`✅ Chuyển từ Người Lạ sang Bạn Thân! Reset stranger counters.`);
         }
         // Reset counter khi rời friend
         if (oldStage === 'friend' && newStage !== 'friend') {
@@ -2084,6 +2095,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         
         // Cập nhật relationship_stage
         userProfile.relationship_stage = newStage;
+    } else {
+        console.log(`ℹ️ Relationship stage không thay đổi: ${oldStage} (message_count: ${userProfile.message_count})`);
     }
     
     // Giới hạn history

@@ -759,11 +759,20 @@ async function sendMessageToServer(messageText, loadingId) {
         const data = await response.json();
         
         // Cập nhật relationship_stage từ response
+        if (!currentMemory) currentMemory = { user_profile: {} };
+        if (!currentMemory.user_profile) currentMemory.user_profile = {};
+        
+        const oldStage = currentMemory.user_profile.relationship_stage || 'stranger';
+        const oldMessageCount = currentMemory.user_profile.message_count || 0;
+        
+        // Cập nhật message_count nếu có
+        if (data.message_count !== undefined) {
+            currentMemory.user_profile.message_count = data.message_count;
+            console.log(`📊 Message count: ${oldMessageCount} → ${data.message_count}`);
+        }
+        
+        // Cập nhật relationship_stage nếu có
         if (data.relationship_stage) {
-            if (!currentMemory) currentMemory = { user_profile: {} };
-            if (!currentMemory.user_profile) currentMemory.user_profile = {};
-            
-            const oldStage = currentMemory.user_profile.relationship_stage || 'stranger';
             const newStage = data.relationship_stage;
             
             if (oldStage !== newStage) {
@@ -775,12 +784,11 @@ async function sendMessageToServer(messageText, loadingId) {
                 if (typeof window.renderRelationshipMenu === 'function') {
                     window.renderRelationshipMenu();
                 }
+            } else {
+                console.log(`ℹ️ Relationship stage không thay đổi: ${oldStage}`);
             }
-            
-            // Cập nhật message_count nếu có
-            if (data.message_count !== undefined) {
-                currentMemory.user_profile.message_count = data.message_count;
-            }
+        } else {
+            console.warn(`⚠️ Không nhận được relationship_stage trong response!`);
         }
         
         removeMessage(loadingId);
