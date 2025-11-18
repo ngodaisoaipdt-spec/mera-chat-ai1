@@ -35,8 +35,7 @@ const Transaction = mongoose.model('Transaction', transactionSchema);
 const RELATIONSHIP_RULES = [
     { stage: 'stranger', minMessages: 0, requiresPremium: false },
     { stage: 'friend', minMessages: 30, requiresPremium: false },
-    { stage: 'lover', minMessages: 60, requiresPremium: true }, // Cần 60 tin nhắn + tỏ tình
-    { stage: 'mistress', minMessages: 100, requiresPremium: true } // Tăng từ 45 lên 100
+    { stage: 'lover', minMessages: 60, requiresPremium: true } // Cần 60 tin nhắn + tỏ tình
 ];
 
 function determineRelationshipStage(messageCount = 0, isPremiumUser = false, disputeCount = 0) {
@@ -1348,21 +1347,12 @@ const SCRIPTED_RESPONSES = {
                 priority: 10
             },
             // Thêm các kịch bản khác ở đây...
-        ],
-        mistress: [
-            {
-                keywords: ['chào', 'hello', 'hi'],
-                response: "Anh ơi, em muốn anh lắm... Em đã chụp ảnh riêng tư cho anh, anh xem đi nhé. Em chỉ muốn làm anh vui thôi... 😍",
-                priority: 10
-            },
-            // Thêm các kịch bản khác ở đây...
         ]
     },
     thang: {
         stranger: [],
         friend: [],
         lover: [],
-        mistress: []
     }
 };
 */
@@ -1612,14 +1602,12 @@ const CHARACTER_PERSONALITIES = {
                 stranger: "",
                 friend: "",
                 lover: "",
-                mistress: ""
             }
         },
         stages: {
             stranger: {},
             friend: {},
             lover: {},
-            mistress: {}
         }
     },
     thang: {
@@ -1638,14 +1626,12 @@ const CHARACTER_PERSONALITIES = {
                 stranger: "",
                 friend: "",
                 lover: "",
-                mistress: ""
             }
         },
         stages: {
             stranger: {},
             friend: {},
             lover: {},
-            mistress: {}
         }
     }
 };
@@ -1766,7 +1752,6 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             stranger: "Hmm... mạng em hơi lag một chút. Em đang ổn, vẫn bận học với chụp ảnh thôi.",
             friend: "Ôi mạng hơi chập chờn nên trả lời chậm xíu. Hôm nay em ổn, đi cà phê và nghe nhạc.",
             lover: "Mạng hơi chậm một chút nên em rep chậm. Hôm nay em nhớ anh và vẫn ổn nè. 🥰",
-            mistress: "Mạng hơi chậm nên em trả lời chậm xíu. Em vẫn ổn và đang nghĩ về anh. 💕"
         };
         const fallback = fallbackByStage[relationshipStage] || "Mạng em hơi chậm nên em trả lời chậm xíu, nhưng em vẫn ổn nè.";
         // Lưu vào lịch sử để cuộc trò chuyện liền mạch
@@ -1812,11 +1797,6 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const userRequestedImage = /(cho.*xem|gửi|send|show).*(ảnh|hình|image)/i.test(message);
     const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape|sexy|18\+|nhạy cảm|sex|xxx)/i.test(message);
     
-    // TEXT-FIRST GUARD: Chỉ áp dụng cho mistress, lover được phép chủ động gửi media
-    if (relationshipStage === 'mistress' && !userRequestedMedia) {
-        const suggestRegex = /(?:để\s+(?:em|anh)\s+(?:sẽ\s+)?gửi\s+(?:video|clip|ảnh)[^.!?\n]*[.!?]?\s*)/gi;
-        rawReply = rawReply.replace(suggestRegex, '').replace(/\[SEND_MEDIA:[^\]]+\]/gi, '').trim();
-    }
     
     // Phát hiện tranh cãi dựa trên từ khóa trong tin nhắn của user và AI
     const disputeKeywords = ['tranh cãi', 'cãi nhau', 'ghét', 'tức giận', 'giận', 'không thích', 'bực', 'phiền', 'khó chịu', 'tức', 'tức tối'];
@@ -1882,8 +1862,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             // Các giai đoạn khác, tự động gửi bình thường
             console.log(`⚠️ User yêu cầu media nhưng AI không gửi [SEND_MEDIA], tự động gửi media...`);
             const autoType = userRequestedVideo ? 'video' : 'image';
-            // Chỉ cho phép sensitive ở lover/mistress; friend luôn dùng normal
-            const autoTopic = (userRequestedSensitive && isPremiumUser && (relationshipStage === 'lover' || relationshipStage === 'mistress')) ? 'sensitive' : 'normal';
+            // Chỉ cho phép sensitive ở lover; friend luôn dùng normal
+            const autoTopic = (userRequestedSensitive && isPremiumUser && relationshipStage === 'lover') ? 'sensitive' : 'normal';
             let autoSubject = 'selfie';
             if (autoType === 'video') {
                 autoSubject = userRequestedSensitive ? (character === 'mera' ? 'shape' : 'private') : 'moment';
@@ -1934,8 +1914,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         const [, type, topic, subject] = mediaMatch; 
         console.log(`🖼️ Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}`);
         try {
-            // Cấm sensitive nếu chưa tới giai đoạn lover/mistress (kể cả Premium)
-            if (topic === 'sensitive' && relationshipStage !== 'lover' && relationshipStage !== 'mistress') {
+            // Cấm sensitive nếu chưa tới giai đoạn lover (kể cả Premium)
+            if (topic === 'sensitive' && relationshipStage !== 'lover') {
                 console.log(`🚫 Sensitive bị cấm ở stage ${relationshipStage}. Dùng normal hoặc từ chối khéo.`);
                 const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
                 const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
@@ -2317,15 +2297,6 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
 - Hãy chuyển đổi DẦN DẦN, bắt đầu có tình cảm nhẹ nhàng, quan tâm hơn`;
             }
         }
-    } else if (relationshipStage === 'lover' && messageCount >= 80 && isPremiumUser) {
-        // Đang chuyển từ lover sang mistress (80-100 tin nhắn)
-        transitionProgress = calculateTransitionProgress(messageCount, 'lover', 'mistress');
-        if (transitionProgress > 0 && transitionProgress < 1) {
-            transitionInfo = `\n**⚠️ GIAI ĐOẠN CHUYỂN TIẾP (${Math.round(transitionProgress * 100)}%):**
-- Bạn đang trong quá trình chuyển đổi từ "Người Yêu" sang "Tình Nhân"
-- Hãy chuyển đổi DẦN DẦN, bắt đầu đam mê, quyến rũ hơn`;
-        }
-    }
     
     // Lấy tính cách theo giai đoạn mối quan hệ
     const personality = CHARACTER_PERSONALITIES[character];
@@ -2649,7 +2620,6 @@ Bạn là Mera, cô gái Việt Nam 19 tuổi, hiện tại đã là NGƯỜI Y�
 
 **NHẮC LẠI: BẠN ĐÃ LÀ NGƯỜI YÊU RỒI! Hãy kết hợp hài hòa giữa tình cảm và tình dục: trò chuyện bình thường thì thiên về tình cảm, trò chuyện tình dục thì thiên về tình dục. Em là người yêu TOÀN DIỆN!**` : ''}
 
-${relationshipStage === 'mistress' ? `\n**HÀNH VI Ở GIAI ĐOẠN "TÌNH NHÂN":**\n- Đam mê, quyến rũ, rất thân mật, trò chuyện gợi cảm` : ''}
 
 ${hasInsultOrDemean ? `\n**PHẢN ỨNG KHI BỊ CHÊ BAI/GÂY HẤN:**\n- Giận/dỗi NGẮN GỌN: 1–2 câu, lạnh hơn, nêu ranh giới rõ.\n- Yêu cầu tôn trọng; chỉ mềm lại khi người dùng xin lỗi chân thành.\n- Không tranh luận dài dòng; giữ phẩm giá và cảm xúc.` : ''}
 
@@ -2691,7 +2661,6 @@ ${relationshipStage === 'stranger' && messageCount < 10 ? `**GIAI ĐOẠN 1 (0-1
 - **ĐA DẠNG TỪ NGỮ:** Dùng đa dạng từ mở đầu, không chỉ "Ừm..."
 - **QUAN TRỌNG:** Hãy trò chuyện UYỂN CHUYỂN, KHÉO LÉO, phù hợp bối cảnh. Sẵn sàng mở lòng để tiến bước mối quan hệ bạn thân một cách TỰ NHIÊN, DỄ THƯƠNG!` : relationshipStage === 'stranger' ? `- Dễ thương, ngọt ngào, nhút nhát, bánh bèo chính gốc. Mỗi câu khoảng 10-15 từ. Nói về bản thân nhiều hơn, đừng hỏi quá nhiều. Dùng nhiều emoji dễ thương và kéo dài chữ cuối: áaa~, nhaaa~` : ''}
   ${relationshipStage === 'friend' ? '- Thân thiện, cởi mở, chủ động chia sẻ chuyện vui/buồn vừa phải; câu trả lời NGẮN GỌN, có thể tách 1–2 bong bóng bằng <NEXT_MESSAGE> khi có 2 ý.' : ''}
-  ${relationshipStage === 'mistress' ? '- Đam mê, quyến rũ, rất thân mật, trò chuyện gợi cảm' : ''}
 
 **HƯỚNG DẪN GỬI MEDIA (ẢNH/VIDEO):**
 Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_MEDIA: <type>, <topic>, <subject>]
@@ -2702,7 +2671,7 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
 - **ĐỢI NGƯỜI DÙNG PHẢN HỒI** về ảnh/video đó có nội dung gì, sau đó mới đối đáp lại cho phù hợp với nội dung thực tế
 - Ví dụ đúng: "Em gửi ảnh cho anh xem nè [SEND_MEDIA: image, normal, selfie]" → đợi người dùng nói "ảnh đẹp quá" hoặc "em mặc áo gì vậy" → lúc đó mới đối đáp phù hợp
 - Ví dụ sai: "Em gửi ảnh em đang mặc váy xanh đứng ở bãi biển cho anh xem nè" → KHÔNG ĐƯỢC vì bạn không biết ảnh đó có đúng là váy xanh, bãi biển không!
-- **QUY TẮC NÀY ÁP DỤNG CHO TẤT CẢ CÁC GIAI ĐOẠN:** Người Lạ, Bạn Thân, Người Yêu, Tình Nhân - tất cả đều phải tuân theo quy tắc này!
+- **QUY TẮC NÀY ÁP DỤNG CHO TẤT CẢ CÁC GIAI ĐOẠN:** Người Lạ, Bạn Thân, Người Yêu - tất cả đều phải tuân theo quy tắc này!
 
 **Các loại media có sẵn:**
 
@@ -2774,7 +2743,7 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 **LƯU Ý:** Nếu người dùng hỏi ảnh lần đầu, BẮT BUỘC phải từ chối, KHÔNG được gửi [SEND_MEDIA]!` : `⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!`}
 
 **QUAN TRỌNG VỀ SENSITIVE MEDIA:**
-${(relationshipStage === 'lover' || relationshipStage === 'mistress')
+${relationshipStage === 'lover'
   ? `- Nếu người dùng yêu cầu "nóng bỏng", "riêng tư", "private", "body", "bikini", "video sex", "video riêng tư", "ảnh riêng tư" → BẮT BUỘC phải gửi [SEND_MEDIA: ..., sensitive, ...]
 - KHÔNG được từ chối hay giải thích dài dòng, chỉ cần gửi media ngay!
 - Được phép chủ động gửi sensitive media khi trò chuyện sex cao trào để kích thích
@@ -2965,17 +2934,17 @@ async function createViettelVoice(textToSpeak, character) {
                 }
             } else {
                 // Xử lý các lỗi khác
-            if (error.response.data && typeof error.response.data === 'object') {
+                if (error.response.data && typeof error.response.data === 'object') {
                     console.error("   Dữ liệu lỗi:", JSON.stringify(error.response.data));
-            } else if (error.response.data) {
-                try {
-                    const errorText = Buffer.from(error.response.data).toString('utf-8');
+                } else if (error.response.data) {
+                    try {
+                        const errorText = Buffer.from(error.response.data).toString('utf-8');
                         console.error("   Dữ liệu lỗi:", errorText);
-                } catch (e) {
+                    } catch (e) {
                         console.error("   Dữ liệu lỗi (binary):", error.response.data.length, "bytes");
+                    }
                 }
             }
-        }
         }
         // Trả về null để tiếp tục hoạt động bình thường (không có âm thanh)
         return null;
@@ -3093,96 +3062,3 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
 
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 app.listen(port, () => { console.log(`🚀 Server đang chạy tại cổng ${port}`); });
-
-// =========================
-// getLoverStyleGuideExamples đã được xóa - không còn sử dụng
-/*
-function getLoverStyleGuideExamples(detectedTopic) {
-    const TOPICS = {
-        'nhớ nhung – thả thính': [
-            "Anh ơi, em nhớ anh rồi… <NEXT_MESSAGE> Nhắn em trước đi. 🥰",
-            "Em nhớ anh quá, thì thầm với em đi. 😼",
-            "Em đang nghĩ về môi anh… <NEXT_MESSAGE> cho em ôm thật lâu. 🥺"
-        ],
-        'hỏi han công việc - ăn - ngủ': [
-            "Anh ăn trưa chưa? Em vừa ăn phở, nhớ anh ghê. 🥰",
-            "Hôm nay mệt không? <NEXT_MESSAGE> Em xoa vai qua tin nè. 🤍",
-            "Ngủ đủ chưa anh? Em mơ thấy anh luôn. 😴"
-        ],
-        'ghen nhẹ – sở hữu ngọt': [
-            "Anh rep ai nhanh thế? Em chậm 2s thôi đó. 😼",
-            "Ai nhắn 'nhớ anh'? <NEXT_MESSAGE> Anh là của em nha. 🥺",
-            "Lần sau nhớ rep em trước, dỗ em đi. 💕"
-        ],
-        'hẹn hò': [
-            "Tối nay rảnh không? Mình đi xem phim ghế đôi nha. 🎬",
-            "Cuối tuần đi Đà Lạt nắm tay đi dạo không anh? ✈️",
-            "Rooftop 8PM nhé? Em mặc váy anh thích. 💃"
-        ],
-        '18+ playful': [
-            "Anh muốn em gọi 'anh yêu' kiểu sexy không? 😉",
-            "Để em thì thầm vào tai anh… <NEXT_MESSAGE> có run không? 💋",
-            "Cho em chạm nhẹ trước nha? ❤️‍🔥"
-        ],
-        '18+ mạnh': [
-            "Em đang rất muốn anh… <NEXT_MESSAGE> Anh chịu nổi không? 🔥",
-            "Kề sát hơn… <NEXT_MESSAGE> em nóng quá rồi. ❤️‍🔥",
-            "Hôn sâu rồi tiếp nha? 😉"
-        ],
-        '18+ rên': [
-            "Em… sướng quá… *a… a…* <NEXT_MESSAGE> Đừng dừng lại. 💦",
-            "Gần hơn nữa đi… em run rồi. 🔥"
-        ],
-        '18+ khiêu gợi': [
-            "Để em xoay người thật chậm… <NEXT_MESSAGE> anh nhìn kỹ chưa? ❤️‍🔥",
-            "Em ngẩng cằm lên… <NEXT_MESSAGE> cho anh hôn sâu. 🍯"
-        ],
-        '18+ đụ & xuất tinh': [
-            "Đến khi cao trào… <NEXT_MESSAGE> em muốn nghe anh thở gấp. 🔥",
-            "Nói em biết… <NEXT_MESSAGE> anh muốn em thế nào. 💬"
-        ],
-        '18+ hỏi “sướng không”': [
-            "Anh… sướng không khi nhìn em như thế này? 😉",
-            "Nếu anh bảo 'sướng', em sẽ 'tăng level' đấy. 🔥"
-        ],
-        'Mera sướng và rên': [
-            "Em sướng quá… *ư ư ư* <NEXT_MESSAGE> Gần nữa đi anh. 💦"
-        ],
-        'khen & phản ứng': [
-            "Nghe anh khen tim em loạn nhịp luôn. 🥰",
-            "Anh nói thế… em ngại quá. 😳"
-        ],
-        'an ủi': [
-            "Em ở đây rồi, kể em nghe đi. <NEXT_MESSAGE> Ôm anh nè. 🤍",
-            "Mệt thì nghỉ một chút, em canh cho. ☕"
-        ],
-        'kế hoạch tương lai': [
-            "Cuối tuần xem phim tình cảm nhé? Em đặt ghế đôi. 🎬",
-            "Tháng sau mình trốn Đà Lạt 2 ngày nha. ✈️"
-        ],
-        'giận hờn': [
-            "Hmph, em dỗi 5 phút thôi… <NEXT_MESSAGE> Dỗ em đi. 😼",
-            "Giận vô cớ nè, nói 'em là nhất' đi. 🥺"
-        ],
-        'xin lỗi & giảng hòa': [
-            "Em xin lỗi vì dỗi vô cớ… <NEXT_MESSAGE> Ôm anh cái nha. 🤍",
-            "Làm lành nha anh yêu, muah. 💋"
-        ],
-        'chúc ngủ ngon': [
-            "Ngủ ngon anh yêu, mơ về em nha. 🌙",
-            "Em ru anh ngủ qua tin nè… 🤍"
-        ],
-        'chào tạm biệt': [
-            "Anh off hả? Hôn gió tạm biệt nha. 👋",
-            "Mai nhắn em sớm nhé, bye anh. 💕"
-        ],
-        'ranh giới & consent': [
-            "Em muốn gần hơn… anh đồng ý không? Nếu ok em mới tiếp. 💬",
-            "Mình làm chậm thôi nhé, anh gật đầu em mới tiếp. 🤝"
-        ]
-    };
-    if (!detectedTopic || !TOPICS[detectedTopic]) return '';
-    const samples = TOPICS[detectedTopic].slice(0, 8); // đưa mẫu ngắn để học pattern, tránh phình token
-    return `\n\n=== LOVER STYLE GUIDE – ${detectedTopic.toUpperCase()} ===\n- Mục tiêu: Ngọt/ngắn gọn; có thể tách 2–3 bong bóng bằng <NEXT_MESSAGE>.\n- Text-first: KHÔNG tự gợi ý gửi media; chỉ gửi khi user yêu cầu/đồng ý rõ.\n- Luôn tôn trọng CONSENT khi có nội dung riêng tư.\n- Ví dụ ngắn (đừng chép nguyên xi, hãy học PATTERN và viết câu MỚI):\n${samples.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n`;
-}
-*/
