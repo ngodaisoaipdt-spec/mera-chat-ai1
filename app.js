@@ -1659,11 +1659,14 @@ app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
     const { character } = req.params;
     const memory = await loadMemory(req.user._id, character);
     memory.user_profile = memory.user_profile || {};
+    
+    // Tính toán và cập nhật relationship_stage nếu cần
     const computedStage = determineRelationshipStage(memory.user_profile.message_count || 0, req.user.isPremium, memory.user_profile.dispute_count || 0);
-    if (memory.user_profile.relationship_stage !== computedStage) {
+    if (!memory.user_profile.relationship_stage || memory.user_profile.relationship_stage !== computedStage) {
         memory.user_profile.relationship_stage = computedStage;
         await memory.save();
     }
+    
     res.json({ memory, isPremium: req.user.isPremium });
 });
 app.post('/chat', ensureAuthenticated, async (req, res) => { 
@@ -1762,8 +1765,14 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         memory.history.push({ role: 'user', content: message });
         memory.history.push({ role: 'assistant', content: fallback });
         userProfile.message_count = (userProfile.message_count || 0) + 1;
-        const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
-        if (userProfile.relationship_stage !== computedStage) userProfile.relationship_stage = computedStage;
+        
+        // Tính toán và cập nhật relationship_stage
+        const newStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
+        const oldStage = userProfile.relationship_stage || 'stranger';
+        if (oldStage !== newStage) {
+            userProfile.relationship_stage = newStage;
+        }
+        
         if (memory.history.length > 50) memory.history = memory.history.slice(memory.history.length - 50);
         await memory.save();
         const audioDataUri = await createViettelVoice(fallback, character);
@@ -1773,7 +1782,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             audio: audioDataUri,
             mediaUrl: null,
             mediaType: null,
-            updatedMemory: memory
+            relationship_stage: userProfile.relationship_stage || 'stranger',
+            message_count: userProfile.message_count
         });
     } 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
@@ -2050,52 +2060,47 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         console.log(`💾 Lưu media vào history: ${mediaUrl} (${mediaType}, topic: ${mediaTopic}, subject: ${mediaSubject})`);
     }
     memory.history.push(assistantMessage);
+    // Tăng message_count
     userProfile.message_count = (userProfile.message_count || 0) + 1; 
-    const computedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0); 
-    if (!userProfile.relationship_stage || userProfile.relationship_stage !== computedStage) {
-        // Khi chuyển giai đoạn, reset counter ảnh stranger
-        if (computedStage !== 'stranger' && userProfile.relationship_stage === 'stranger') {
+    
+    // Tính toán relationship_stage mới dựa trên message_count
+    const newStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
+    const oldStage = userProfile.relationship_stage || 'stranger';
+    
+    // Nếu stage thay đổi, cập nhật và reset các counter liên quan
+    if (oldStage !== newStage) {
+        console.log(`🔄 Relationship stage thay đổi: ${oldStage} → ${newStage} (message_count: ${userProfile.message_count})`);
+        
+        // Reset counter khi chuyển từ stranger
+        if (oldStage === 'stranger' && newStage !== 'stranger') {
             userProfile.stranger_images_sent = 0;
             userProfile.stranger_image_requests = 0;
-            console.log(`🔄 Chuyển từ stranger sang ${computedStage}, reset stranger_images_sent và stranger_image_requests`);
         }
-        // Khi rời giai đoạn bạn thân, reset quota media của friend
-        if (computedStage !== 'friend' && userProfile.relationship_stage === 'friend') {
+        // Reset counter khi rời friend
+        if (oldStage === 'friend' && newStage !== 'friend') {
             userProfile.friend_images_sent = 0;
             userProfile.friend_videos_sent = 0;
-            console.log(`🔄 Rời friend → ${computedStage}, reset friend_images_sent và friend_videos_sent`);
         }
-        userProfile.relationship_stage = computedStage; 
-    } 
+        
+        // Cập nhật relationship_stage
+        userProfile.relationship_stage = newStage;
+    }
+    
+    // Giới hạn history
     if (memory.history.length > 50) { 
         memory.history = memory.history.slice(memory.history.length - 50); 
     } 
+    
+    // Lưu memory
     await memory.save(); 
     
-    // Đảm bảo relationship_stage đã được cập nhật trước khi trả về
-    // Tính toán lại để chắc chắn
-    const finalComputedStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
-    if (userProfile.relationship_stage !== finalComputedStage) {
-        userProfile.relationship_stage = finalComputedStage;
-        await memory.save();
-        console.log(`🔄 Đã cập nhật relationship_stage thành: ${finalComputedStage} (message_count: ${userProfile.message_count})`);
-    }
-    
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
+    const audioDataUri = null; // TTS on-demand
     
-    // KHÔNG tạo TTS tự động để tiết kiệm quota - chỉ tạo khi user click nút play
-    // TTS sẽ được tạo on-demand qua endpoint /api/tts
-    const audioDataUri = null;
+    // Trả về relationship_stage hiện tại
+    const currentRelationshipStage = userProfile.relationship_stage || 'stranger';
     
-    // Trả về relationship_stage đã cập nhật - lấy trực tiếp từ userProfile sau khi save
-    const updatedRelationshipStage = userProfile.relationship_stage || 'stranger';
-    
-    // Convert memory thành plain object để đảm bảo serialize đúng
-    const memoryToSend = memory.toObject ? memory.toObject() : JSON.parse(JSON.stringify(memory));
-    
-    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=on-demand`);
-    console.log(`📊 Relationship stage: ${updatedRelationshipStage} (message_count: ${userProfile.message_count})`);
-    console.log(`📊 Memory user_profile.relationship_stage: ${memoryToSend.user_profile?.relationship_stage || 'undefined'}`);
+    console.log(`✅ Response: relationship_stage=${currentRelationshipStage}, message_count=${userProfile.message_count}`);
     
     res.json({ 
         displayReply, 
@@ -2103,8 +2108,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         audio: audioDataUri, 
         mediaUrl, 
         mediaType, 
-        updatedMemory: memoryToSend, 
-        relationship_stage: updatedRelationshipStage 
+        relationship_stage: currentRelationshipStage,
+        message_count: userProfile.message_count
     }); 
 } catch (error) { 
     console.error("❌ Lỗi chung trong /chat:", error);
