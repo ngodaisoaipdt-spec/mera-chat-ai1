@@ -2071,6 +2071,11 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         memory.history = memory.history.slice(memory.history.length - 50); 
     } 
     await memory.save(); 
+    
+    // Reload memory từ DB để đảm bảo có dữ liệu mới nhất (bao gồm relationship_stage đã cập nhật)
+    await memory.populate('userId');
+    const freshMemory = await Memory.findById(memory._id);
+    
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
     
     // KHÔNG tạo TTS tự động để tiết kiệm quota - chỉ tạo khi user click nút play
@@ -2078,10 +2083,20 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const audioDataUri = null;
     
     // Trả về relationship_stage đã cập nhật để frontend tự động cập nhật UI
-    const updatedRelationshipStage = userProfile.relationship_stage || 'stranger';
+    const updatedRelationshipStage = freshMemory.user_profile.relationship_stage || userProfile.relationship_stage || 'stranger';
     
-    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=on-demand, relationship_stage=${updatedRelationshipStage}`);
-    res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory, relationship_stage: updatedRelationshipStage }); 
+    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=on-demand`);
+    console.log(`📊 Relationship stage: ${updatedRelationshipStage} (message_count: ${freshMemory.user_profile.message_count || userProfile.message_count})`);
+    
+    res.json({ 
+        displayReply, 
+        historyReply: rawReply, 
+        audio: audioDataUri, 
+        mediaUrl, 
+        mediaType, 
+        updatedMemory: freshMemory || memory, 
+        relationship_stage: updatedRelationshipStage 
+    }); 
 } catch (error) { 
     console.error("❌ Lỗi chung trong /chat:", error);
     console.error("   Stack:", error.stack);

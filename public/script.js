@@ -130,6 +130,15 @@ async function loadChatData() {
         const data = await response.json();
         currentMemory = data.memory;
         currentUser.isPremium = data.isPremium;
+        
+        // Đảm bảo user_profile tồn tại
+        if (!currentMemory.user_profile) {
+            currentMemory.user_profile = {};
+        }
+        
+        // Log để debug
+        console.log(`📊 Load chat data - relationship_stage: ${currentMemory.user_profile.relationship_stage || 'undefined'}, message_count: ${currentMemory.user_profile.message_count || 0}`);
+        
         conversationHistory = currentMemory.history || [];
         DOMElements.chatBox.innerHTML = '';
         if (conversationHistory.length === 0) {
@@ -146,6 +155,8 @@ async function loadChatData() {
                 }
             });
         }
+        
+        // Cập nhật UI relationship status ngay sau khi load
         updateRelationshipStatus();
         updateUIForPremium();
         if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
@@ -746,14 +757,34 @@ async function sendMessageToServer(messageText, loadingId) {
         });
         if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`);
         const data = await response.json();
-        if (data.updatedMemory) currentMemory = data.updatedMemory;
-        // Cập nhật relationship_stage từ response để đảm bảo UI tự động cập nhật
-        if (data.relationship_stage) {
+        
+        // Cập nhật currentMemory từ response
+        if (data.updatedMemory) {
+            currentMemory = data.updatedMemory;
+            // Đảm bảo user_profile tồn tại
             if (!currentMemory.user_profile) currentMemory.user_profile = {};
-            currentMemory.user_profile.relationship_stage = data.relationship_stage;
-            console.log(`🔄 Đã cập nhật relationship_stage: ${data.relationship_stage}`);
+        } else {
+            // Nếu không có updatedMemory, tạo mới nếu chưa có
+            if (!currentMemory) currentMemory = { user_profile: {} };
+            if (!currentMemory.user_profile) currentMemory.user_profile = {};
         }
+        
+        // Ưu tiên cập nhật relationship_stage từ response (đảm bảo luôn đúng)
+        if (data.relationship_stage) {
+            currentMemory.user_profile.relationship_stage = data.relationship_stage;
+            console.log(`🔄 Đã cập nhật relationship_stage từ response: ${data.relationship_stage}`);
+        } else if (data.updatedMemory && data.updatedMemory.user_profile && data.updatedMemory.user_profile.relationship_stage) {
+            // Fallback: lấy từ updatedMemory nếu có
+            currentMemory.user_profile.relationship_stage = data.updatedMemory.user_profile.relationship_stage;
+            console.log(`🔄 Đã cập nhật relationship_stage từ updatedMemory: ${data.updatedMemory.user_profile.relationship_stage}`);
+        }
+        
+        // Log để debug
+        console.log(`📊 Current relationship_stage sau khi cập nhật: ${currentMemory?.user_profile?.relationship_stage || 'undefined'}`);
+        
         removeMessage(loadingId);
+        
+        // Cập nhật UI ngay lập tức
         updateRelationshipStatus();
         if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
         const messages = data.displayReply.split('<NEXT_MESSAGE>').filter(m => m.trim().length > 0);
@@ -772,12 +803,31 @@ async function sendMessageToServer(messageText, loadingId) {
 }
 function setProcessing(state) { isProcessing = state;[DOMElements.userInput, DOMElements.sendBtn, DOMElements.micBtnText].forEach(el => { if (el) el.disabled = state; }); }
 function updateRelationshipStatus() {
-    const stage = currentMemory?.user_profile?.relationship_stage || 'stranger';
+    // Đảm bảo currentMemory và user_profile tồn tại
+    if (!currentMemory) {
+        console.warn('⚠️ currentMemory không tồn tại trong updateRelationshipStatus');
+        return;
+    }
+    if (!currentMemory.user_profile) {
+        currentMemory.user_profile = {};
+    }
+    
+    const stage = currentMemory.user_profile.relationship_stage || 'stranger';
     const statusEl = document.getElementById('relationshipStatus');
-    if (!statusEl) return;
+    if (!statusEl) {
+        console.warn('⚠️ Không tìm thấy element relationshipStatus');
+        return;
+    }
+    
     const rule = RELATIONSHIP_RULES_CONFIG.find(r => r.stage === stage) || RELATIONSHIP_RULES_CONFIG[0];
-    statusEl.textContent = `${rule.emoji} ${rule.label}`;
-    statusEl.dataset.stage = stage;
+    const newText = `${rule.emoji} ${rule.label}`;
+    
+    // Chỉ cập nhật nếu thay đổi để tránh flicker
+    if (statusEl.textContent !== newText) {
+        statusEl.textContent = newText;
+        statusEl.dataset.stage = stage;
+        console.log(`✅ Đã cập nhật UI relationship status: ${stage} (${newText})`);
+    }
 }
 function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
 
