@@ -1949,7 +1949,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
                         console.log(`🚫 AI muốn gửi video trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         // Không hardcode response - để AI tự suy nghĩ và trả lời
-                    }
+                        }
                     // Chặn sensitive media (ảnh/video riêng tư) - chỉ xóa [SEND_MEDIA], để AI tự xử lý câu trả lời
                     else if (topic === 'sensitive') {
                         console.log(`🚫 AI muốn gửi sensitive media trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
@@ -2077,8 +2077,11 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     // TTS sẽ được tạo on-demand qua endpoint /api/tts
     const audioDataUri = null;
     
-    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=on-demand`);
-    res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory }); 
+    // Trả về relationship_stage đã cập nhật để frontend tự động cập nhật UI
+    const updatedRelationshipStage = userProfile.relationship_stage || 'stranger';
+    
+    console.log(`✅ Trả về response: displayReply length=${displayReply.length}, mediaUrl=${mediaUrl || 'none'}, mediaType=${mediaType || 'none'}, audio=on-demand, relationship_stage=${updatedRelationshipStage}`);
+    res.json({ displayReply, historyReply: rawReply, audio: audioDataUri, mediaUrl, mediaType, updatedMemory: memory, relationship_stage: updatedRelationshipStage }); 
 } catch (error) { 
     console.error("❌ Lỗi chung trong /chat:", error);
     console.error("   Stack:", error.stack);
