@@ -157,6 +157,7 @@ async function loadChatData() {
         }
         
         // Cập nhật UI relationship status ngay sau khi load
+        console.log(`🔄 Load chat data - Cập nhật UI với relationship_stage: ${currentMemory.user_profile.relationship_stage || 'undefined'}`);
         updateRelationshipStatus();
         updateUIForPremium();
         if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
@@ -771,24 +772,25 @@ async function sendMessageToServer(messageText, loadingId) {
             console.log(`📊 Message count: ${oldMessageCount} → ${data.message_count}`);
         }
         
-        // Cập nhật relationship_stage nếu có
+        // Cập nhật relationship_stage nếu có - LUÔN cập nhật để đảm bảo sync
         if (data.relationship_stage) {
             const newStage = data.relationship_stage;
+            currentMemory.user_profile.relationship_stage = newStage;
             
             if (oldStage !== newStage) {
-                currentMemory.user_profile.relationship_stage = newStage;
                 console.log(`🔄 Relationship stage thay đổi: ${oldStage} → ${newStage}`);
-                
-                // Cập nhật UI ngay lập tức
-                updateRelationshipStatus();
-                if (typeof window.renderRelationshipMenu === 'function') {
-                    window.renderRelationshipMenu();
-                }
             } else {
                 console.log(`ℹ️ Relationship stage không thay đổi: ${oldStage}`);
             }
+            
+            // LUÔN cập nhật UI để đảm bảo sync với backend
+            console.log(`🔄 Cập nhật UI với relationship_stage: ${newStage}`);
+            updateRelationshipStatus();
+            if (typeof window.renderRelationshipMenu === 'function') {
+                window.renderRelationshipMenu();
+            }
         } else {
-            console.warn(`⚠️ Không nhận được relationship_stage trong response!`);
+            console.warn(`⚠️ Không nhận được relationship_stage trong response!`, data);
         }
         
         removeMessage(loadingId);
@@ -809,6 +811,7 @@ async function sendMessageToServer(messageText, loadingId) {
 function setProcessing(state) { isProcessing = state;[DOMElements.userInput, DOMElements.sendBtn, DOMElements.micBtnText].forEach(el => { if (el) el.disabled = state; }); }
 function updateRelationshipStatus() {
     if (!currentMemory || !currentMemory.user_profile) {
+        console.warn('⚠️ updateRelationshipStatus: currentMemory hoặc user_profile không tồn tại');
         return;
     }
     
@@ -816,19 +819,27 @@ function updateRelationshipStatus() {
     const statusEl = document.getElementById('relationshipStatus');
     
     if (!statusEl) {
+        console.error('❌ updateRelationshipStatus: Không tìm thấy element relationshipStatus');
         return;
     }
     
     const rule = RELATIONSHIP_RULES_CONFIG.find(r => r.stage === stage);
     if (!rule) {
+        console.error(`❌ updateRelationshipStatus: Không tìm thấy rule cho stage: ${stage}`);
         return;
     }
     
     const newText = `${rule.emoji} ${rule.label}`;
+    const oldText = statusEl.textContent.trim();
+    
     statusEl.textContent = newText;
     statusEl.dataset.stage = stage;
     
-    console.log(`✅ Đã cập nhật relationship status: ${newText}`);
+    if (oldText !== newText) {
+        console.log(`✅ Đã cập nhật relationship status: "${oldText}" → "${newText}" (stage: ${stage})`);
+    } else {
+        console.log(`ℹ️ Relationship status đã đúng: "${newText}" (stage: ${stage})`);
+    }
 }
 function openMemoriesModal() { const memoriesGrid = document.getElementById('memoriesGrid'); if (!memoriesGrid) return; memoriesGrid.innerHTML = ''; const mediaElements = Array.from(document.querySelectorAll('.chat-image, .chat-video')); if (mediaElements.length === 0) { memoriesGrid.innerHTML = '<p class="no-memories">Chưa có kỷ niệm nào.</p>'; } else { mediaElements.forEach(el => { const memoryItem = document.createElement('div'); memoryItem.className = 'memory-item'; const mediaClone = el.cloneNode(true); memoryItem.appendChild(mediaClone); memoriesGrid.appendChild(memoryItem); }); } document.body.classList.add('memories-active'); }
 
