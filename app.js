@@ -27,7 +27,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 } } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -1663,6 +1663,35 @@ const characters = {
 };
 
 async function loadMemory(userId, character) { let memory = await Memory.findOne({ userId, character }); if (!memory) { memory = new Memory({ userId, character, user_profile: {} }); await memory.save(); } return memory; }
+
+// Hàm kiểm tra và reset daily message count (reset lúc 6h sáng)
+function checkAndResetDailyMessageCount(userProfile) {
+    const now = new Date();
+    const currentDate = now.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    const currentHour = now.getHours();
+    
+    // Lấy ngày reset cuối cùng
+    const lastResetDate = userProfile.last_reset_date || '';
+    
+    // Nếu chưa có ngày reset hoặc là ngày khác
+    if (!lastResetDate || lastResetDate !== currentDate) {
+        // Nếu đã qua 6h sáng của ngày hôm nay, reset
+        if (currentHour >= 6) {
+            userProfile.daily_message_count = 0;
+            userProfile.last_reset_date = currentDate;
+            console.log(`🔄 Reset daily message count cho ngày ${currentDate} (lúc ${currentHour}h)`);
+        } else {
+            // Nếu chưa qua 6h sáng nhưng đã sang ngày mới, vẫn giữ count cũ nhưng cập nhật date
+            // (sẽ reset khi qua 6h sáng)
+            if (lastResetDate && lastResetDate !== currentDate) {
+                userProfile.last_reset_date = currentDate;
+                console.log(`📅 Đã sang ngày mới ${currentDate} nhưng chưa qua 6h sáng, chưa reset count`);
+            }
+        }
+    }
+    
+    return userProfile;
+}
 app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
     const { character } = req.params;
     const memory = await loadMemory(req.user._id, character);
@@ -1684,10 +1713,52 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         const isPremiumUser = req.user.isPremium; 
         let memory = await loadMemory(req.user._id, character); 
         memory.user_profile = memory.user_profile || {}; 
-        let userProfile = memory.user_profile; 
+        let userProfile = memory.user_profile;
+        
+        // Kiểm tra và reset daily message count (reset lúc 6h sáng)
+        userProfile = checkAndResetDailyMessageCount(userProfile);
+        
+        // Kiểm tra giới hạn 10 tin nhắn/ngày cho non-premium user
+        if (!isPremiumUser) {
+            const dailyMessageCount = userProfile.daily_message_count || 0;
+            if (dailyMessageCount >= 10) {
+                console.log(`🚫 User đã đạt giới hạn 10 tin nhắn/ngày (đã gửi: ${dailyMessageCount})`);
+                return res.json({
+                    displayReply: "Bạn đã hết lượt trò chuyện trong ngày hôm nay, vui lòng nâng cấp Premium để trò chuyện không giới hạn và nhiều tính năng khác.",
+                    historyReply: "[MESSAGE_LIMIT_REACHED]",
+                    audio: null,
+                    mediaUrl: null,
+                    mediaType: null,
+                    relationship_stage: userProfile.relationship_stage || 'stranger',
+                    message_count: userProfile.message_count || 0,
+                    daily_message_count: dailyMessageCount,
+                    requiresPremium: true
+                });
+            }
+        }
+        
+        // Kiểm tra relationship stage - từ friend lên lover cần premium
+        const relationshipStage = userProfile.relationship_stage || 'stranger';
+        const messageCount = userProfile.message_count || 0;
+        const computedStage = determineRelationshipStage(messageCount, isPremiumUser, userProfile.dispute_count || 0);
+        
+        // Nếu user đang ở friend stage và muốn lên lover nhưng chưa premium
+        if (relationshipStage === 'friend' && computedStage === 'lover' && !isPremiumUser) {
+            console.log(`🚫 User ở friend stage muốn lên lover nhưng chưa premium`);
+            return res.json({
+                displayReply: "Để tiếp tục trò chuyện và phát triển mối quan hệ lên giai đoạn Người Yêu, bạn cần nâng cấp Premium. Nâng cấp Premium để mở khóa nhiều tính năng đặc biệt!",
+                historyReply: "[PREMIUM_REQUIRED_FOR_LOVER]",
+                audio: null,
+                mediaUrl: null,
+                mediaType: null,
+                relationship_stage: relationshipStage,
+                message_count: messageCount,
+                daily_message_count: userProfile.daily_message_count || 0,
+                requiresPremium: true
+            });
+        }
+        
     if (!isPremiumUser && message.toLowerCase().includes('yêu')) { const charName = character === 'mera' ? 'Mera' : 'Trương Thắng'; return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); }
-    
-    const relationshipStage = userProfile.relationship_stage || 'stranger';
     // Friend-stage media quotas: 
     // Mera: 4 ảnh normal, 2 ảnh body, 2 video normal
     // Thắng: 20 ảnh selfie (normal), 6 video khoảnh khắc (normal, moment)
@@ -1778,6 +1849,11 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         memory.history.push({ role: 'assistant', content: fallback });
         userProfile.message_count = (userProfile.message_count || 0) + 1;
         
+        // Tăng daily_message_count cho non-premium user
+        if (!isPremiumUser) {
+            userProfile.daily_message_count = (userProfile.daily_message_count || 0) + 1;
+        }
+        
         // Tính toán và cập nhật relationship_stage
         const newStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
         const oldStage = userProfile.relationship_stage || 'stranger';
@@ -1795,7 +1871,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
             mediaUrl: null,
             mediaType: null,
             relationship_stage: userProfile.relationship_stage || 'stranger',
-            message_count: userProfile.message_count
+            message_count: userProfile.message_count,
+            daily_message_count: userProfile.daily_message_count || 0
         });
     } 
     let rawReply = gptResponse.choices[0].message.content.trim(); 
@@ -1830,7 +1907,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         userProfile.dispute_count = (userProfile.dispute_count || 0) + 1;
         console.log(`⚠️ Phát hiện tranh cãi! Dispute count: ${userProfile.dispute_count}`);
     }
-    const messageCount = userProfile.message_count || 0;
+    const strangerMessageCount = userProfile.message_count || 0;
     const strangerImagesSent = userProfile.stranger_images_sent || 0;
     const strangerImageRequests = userProfile.stranger_image_requests || 0;
     
@@ -2089,7 +2166,13 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     memory.history.push(assistantMessage);
     // Tăng message_count
     const oldMessageCount = userProfile.message_count || 0;
-    userProfile.message_count = oldMessageCount + 1; 
+    userProfile.message_count = oldMessageCount + 1;
+    
+    // Tăng daily_message_count cho non-premium user
+    if (!isPremiumUser) {
+        userProfile.daily_message_count = (userProfile.daily_message_count || 0) + 1;
+        console.log(`📊 Daily message count: ${userProfile.daily_message_count}/10`);
+    }
     
     console.log(`📊 Message count: ${oldMessageCount} → ${userProfile.message_count}`);
     
@@ -2141,7 +2224,8 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         historyReply: rawReply, 
         audio: audioDataUri, 
         mediaUrl, 
-        mediaType, 
+        mediaType,
+        daily_message_count: userProfile.daily_message_count || 0, 
         relationship_stage: currentRelationshipStage,
         message_count: userProfile.message_count
     }); 

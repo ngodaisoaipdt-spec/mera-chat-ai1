@@ -770,6 +770,23 @@ async function sendMessageToServer(messageText, loadingId) {
         if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`);
         const data = await response.json();
         
+        // Kiểm tra nếu user đã hết lượt hoặc cần premium
+        if (data.requiresPremium || data.historyReply === "[MESSAGE_LIMIT_REACHED]" || data.historyReply === "[PREMIUM_REQUIRED_FOR_LOVER]") {
+            removeMessage(loadingId);
+            addMessage(DOMElements.chatBox, currentCharacter, data.displayReply || "Bạn đã hết lượt trò chuyện trong ngày hôm nay, vui lòng nâng cấp Premium để trò chuyện không giới hạn và nhiều tính năng khác.");
+            // Mở modal premium sau 1 giây
+            setTimeout(() => {
+                if (typeof openPremiumFeaturesModal === 'function') {
+                    openPremiumFeaturesModal();
+                } else {
+                    // Fallback: click premium button
+                    const premiumBtn = document.getElementById('premiumBtn');
+                    if (premiumBtn) premiumBtn.click();
+                }
+            }, 1500);
+            return;
+        }
+        
         // Cập nhật relationship_stage từ response
         if (!currentMemory) currentMemory = { user_profile: {} };
         if (!currentMemory.user_profile) currentMemory.user_profile = {};
@@ -781,6 +798,12 @@ async function sendMessageToServer(messageText, loadingId) {
         if (data.message_count !== undefined) {
             currentMemory.user_profile.message_count = data.message_count;
             console.log(`📊 Message count: ${oldMessageCount} → ${data.message_count}`);
+        }
+        
+        // Cập nhật daily_message_count nếu có
+        if (data.daily_message_count !== undefined) {
+            currentMemory.user_profile.daily_message_count = data.daily_message_count;
+            console.log(`📊 Daily message count: ${data.daily_message_count}/10`);
         }
         
         // Cập nhật relationship_stage nếu có - LUÔN cập nhật để đảm bảo sync
