@@ -58,7 +58,7 @@
             <p>Mở khóa mối quan hệ <strong>Người Yêu</strong> và toàn bộ tính năng.</p>
             <div class="package-details">
                 <span class="package-name">Gói Tình Yêu Vĩnh Cửu</span>
-                <span class="package-price">48.000đ<small>/tháng</small></span>
+                <span class="package-price">58.000đ<small>/tháng</small></span>
             </div>
             <div class="payment-method-selection">
                 <h3 style="font-size: 1.1em; margin-bottom: 15px; color: #555;">Chọn phương thức thanh toán</h3>
@@ -76,32 +76,36 @@
                 <p class="qr-loading">Đang tạo mã thanh toán...</p>
                 <img id="qrCodeImage" src="" alt="Mã QR thanh toán"/>
             </div>
-            <div class="bank-info">
-                <p><strong>TÊN NGÂN HÀNG:</strong> VietinBank</p>
-                <p><strong>SỐ TÀI KHOẢN:</strong> 101611784168</p>
-                <p><strong>CHỦ TÀI KHOẢN:</strong> PHAM DUC THANG</p>
-                <p id="transferContent" style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 5px; display: none;">
-                    <strong>NỘI DUNG CHUYỂN KHOẢN:</strong><br>
-                    <span id="orderCodeDisplay" style="font-family: monospace; font-size: 1.1em; color: #d63384; font-weight: bold;"></span>
-                    <br><br>
-                    <small style="color: #666; font-size: 0.85em;">
-                        <strong>⚠️ Lưu ý khi chuyển khoản thủ công:</strong><br>
-                        Nếu bạn chuyển khoản bằng tay (không quét QR), vui lòng thêm <strong>"SEVQR"</strong> vào đầu nội dung chuyển khoản:<br>
-                        <code style="background: #fff; padding: 2px 5px; border-radius: 3px;">SEVQR <span id="orderCodeForManual">MERACHAT...</span></code>
+            <div class="bank-info" style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%); border-radius: 12px; border: 1px solid #e0e0e0;">
+                <h3 style="font-size: 1.1em; margin-bottom: 15px; color: #333; text-align: center; font-weight: 700;">💳 Thông tin chuyển khoản</h3>
+                <div style="background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <p style="margin: 8px 0; display: flex; justify-content: space-between; align-items: center;"><strong style="color: #555;">Tên ngân hàng:</strong><span style="color: #333; font-weight: 600;">VietinBank</span></p>
+                    <p style="margin: 8px 0; display: flex; justify-content: space-between; align-items: center;"><strong style="color: #555;">Số tài khoản:</strong><span style="color: #333; font-weight: 600; font-family: 'Courier New', monospace;">101611784168</span></p>
+                    <p style="margin: 8px 0; display: flex; justify-content: space-between; align-items: center;"><strong style="color: #555;">Chủ tài khoản:</strong><span style="color: #333; font-weight: 600;">PHAM DUC THANG</span></p>
+                </div>
+                <div style="padding: 15px; background: linear-gradient(135deg, #fff5f5 0%, #ffe8e8 100%); border-left: 4px solid #ff9800; border-radius: 8px; margin-bottom: 15px;">
+                    <strong style="color: #333; display: block; margin-bottom: 10px; font-size: 1em;">📋 Nội dung chuyển khoản:</strong>
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span id="orderCodeDisplay" style="font-family: 'Courier New', monospace; font-size: 1.1em; color: #d63384; font-weight: bold; flex: 1; min-width: 200px; padding: 10px 15px; background: #fff; border-radius: 6px; border: 2px solid #ff9800; cursor: pointer; user-select: all; transition: all 0.3s;" onclick="this.select(); document.execCommand('copy'); this.style.background='#fff8e1'; setTimeout(() => this.style.background='#fff', 500);" title="Click để copy">SEVQR MERACHAT...</span>
+                    </div>
+                    <small style="color: #666; font-size: 0.85em; display: block; margin-top: 10px; line-height: 1.5;">
+                        <strong>⚠️ Lưu ý:</strong> Khi chuyển khoản thủ công, hãy kiểm tra đúng thông tin trước khi chuyển tiền.
                     </small>
-                </p>
-                <p id="expiryTime" style="margin-top: 10px; color: #dc3545; font-weight: bold; display: none;">
-                    ⏰ Hết hạn sau: <span id="countdownTimer">15:00</span>
+                </div>
+                <p id="expiryTime" style="margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 6px; color: #856404; font-weight: 600; text-align: center; display: none;">
+                    ⏰ Hết hạn sau: <span id="countdownTimer" style="color: #dc3545; font-size: 1.1em;">15:00</span>
                 </p>
             </div>
-            <div id="manualConfirmArea" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; display: none;">
-                <p style="margin-bottom: 10px; font-weight: 600; color: #555;">Đã chuyển khoản? Kiểm tra trạng thái:</p>
-                <p style="margin-bottom: 10px; font-size: 0.9em; color: #666; font-style: italic;">⚠️ Hệ thống sẽ tự động xác nhận khi nhận được thông báo từ ngân hàng (thường trong 1-5 phút). Bạn có thể kiểm tra trạng thái bên dưới.</p>
-                <div style="display: flex; gap: 10px;">
-                    <input type="text" id="manualOrderCodeInput" placeholder="Nhập nội dung chuyển khoản (MERACHAT...)" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 0.95em;">
-                    <button id="confirmPaymentBtn" style="padding: 10px 20px; background: linear-gradient(45deg, #ff9800, #f57c00); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; white-space: nowrap;">Kiểm tra trạng thái</button>
+            <div id="manualConfirmArea" style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); border-radius: 12px; border: 1px solid #e0e0e0; display: none;">
+                <p style="margin-bottom: 12px; font-weight: 700; color: #333; font-size: 1.05em; text-align: center;">✅ Đã chuyển khoản? Kiểm tra trạng thái</p>
+                <p style="margin-bottom: 15px; padding: 10px; background: #e3f2fd; border-radius: 6px; font-size: 0.9em; color: #1976d2; line-height: 1.5;">
+                    <strong>ℹ️ Thông tin:</strong> Hệ thống sẽ tự động xác nhận khi nhận được thông báo từ ngân hàng (thường trong 1-5 phút). Bạn có thể kiểm tra trạng thái bên dưới.
+                </p>
+                <div style="display: flex; gap: 10px; align-items: stretch;">
+                    <input type="text" id="manualOrderCodeInput" placeholder="Nhập nội dung chuyển khoản (SEVQR MERACHAT...)" style="flex: 1; padding: 12px 15px; border: 2px solid #ddd; border-radius: 8px; font-size: 0.95em; font-family: 'Courier New', monospace; transition: border-color 0.3s;" onfocus="this.style.borderColor='#ff9800';" onblur="this.style.borderColor='#ddd';">
+                    <button id="confirmPaymentBtn" style="padding: 12px 24px; background: linear-gradient(45deg, #ff9800, #f57c00); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; white-space: nowrap; font-size: 0.95em; box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3); transition: all 0.3s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(255, 152, 0, 0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(255, 152, 0, 0.3)';" onmousedown="this.style.transform='translateY(0)';" onmouseup="this.style.transform='translateY(-2px)';" disabled>Kiểm tra trạng thái</button>
                 </div>
-                <p id="manualConfirmError" style="color: #ff9800; margin-top: 8px; font-size: 0.9em; display: none;"></p>
+                <p id="manualConfirmError" style="color: #ff9800; margin-top: 12px; font-size: 0.9em; display: none; padding: 8px; background: #fff3cd; border-radius: 6px; text-align: center;"></p>
             </div>
             <p id="paymentError" style="color: red; margin-top: 10px;"></p>
             <p class="payment-instructions" id="paymentInstructions">Dùng App Ngân hàng hoặc Ví điện tử để quét mã QR</p>
@@ -170,7 +174,7 @@
             <div class="modal-body" style="padding: 20px; overflow-y: auto; max-height: 60vh;">
                 <div style="text-align: center; margin-bottom: 20px;">
                     <div style="font-size: 2em; margin-bottom: 10px;">💖</div>
-                    <div style="font-size: 1.5em; font-weight: 700; color: var(--secondary-color); margin-bottom: 5px;">48.000đ/tháng</div>
+                    <div style="font-size: 1.5em; font-weight: 700; color: var(--secondary-color); margin-bottom: 5px;">58.000đ/tháng</div>
                     <div style="color: #666; font-size: 0.9em;">Gói Tình Yêu Vĩnh Cửu</div>
                 </div>
                 

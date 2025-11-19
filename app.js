@@ -97,7 +97,7 @@ app.get('/auth/google/callback', passport.authenticate('google', { failureRedire
 app.get('/api/current_user', (req, res) => { if (req.user) res.json(req.user); else res.status(401).json(null); });
 app.get('/logout', (req, res, next) => { req.logout(err => { if (err) { return next(err); } res.redirect('/'); }); });
 
-const PREMIUM_PRICE = 48000;
+const PREMIUM_PRICE = 58000;
 
 app.post('/api/create-payment', ensureAuthenticated, async (req, res) => {
     try {

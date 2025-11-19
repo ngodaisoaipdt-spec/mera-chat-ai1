@@ -211,7 +211,7 @@ function proceedToPayment() {
     const manualConfirmError = document.getElementById('manualConfirmError');
     const paymentError = document.getElementById('paymentError');
     
-    if (transferContent) transferContent.style.display = 'none';
+    // Không cần ẩn transferContent nữa vì đã xóa
     if (expiryTime) expiryTime.style.display = 'none';
     if (manualConfirmArea) manualConfirmArea.style.display = 'none';
     if (manualOrderCodeInput) manualOrderCodeInput.value = '';
@@ -316,20 +316,15 @@ async function initiatePayment() {
             qrCodeImage.style.display = 'block';
             qrLoadingText.style.display = 'none';
             
-            // Hiển thị nội dung chuyển khoản
-            const transferContent = document.getElementById('transferContent');
+            // Hiển thị nội dung chuyển khoản với SEVQR ở đầu
             const orderCodeDisplay = document.getElementById('orderCodeDisplay');
             const expiryTime = document.getElementById('expiryTime');
             const manualConfirmArea = document.getElementById('manualConfirmArea');
             
-            if (transferContent && orderCodeDisplay) {
-                orderCodeDisplay.textContent = data.orderCode;
-                // Hiển thị format đầy đủ cho chuyển khoản thủ công
-                const orderCodeForManual = document.getElementById('orderCodeForManual');
-                if (orderCodeForManual) {
-                    orderCodeForManual.textContent = data.orderCode;
-                }
-                transferContent.style.display = 'block';
+            // Hiển thị mã với SEVQR ở đầu cho người dùng copy (luôn hiển thị)
+            if (orderCodeDisplay) {
+                orderCodeDisplay.textContent = `SEVQR ${data.orderCode}`;
+                // Đảm bảo phần này luôn hiển thị (không cần ẩn nữa vì đã tích hợp vào giao diện)
             }
             
             // Hiển thị countdown timer
@@ -341,10 +336,10 @@ async function initiatePayment() {
             // Hiển thị form xác nhận thủ công
             if (manualConfirmArea) {
                 manualConfirmArea.style.display = 'block';
-                // Set orderCode vào input để người dùng dễ copy
+                // Set orderCode với SEVQR vào input để người dùng dễ copy
                 const manualInput = document.getElementById('manualOrderCodeInput');
                 if (manualInput) {
-                    manualInput.value = data.orderCode;
+                    manualInput.value = `SEVQR ${data.orderCode}`;
                 }
             }
             
@@ -667,7 +662,9 @@ function initializeChatApp() {
             }
             
             // Validate format
-            if (!orderCode.match(/^MERACHAT\d+$/i)) {
+            // Hỗ trợ cả format có SEVQR và không có SEVQR
+            const cleanOrderCode = orderCode.replace(/^SEVQR\s+/i, '').trim();
+            if (!cleanOrderCode.match(/^MERACHAT\d+$/i)) {
                 if (manualConfirmError) {
                     manualConfirmError.textContent = 'Nội dung chuyển khoản không hợp lệ. Vui lòng nhập đúng định dạng MERACHAT...';
                     manualConfirmError.style.display = 'block';
@@ -681,10 +678,11 @@ function initializeChatApp() {
             
             try {
                 // Chỉ kiểm tra trạng thái, KHÔNG tự động xác nhận
+                // Gửi cleanOrderCode (không có SEVQR) lên server
                 const response = await fetch('/api/check-payment-status', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ orderCode: orderCode })
+                    body: JSON.stringify({ orderCode: cleanOrderCode })
                 });
                 
                 const data = await response.json();
@@ -949,7 +947,7 @@ function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false
     if (text.includes('[PREMIUM_PROMPT]')) { 
         if (currentUser && currentUser.isPremium) return null; 
         const charName = currentCharacter === 'mera' ? 'Mera' : 'Trương Thắng'; 
-        const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>48.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; 
+        const promptHtml = `<div id="${id}" class="message mera premium-prompt-message"><p>Nâng cấp Premium chỉ với <strong>58.000đ/tháng</strong> để mở khóa giai đoạn <strong>Người Yêu</strong>!...</p><button class="premium-prompt-button" onclick="handlePremiumClick()">Tìm Hiểu Mối Quan Hệ Sâu Sắc Hơn</button></div>`; 
         chatBox.insertAdjacentHTML('beforeend', promptHtml); 
         chatBox.scrollTop = chatBox.scrollHeight; 
         return id; 
