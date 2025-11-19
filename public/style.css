@@ -112,6 +112,17 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
 .premium-btn:hover { transform: scale(1.1); background-color: #fef3c7; }
 .premium-btn.is-premium { background: linear-gradient(45deg, var(--primary-color), var(--secondary-color)); cursor: default; }
 .premium-btn.is-premium img { filter: none; }
+.install-app-btn {
+    background-color: #4caf50 !important;
+    border: 2px solid #45a049 !important;
+}
+.install-app-btn:hover {
+    background-color: #45a049 !important;
+    transform: scale(1.1);
+}
+.install-app-btn svg {
+    color: white !important;
+}
 
 @media (max-width: 480px) {
     body {

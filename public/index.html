@@ -59,6 +59,32 @@
         </div>
     </div>
 
+    <div id="installAppModal" class="selection-screen">
+        <div class="selection-box" style="max-width: 420px; padding: 30px;">
+            <h2 style="margin-top: 0; color: #3c3c3c;">📱 Thêm vào màn hình chính</h2>
+            <p style="color: #666; margin-bottom: 20px;">Cài đặt YorLuv Chat để trải nghiệm tốt hơn!</p>
+            <div id="installInstructions" style="text-align: left; margin-bottom: 20px;">
+                <div id="androidInstructions" style="display: none;">
+                    <p style="font-weight: 600; color: #3c3c3c; margin-bottom: 10px;">📱 Trên Android:</p>
+                    <ol style="color: #666; line-height: 1.8; padding-left: 20px;">
+                        <li>Nhấn vào menu <strong>⋮</strong> (3 chấm) ở góc trên bên phải</li>
+                        <li>Chọn <strong>"Thêm vào màn hình chính"</strong> hoặc <strong>"Cài đặt ứng dụng"</strong></li>
+                        <li>Nhấn <strong>"Thêm"</strong> hoặc <strong>"Cài đặt"</strong></li>
+                    </ol>
+                </div>
+                <div id="iosInstructions" style="display: none;">
+                    <p style="font-weight: 600; color: #3c3c3c; margin-bottom: 10px;">🍎 Trên iOS (iPhone/iPad):</p>
+                    <ol style="color: #666; line-height: 1.8; padding-left: 20px;">
+                        <li>Nhấn vào nút <strong>Share</strong> <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8'/%3E%3Cpolyline points='16 6 12 2 8 6'/%3E%3Cline x1='12' y1='2' x2='12' y2='15'/%3E%3C/svg%3E" style="vertical-align: middle; margin: 0 4px;"> ở dưới màn hình</li>
+                        <li>Cuộn xuống và chọn <strong>"Thêm vào Màn hình chính"</strong></li>
+                        <li>Nhấn <strong>"Thêm"</strong> ở góc trên bên phải</li>
+                    </ol>
+                </div>
+            </div>
+            <button id="closeInstallModalBtn" class="google-login-button" style="width: 100%; margin-top: 10px;">Đã hiểu</button>
+        </div>
+    </div>
+
     <div id="paymentScreen" class="selection-screen">
         <div class="payment-box">
             <span id="closePaymentBtn" class="close-btn">&times;</span>
@@ -136,6 +162,11 @@
             <div class="status-bar">
                 <div id="relationshipStatus" class="relationship-status">💔 Người Lạ</div>
                 <div class="status-actions">
+                    <button id="installAppBtn" class="status-btn install-app-btn" title="Thêm vào màn hình chính" style="display: none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; color: white;">
+                            <path d="M12 2v20M2 12h20"/>
+                        </svg>
+                    </button>
                     <button id="memoriesBtn" class="status-btn" title="Kỷ niệm">
                         <img src="icons/icon-memories.png" alt="Kỷ niệm">
                     </button>
@@ -244,6 +275,84 @@
                     });
             });
         }
+
+        // PWA Install Button Handler
+        let deferredPrompt = null;
+        const installAppBtn = document.getElementById('installAppBtn');
+        const installAppModal = document.getElementById('installAppModal');
+        const closeInstallModalBtn = document.getElementById('closeInstallModalBtn');
+        const androidInstructions = document.getElementById('androidInstructions');
+        const iosInstructions = document.getElementById('iosInstructions');
+
+        // Detect if app is already installed
+        function isAppInstalled() {
+            return window.matchMedia('(display-mode: standalone)').matches || 
+                   window.navigator.standalone || 
+                   document.referrer.includes('android-app://');
+        }
+
+        // Detect iOS
+        function isIOS() {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        }
+
+        // Show install button if needed
+        function checkAndShowInstallButton() {
+            if (isAppInstalled()) {
+                if (installAppBtn) installAppBtn.style.display = 'none';
+                return;
+            }
+
+            // Show button on mobile devices
+            if (window.innerWidth <= 768 || isIOS()) {
+                if (installAppBtn) installAppBtn.style.display = 'flex';
+            }
+        }
+
+        // Handle beforeinstallprompt event (Android Chrome)
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            checkAndShowInstallButton();
+        });
+
+        // Handle install button click
+        if (installAppBtn) {
+            installAppBtn.addEventListener('click', () => {
+                if (deferredPrompt) {
+                    // Android Chrome - trigger install prompt
+                    deferredPrompt.prompt();
+                    deferredPrompt.userChoice.then((choiceResult) => {
+                        if (choiceResult.outcome === 'accepted') {
+                            console.log('User accepted the install prompt');
+                        }
+                        deferredPrompt = null;
+                        installAppBtn.style.display = 'none';
+                    });
+                } else {
+                    // iOS or other browsers - show instructions
+                    if (isIOS()) {
+                        iosInstructions.style.display = 'block';
+                        androidInstructions.style.display = 'none';
+                    } else {
+                        androidInstructions.style.display = 'block';
+                        iosInstructions.style.display = 'none';
+                    }
+                    if (installAppModal) installAppModal.classList.add('active');
+                }
+            });
+        }
+
+        // Close install modal
+        if (closeInstallModalBtn) {
+            closeInstallModalBtn.addEventListener('click', () => {
+                if (installAppModal) installAppModal.classList.remove('active');
+            });
+        }
+
+        // Check on load and when app container is shown
+        window.addEventListener('load', checkAndShowInstallButton);
+        setTimeout(checkAndShowInstallButton, 1000);
     </script>
 </body>
 </html>
