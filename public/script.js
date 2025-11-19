@@ -447,6 +447,39 @@ function updateUIForPremium() {
 function initializeChatApp() {
     DOMElements.sendBtn.addEventListener("click", sendMessageFromInput);
     DOMElements.userInput.addEventListener("keypress", e => { if (e.key === "Enter") sendMessageFromInput(); });
+    
+    // Handle mobile keyboard - ensure input area is visible when keyboard opens
+    if (DOMElements.userInput) {
+        DOMElements.userInput.addEventListener('focus', () => {
+            // Scroll input into view when focused
+            setTimeout(() => {
+                DOMElements.userInput.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                // Also scroll chat box to bottom to show latest messages
+                const chatBox = document.getElementById('chatBox');
+                if (chatBox) {
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            }, 300);
+        });
+        
+        DOMElements.userInput.addEventListener('blur', () => {
+            // Optional: scroll back when keyboard closes
+        });
+    }
+    
+    // Handle viewport resize (when keyboard opens/closes on mobile)
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+            const inputArea = document.querySelector('.input-area');
+            if (inputArea && window.visualViewport.height < window.innerHeight) {
+                // Keyboard is open
+                inputArea.style.bottom = `${window.innerHeight - window.visualViewport.height}px`;
+            } else if (inputArea) {
+                // Keyboard is closed
+                inputArea.style.bottom = '0';
+            }
+        });
+    }
     const premiumBtn = document.getElementById('premiumBtn');
     if (premiumBtn) { premiumBtn.addEventListener('click', handlePremiumClick); }
     document.getElementById('characterAvatarContainer').addEventListener('click', () => { const avatarImage = document.querySelector('.character-avatar'); if (avatarImage) { document.getElementById('lightboxImage').src = avatarImage.src; document.body.classList.add('lightbox-active'); } });
