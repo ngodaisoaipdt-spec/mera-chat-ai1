@@ -1,0 +1,25 @@
+{
+  "name": "YorLuv Chat",
+  "short_name": "YorLuv",
+  "description": "Ứng dụng chat AI với Mera San và Trương Thắng",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdfcff",
+  "theme_color": "#8e82ff",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "yorluv-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "yorluv-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
