@@ -82,20 +82,22 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
 .user-profile-area a { font-size: 0.8em; color: #888; text-decoration: none; }
 .message.premium-prompt-message p { background-color: #fff8e1; padding: 15px; border-radius: 10px; border-left: 5px solid var(--secondary-color); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 .premium-prompt-button { display: block; width: 100%; text-align: center; margin-top: 15px; padding: 12px; background: linear-gradient(45deg, var(--primary-color), var(--secondary-color)); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: 'Nunito', sans-serif; font-size: 1em; }
-.payment-box { background: #fff; padding: 30px 40px; border-radius: 20px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.3); max-width: 400px; width: 90vw; position: relative; }
+.payment-box { background: #fff; padding: 20px 25px; border-radius: 20px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.3); max-width: 480px; width: 90vw; max-height: 90vh; overflow-y: auto; position: relative; }
 .payment-box .close-btn { position: absolute; top: 10px; right: 20px; font-size: 30px; }
-.payment-box h2 { font-size: 1.8em; margin-bottom: 10px; }
-.package-details { display: flex; justify-content: space-between; align-items: center; background-color: #f7f7f9; padding: 15px; border-radius: 12px; margin-bottom: 20px; }
+.payment-box h2 { font-size: 1.6em; margin-bottom: 8px; }
+.payment-box p { margin-bottom: 12px; font-size: 0.95em; }
+.package-details { display: flex; justify-content: space-between; align-items: center; background-color: #f7f7f9; padding: 12px 15px; border-radius: 12px; margin-bottom: 15px; }
 .package-name { font-weight: 600; }
 .package-price { font-size: 1.5em; font-weight: 700; color: var(--secondary-color); }
 .package-price small { font-size: 0.5em; font-weight: normal; }
-.qr-code-area { min-height: 250px; display: flex; justify-content: center; align-items: center; }
-#qrCodeImage { width: 250px; height: 250px; border-radius: 10px; border: 1px solid #eee; display: none; }
+.qr-code-area { min-height: 200px; max-height: 220px; display: flex; justify-content: center; align-items: center; margin-bottom: 10px; }
+#qrCodeImage { width: 200px; height: 200px; border-radius: 10px; border: 1px solid #eee; display: none; }
 .qr-loading { font-style: italic; color: #888; }
 .bank-info { margin-top: 10px; font-size: 0.9em; color: #555; text-align: left; line-height: 1.4; }
 .bank-info p { margin: 2px 0; }
 .payment-instructions { font-size: 0.9em; margin-top: 15px; color: #777; }
-.payment-method-selection { margin-bottom: 20px; }
+.payment-method-selection { margin-bottom: 15px; }
+.payment-method-selection h3 { font-size: 1em; margin-bottom: 10px; }
 .payment-methods { display: flex; gap: 10px; justify-content: center; }
 .payment-method-btn { flex: 1; padding: 15px 20px; border: 2px solid #ddd; border-radius: 12px; background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; transition: all 0.3s; font-family: 'Nunito', sans-serif; font-size: 0.9em; font-weight: 600; color: #555; }
 .payment-method-btn:hover { border-color: var(--primary-color); background: #f8f9ff; transform: translateY(-2px); }
