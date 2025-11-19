@@ -108,7 +108,21 @@ async function setupCharacter(char) {
     const charName = isMera ? 'Mera San' : 'Trương Thắng';
 
     document.querySelectorAll('.character-avatar').forEach(el => el.src = avatarSrc);
-    document.querySelector('.character-name').textContent = charName;
+    // Cập nhật tên trong header chat (h2.name.character-name)
+    const headerName = document.querySelector('.chat-header .character-name');
+    if (headerName) {
+        headerName.textContent = charName;
+    }
+    // Cập nhật tên trong selection screen
+    document.querySelectorAll('.character-card .character-name').forEach(el => {
+        if (el.textContent === 'Mera San' || el.textContent === 'Trương Thắng') {
+            // Chỉ cập nhật nếu là card của character hiện tại
+            const card = el.closest('.character-card');
+            if (card && ((isMera && card.id === 'selectMera') || (!isMera && card.id === 'selectThang'))) {
+                el.textContent = charName;
+            }
+        }
+    });
     DOMElements.chatBox.innerHTML = '';
 
     DOMElements.characterSelectionScreen.classList.remove('active');
