@@ -1950,12 +1950,38 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
     const mediaMatch = rawReply.match(mediaRegex); 
     
+    // Kiểm tra xem AI có đồng ý gửi ảnh không (có từ khóa đồng ý trong response)
+    const aiAgreedToSend = /(được rồi|thôi được|rồi|ừm|hmm|ok|okay|gửi|cho.*xem|cho.*anh|cho.*em).*(ảnh|hình|image|tấm|tấm ảnh)/i.test(rawReply);
+    
     // Nếu user yêu cầu media nhưng AI không gửi [SEND_MEDIA] → tự động gửi (nhưng có điều kiện)
     if (userRequestedMedia && !mediaMatch) {
-        // Ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt
+        // Ở stranger stage: Nếu AI đã đồng ý gửi (có từ khóa đồng ý) và đã hỏi từ lần thứ 2 trở đi → tự động gửi
         if (relationshipStage === 'stranger' && userRequestedImage) {
-            console.log(`⚠️ User yêu cầu ảnh ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt`);
-            // Không tự động gửi, để AI xử lý theo prompt
+            const currentRequestCount = userProfile.stranger_image_requests || 0;
+            const maxStrangerImages = character === 'thang' ? 10 : 2;
+            
+            // Nếu AI đã đồng ý gửi và đã hỏi từ lần thứ 2 trở đi và chưa gửi đủ → tự động gửi
+            if (aiAgreedToSend && currentRequestCount >= 2 && strangerImagesSent < maxStrangerImages) {
+                console.log(`✅ AI đã đồng ý gửi ảnh (lần thứ ${currentRequestCount} hỏi), tự động gửi ảnh`);
+                try {
+                    const mediaResult = await sendMediaFile(memory, character, 'image', 'normal', 'selfie');
+                    if (mediaResult && mediaResult.success) {
+                        mediaUrl = mediaResult.mediaUrl;
+                        mediaType = mediaResult.mediaType;
+                        mediaTopic = 'normal';
+                        mediaSubject = 'selfie';
+                        memory.user_profile = mediaResult.updatedMemory.user_profile;
+                        memory.user_profile.stranger_images_sent = (memory.user_profile.stranger_images_sent || 0) + 1;
+                        console.log(`✅ Đã tự động gửi ảnh stranger: ${mediaUrl} (${memory.user_profile.stranger_images_sent}/${maxStrangerImages})`);
+                    } else {
+                        console.warn(`⚠️ Không thể tự động gửi ảnh:`, mediaResult?.message || 'Unknown error');
+                    }
+                } catch (autoError) {
+                    console.error("❌ Lỗi khi tự động gửi ảnh:", autoError);
+                }
+            } else {
+                console.log(`⚠️ User yêu cầu ảnh ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt (aiAgreedToSend=${aiAgreedToSend}, currentRequestCount=${currentRequestCount}, strangerImagesSent=${strangerImagesSent})`);
+            }
         } else if (relationshipStage !== 'stranger') {
             // Các giai đoạn khác, tự động gửi bình thường
             console.log(`⚠️ User yêu cầu media nhưng AI không gửi [SEND_MEDIA], tự động gửi media...`);
