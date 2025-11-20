@@ -3140,6 +3140,57 @@ ${relationshipStage === 'lover'
     return masterPrompt;
 }
 
+// Hàm phát hiện cảm xúc và tính toán speed/pitch phù hợp
+function calculateVoiceParams(text, character) {
+    const lowerText = text.toLowerCase();
+    
+    // Tốc độ mặc định: chậm hơn để tự nhiên hơn (0.85 thay vì 1.0)
+    let speed = 0.85;
+    let pitch = 0; // Pitch mặc định (nếu API hỗ trợ)
+    
+    // Phát hiện cảm xúc vui, hào hứng
+    const happyKeywords = ['hihi', 'haha', 'hehe', '😊', '😄', '😁', 'vui', 'thích', 'yêu', '❤️', '💕', '🥰', '😘', '💋', '✨', '🌟'];
+    const excitedKeywords = ['wow', 'tuyệt', 'đã', 'thích quá', 'yêu quá', '🔥', '💯'];
+    
+    // Phát hiện cảm xúc buồn, nhẹ nhàng
+    const sadKeywords = ['buồn', 'nhớ', '😢', '😔', '💔', 'sao', 'tại sao'];
+    const gentleKeywords = ['nhẹ nhàng', 'dịu dàng', 'từ tốn', 'thì thầm', 'bên tai'];
+    
+    // Phát hiện cảm xúc tình cảm, ngọt ngào
+    const romanticKeywords = ['yêu', 'thương', 'nhớ', 'vợ', 'chồng', 'anh', 'em', '❤️', '💕', '🥰', '😘', '💋'];
+    
+    // Phát hiện cảm xúc mạnh mẽ, quyết đoán
+    const strongKeywords = ['chắc chắn', 'nhất định', 'phải', 'sẽ', '🔥', '💯', 'mạnh mẽ'];
+    
+    // Đếm số từ khóa xuất hiện
+    let happyCount = happyKeywords.filter(kw => lowerText.includes(kw)).length;
+    let excitedCount = excitedKeywords.filter(kw => lowerText.includes(kw)).length;
+    let sadCount = sadKeywords.filter(kw => lowerText.includes(kw)).length;
+    let gentleCount = gentleKeywords.filter(kw => lowerText.includes(kw)).length;
+    let romanticCount = romanticKeywords.filter(kw => lowerText.includes(kw)).length;
+    let strongCount = strongKeywords.filter(kw => lowerText.includes(kw)).length;
+    
+    // Điều chỉnh speed dựa trên cảm xúc
+    if (happyCount > 0 || excitedCount > 0) {
+        // Vui, hào hứng: nhanh hơn một chút nhưng vẫn tự nhiên
+        speed = 0.90;
+    } else if (sadCount > 0 || gentleCount > 0) {
+        // Buồn, nhẹ nhàng: chậm hơn, từ tốn
+        speed = 0.75;
+    } else if (romanticCount > 2) {
+        // Tình cảm, ngọt ngào: chậm, nhẹ nhàng
+        speed = 0.80;
+    } else if (strongCount > 0) {
+        // Mạnh mẽ, quyết đoán: vừa phải
+        speed = 0.88;
+    }
+    
+    // Đảm bảo speed trong khoảng hợp lý (0.7 - 1.0)
+    speed = Math.max(0.70, Math.min(1.0, speed));
+    
+    return { speed, pitch };
+}
+
 async function createViettelVoice(textToSpeak, character) {
     try {
         const trimmed = (textToSpeak || '').trim();
@@ -3155,6 +3206,9 @@ async function createViettelVoice(textToSpeak, character) {
         // Lấy voice từ character config
         const voice = characters[character]?.voice || 'hn-phuongtrang';
         
+        // Tính toán speed và pitch dựa trên nội dung và character
+        const voiceParams = calculateVoiceParams(trimmed, character);
+        
         // Endpoint đúng theo tài liệu Viettel AI
         const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://viettelai.vn/tts/speech_synthesis';
         
@@ -3162,13 +3216,13 @@ async function createViettelVoice(textToSpeak, character) {
         const payload = {
             text: trimmed,
             voice: voice,
-            speed: 1.0,
+            speed: voiceParams.speed, // Tốc độ điều chỉnh động
             tts_return_option: 3, // 3 = mp3, 2 = wav
             token: token, // Token gửi trong body, không phải header!
             without_filter: false
         };
         
-        console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, text length: ${trimmed.length}`);
+        console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, speed: ${voiceParams.speed}, text length: ${trimmed.length}`);
         
         // Hàm gọi API với timeout - dùng 8s để đảm bảo thành công, retry nếu cần
         const makeRequest = (timeoutMs = 8000) => axios.post(ttsUrl, payload, {
