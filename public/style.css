@@ -157,18 +157,19 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
         overflow: hidden;
     }
     .chat-header {
-        padding: 8px 12px;
+        padding: 6px 10px;
         flex-shrink: 0;
     }
     .avatar {
-        width: 40px;
-        height: 40px;
+        width: 35px;
+        height: 35px;
+        margin-right: 10px;
     }
     .header-info .name {
-        font-size: 1em;
+        font-size: 0.9em;
     }
     .status-bar {
-        padding: 4px 12px;
+        padding: 3px 10px;
         flex-shrink: 0;
     }
     .status-btn {
@@ -190,7 +191,7 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
     }
     .chat-box {
         padding: 6px 12px;
-        padding-bottom: 6px;
+        padding-bottom: 70px; /* Space for input area */
         flex: 1;
         min-height: 0;
         overflow-y: auto;
@@ -211,9 +212,6 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
         width: 100%;
         z-index: 1000;
         box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-    }
-    .chat-box {
-        padding-bottom: 80px;
     }
     #userInput {
         padding: 10px 12px;

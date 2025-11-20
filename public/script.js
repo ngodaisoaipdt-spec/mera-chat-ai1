@@ -451,34 +451,67 @@ function initializeChatApp() {
     // Handle mobile keyboard - ensure input area is visible when keyboard opens
     if (DOMElements.userInput) {
         DOMElements.userInput.addEventListener('focus', () => {
-            // Scroll input into view when focused
+            // Scroll chat box to bottom to show latest messages when keyboard opens
             setTimeout(() => {
-                DOMElements.userInput.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                // Also scroll chat box to bottom to show latest messages
                 const chatBox = document.getElementById('chatBox');
                 if (chatBox) {
                     chatBox.scrollTop = chatBox.scrollHeight;
+                }
+                // Trigger resize để điều chỉnh layout
+                if (window.visualViewport) {
+                    window.visualViewport.dispatchEvent(new Event('resize'));
                 }
             }, 300);
         });
         
         DOMElements.userInput.addEventListener('blur', () => {
-            // Optional: scroll back when keyboard closes
+            // Reset layout khi bàn phím đóng
+            setTimeout(() => {
+                if (window.visualViewport) {
+                    window.visualViewport.dispatchEvent(new Event('resize'));
+                }
+            }, 100);
         });
     }
     
     // Handle viewport resize (when keyboard opens/closes on mobile)
     if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', () => {
+        const adjustLayoutForKeyboard = () => {
             const inputArea = document.querySelector('.input-area');
-            if (inputArea && window.visualViewport.height < window.innerHeight) {
+            const chatBox = document.getElementById('chatBox');
+            
+            if (!inputArea || !chatBox) return;
+            
+            const inputAreaHeight = inputArea.offsetHeight;
+            
+            if (window.visualViewport.height < window.innerHeight) {
                 // Keyboard is open
-                inputArea.style.bottom = `${window.innerHeight - window.visualViewport.height}px`;
-            } else if (inputArea) {
+                const keyboardHeight = window.innerHeight - window.visualViewport.height;
+                inputArea.style.bottom = `${keyboardHeight}px`;
+                // Điều chỉnh padding-bottom của chat-box để không bị che
+                chatBox.style.paddingBottom = `${inputAreaHeight + keyboardHeight + 10}px`;
+                // Scroll chat box lên để hiển thị tin nhắn
+                setTimeout(() => {
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }, 100);
+            } else {
                 // Keyboard is closed
                 inputArea.style.bottom = '0';
+                chatBox.style.paddingBottom = `${inputAreaHeight + 10}px`;
             }
-        });
+        };
+        
+        window.visualViewport.addEventListener('resize', adjustLayoutForKeyboard);
+        // Gọi ngay để set initial state
+        setTimeout(adjustLayoutForKeyboard, 100);
+    } else {
+        // Fallback for browsers without visualViewport support
+        const inputArea = document.querySelector('.input-area');
+        const chatBox = document.getElementById('chatBox');
+        if (inputArea && chatBox) {
+            const inputAreaHeight = inputArea.offsetHeight;
+            chatBox.style.paddingBottom = `${inputAreaHeight + 10}px`;
+        }
     }
     const premiumBtn = document.getElementById('premiumBtn');
     if (premiumBtn) { premiumBtn.addEventListener('click', handlePremiumClick); }
@@ -789,6 +822,12 @@ function sendMessageFromInput() {
     console.log(`✅ Đã thêm tin nhắn user với ID: ${userMessageId}`);
     
     DOMElements.userInput.value = ""; 
+    
+    // Đóng bàn phím trên mobile sau khi gửi tin nhắn
+    if (DOMElements.userInput === document.activeElement) {
+        DOMElements.userInput.blur();
+    }
+    
     const loadingId = addMessage(DOMElements.chatBox, currentCharacter, "💭 Đang suy nghĩ...", null, true); 
     sendMessageToServer(message, loadingId); 
 }
