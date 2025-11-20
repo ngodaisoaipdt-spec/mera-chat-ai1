@@ -3191,6 +3191,35 @@ function calculateVoiceParams(text, character) {
     return { speed, pitch };
 }
 
+// Hàm normalize text để TTS đọc tự nhiên hơn (xử lý các từ kéo dài như "nhaaa~", "áaa")
+function normalizeTextForTTS(text) {
+    if (!text) return text;
+    
+    let normalized = text;
+    
+    // Danh sách từ có nghĩa cần giữ nguyên (như "hihi", "hehe")
+    const meaningfulWords = ['hihi', 'hehe', 'haha', 'hoho'];
+    
+    // Pattern: Tìm chữ cái lặp lại 3+ lần và thay thế bằng 1 chữ cái + dấu ngã
+    // Ví dụ: "nhaaa~" → "nha~", "áaa" → "á~", "hiii" → "hi~"
+    // Regex: tìm chữ cái (có thể có dấu) lặp lại 3+ lần, có thể có dấu ngã ở cuối
+    normalized = normalized.replace(/([a-zàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ])\1{2,}(~?)/gi, (match, char, tilde) => {
+        // Kiểm tra xem có phải là từ có nghĩa không (như "hihi" trong "hihiii")
+        const lowerMatch = match.toLowerCase();
+        if (meaningfulWords.some(word => lowerMatch.includes(word))) {
+            return match; // Giữ nguyên
+        }
+        
+        // Thay thế bằng 1 chữ cái + dấu ngã (luôn thêm dấu ngã để tạo hiệu ứng kéo dài tự nhiên)
+        return char + '~';
+    });
+    
+    // Xử lý trường hợp đặc biệt: "nhaaa~" (nếu pattern trên chưa xử lý đúng)
+    normalized = normalized.replace(/nha{3,}~/gi, 'nha~');
+    
+    return normalized;
+}
+
 async function createViettelVoice(textToSpeak, character) {
     try {
         const trimmed = (textToSpeak || '').trim();
@@ -3209,12 +3238,15 @@ async function createViettelVoice(textToSpeak, character) {
         // Tính toán speed và pitch dựa trên nội dung và character
         const voiceParams = calculateVoiceParams(trimmed, character);
         
+        // Normalize text để TTS đọc tự nhiên hơn (xử lý các từ kéo dài)
+        const normalizedText = normalizeTextForTTS(trimmed);
+        
         // Endpoint đúng theo tài liệu Viettel AI
         const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://viettelai.vn/tts/speech_synthesis';
         
         // Payload theo đúng format của Viettel AI (token trong body, không phải header!)
         const payload = {
-            text: trimmed,
+            text: normalizedText, // Dùng normalized text cho TTS
             voice: voice,
             speed: voiceParams.speed, // Tốc độ điều chỉnh động
             tts_return_option: 3, // 3 = mp3, 2 = wav
@@ -3222,7 +3254,11 @@ async function createViettelVoice(textToSpeak, character) {
             without_filter: false
         };
         
-        console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, speed: ${voiceParams.speed}, text length: ${trimmed.length}`);
+        console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, speed: ${voiceParams.speed}`);
+        if (normalizedText !== trimmed) {
+            console.log(`   📝 Text gốc: "${trimmed.substring(0, 100)}..."`);
+            console.log(`   ✨ Text normalized: "${normalizedText.substring(0, 100)}..."`);
+        }
         
         // Hàm gọi API với timeout - dùng 8s để đảm bảo thành công, retry nếu cần
         const makeRequest = (timeoutMs = 8000) => axios.post(ttsUrl, payload, {
