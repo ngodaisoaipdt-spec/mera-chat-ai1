@@ -3191,7 +3191,7 @@ function calculateVoiceParams(text, character) {
     return { speed, pitch };
 }
 
-// Hàm normalize text để TTS đọc tự nhiên hơn (xử lý các từ kéo dài như "nhaaa~", "áaa")
+// Hàm normalize text để TTS đọc tự nhiên hơn (xử lý các từ kéo dài và thêm ngắt nghỉ)
 function normalizeTextForTTS(text) {
     if (!text) return text;
     
@@ -3200,22 +3200,39 @@ function normalizeTextForTTS(text) {
     // Danh sách từ có nghĩa cần giữ nguyên (như "hihi", "hehe")
     const meaningfulWords = ['hihi', 'hehe', 'haha', 'hoho'];
     
-    // Pattern: Tìm chữ cái lặp lại 3+ lần và thay thế bằng 1 chữ cái + dấu ngã
-    // Ví dụ: "nhaaa~" → "nha~", "áaa" → "á~", "hiii" → "hi~"
-    // Regex: tìm chữ cái (có thể có dấu) lặp lại 3+ lần, có thể có dấu ngã ở cuối
+    // Bước 1: Xử lý các từ kéo dài (nhaaa~, áaa) - thay bằng 1 chữ + dấu ngã
     normalized = normalized.replace(/([a-zàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ])\1{2,}(~?)/gi, (match, char, tilde) => {
-        // Kiểm tra xem có phải là từ có nghĩa không (như "hihi" trong "hihiii")
         const lowerMatch = match.toLowerCase();
         if (meaningfulWords.some(word => lowerMatch.includes(word))) {
             return match; // Giữ nguyên
         }
-        
-        // Thay thế bằng 1 chữ cái + dấu ngã (luôn thêm dấu ngã để tạo hiệu ứng kéo dài tự nhiên)
         return char + '~';
     });
     
-    // Xử lý trường hợp đặc biệt: "nhaaa~" (nếu pattern trên chưa xử lý đúng)
+    // Xử lý trường hợp đặc biệt: "nhaaa~"
     normalized = normalized.replace(/nha{3,}~/gi, 'nha~');
+    
+    // Bước 2: Thêm ngắt nghỉ tự nhiên để TTS đọc có ngữ điệu
+    // Thêm dấu phẩy sau các từ kéo dài (nếu chưa có dấu câu)
+    normalized = normalized.replace(/([a-zàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]~)([^,\.!?~\s])/gi, '$1, $2');
+    
+    // Thêm dấu phẩy sau emoji (để tạo pause tự nhiên)
+    normalized = normalized.replace(/([😀-🙏🌀-🗿])([^,\.!?~\s])/g, '$1, $2');
+    
+    // Thêm dấu phẩy trước các từ cảm thán phổ biến (nếu chưa có)
+    normalized = normalized.replace(/([^,\.!?~\s])(\s+)(nhaaa|nha~|áaa|á~|àaa|à~)([^,\.!?~])/gi, '$1,$2$3, $4');
+    
+    // Thêm khoảng trắng và dấu phẩy sau "hihi~", "hehe~" để tạo ngắt nghỉ
+    normalized = normalized.replace(/(hihi~|hehe~|haha~)([^,\.!?~\s])/gi, '$1, $2');
+    
+    // Bước 3: Đảm bảo có khoảng trắng sau dấu phẩy
+    normalized = normalized.replace(/,(?!\s)/g, ', ');
+    
+    // Bước 4: Thêm dấu chấm hoặc dấu phẩy ở cuối câu nếu thiếu (để TTS dừng lại)
+    // Nhưng không thêm nếu đã có dấu câu
+    if (!/[.!?]$/.test(normalized.trim())) {
+        normalized = normalized.trim() + '.';
+    }
     
     return normalized;
 }
@@ -3256,8 +3273,10 @@ async function createViettelVoice(textToSpeak, character) {
         
         console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, speed: ${voiceParams.speed}`);
         if (normalizedText !== trimmed) {
-            console.log(`   📝 Text gốc: "${trimmed.substring(0, 100)}..."`);
-            console.log(`   ✨ Text normalized: "${normalizedText.substring(0, 100)}..."`);
+            console.log(`   📝 Text gốc: "${trimmed.substring(0, 150)}"`);
+            console.log(`   ✨ Text normalized: "${normalizedText.substring(0, 150)}"`);
+        } else {
+            console.log(`   📝 Text (không thay đổi): "${trimmed.substring(0, 150)}"`);
         }
         
         // Hàm gọi API với timeout - dùng 8s để đảm bảo thành công, retry nếu cần
