@@ -3216,8 +3216,12 @@ function normalizeTextForTTS(text) {
     // Thêm dấu phẩy sau các từ kéo dài (nếu chưa có dấu câu)
     normalized = normalized.replace(/([a-zàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]~)([^,\.!?~\s])/gi, '$1, $2');
     
-    // Thêm dấu phẩy sau emoji (để tạo pause tự nhiên)
-    normalized = normalized.replace(/([😀-🙏🌀-🗿])([^,\.!?~\s])/g, '$1, $2');
+    // Thêm dấu phẩy sau emoji phổ biến (để tạo pause tự nhiên)
+    // Match các emoji phổ biến được sử dụng trong chat
+    const commonEmojis = ['😊', '😄', '😁', '🥰', '😘', '💋', '❤️', '💕', '💖', '✨', '🌟', '🔥', '💯', '😏', '🙈', '😟', '😢', '😔', '💔'];
+    commonEmojis.forEach(emoji => {
+        normalized = normalized.replace(new RegExp(`(${emoji.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})([^,\.!?~\\s])`, 'g'), '$1, $2');
+    });
     
     // Thêm dấu phẩy trước các từ cảm thán phổ biến (nếu chưa có)
     normalized = normalized.replace(/([^,\.!?~\s])(\s+)(nhaaa|nha~|áaa|á~|àaa|à~)([^,\.!?~])/gi, '$1,$2$3, $4');
