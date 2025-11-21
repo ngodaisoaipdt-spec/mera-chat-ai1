@@ -25,7 +25,7 @@ app.set('trust proxy', 1);
 
 mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết nối MongoDB!")).catch(err => { console.error("❌ Lỗi kết nối MongoDB:", err); process.exit(1); });
 
-const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now } });
+const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now } });
 const User = mongoose.model('User', userSchema);
 const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } } });
 const Memory = mongoose.model('Memory', memorySchema);
@@ -113,18 +113,51 @@ app.use(async (req, res, next) => {
     }
     
     try {
-        const ip = req.ip || req.connection.remoteAddress || 'unknown';
-        const userAgent = req.get('user-agent') || 'unknown';
         const isAuthenticated = req.isAuthenticated() || false;
         const userId = req.user ? req.user._id : null;
         
-        await Visit.create({
-            userId: userId,
-            ip: ip,
-            userAgent: userAgent,
-            path: req.path,
-            isAuthenticated: isAuthenticated
-        });
+        // Nếu user đã đăng nhập: cập nhật lastActiveAt và chỉ track 1 lần/ngày
+        if (isAuthenticated && userId) {
+            // Cập nhật thời gian hoạt động cuối cùng
+            await User.findByIdAndUpdate(userId, { lastActiveAt: new Date() });
+            
+            // Kiểm tra xem user này đã được track trong ngày hôm nay chưa
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            const existingVisit = await Visit.findOne({
+                userId: userId,
+                createdAt: { $gte: today, $lt: tomorrow }
+            });
+            
+            // Chỉ track nếu chưa có visit trong ngày hôm nay
+            if (!existingVisit) {
+                const ip = req.ip || req.connection.remoteAddress || 'unknown';
+                const userAgent = req.get('user-agent') || 'unknown';
+                
+                await Visit.create({
+                    userId: userId,
+                    ip: ip,
+                    userAgent: userAgent,
+                    path: req.path,
+                    isAuthenticated: true
+                });
+            }
+        } else {
+            // Với user chưa đăng nhập: track như bình thường (có thể cải thiện sau nếu cần)
+            const ip = req.ip || req.connection.remoteAddress || 'unknown';
+            const userAgent = req.get('user-agent') || 'unknown';
+            
+            await Visit.create({
+                userId: null,
+                ip: ip,
+                userAgent: userAgent,
+                path: req.path,
+                isAuthenticated: false
+            });
+        }
     } catch (err) {
         // Không làm gián đoạn request nếu tracking lỗi
         console.error('Lỗi tracking visit:', err);
@@ -177,6 +210,10 @@ app.get('/api/analytics/stats', ensureAuthenticated, async (req, res) => {
         // Số lượt truy cập từ người chưa đăng nhập
         const anonymousVisits = await Visit.countDocuments({ isAuthenticated: false });
         
+        // Số người dùng đang hoạt động (hoạt động trong vòng 15 phút gần đây)
+        const activeUsersThreshold = new Date(Date.now() - 15 * 60 * 1000); // 15 phút
+        const activeUsers = await User.countDocuments({ lastActiveAt: { $gte: activeUsersThreshold } });
+        
         // Top 10 người dùng truy cập nhiều nhất
         const topUsers = await Visit.aggregate([
             { $match: { userId: { $ne: null } } },
@@ -207,6 +244,7 @@ app.get('/api/analytics/stats', ensureAuthenticated, async (req, res) => {
             premiumUsers,
             authenticatedVisits,
             anonymousVisits,
+            activeUsers,
             topUsers,
             dailyStats
         });
@@ -1829,6 +1867,10 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     try { 
         const { message, character } = req.body; 
         console.log(`💬 Nhận tin nhắn từ user: "${message}" (character: ${character})`);
+        
+        // Cập nhật thời gian hoạt động cuối cùng
+        await User.findByIdAndUpdate(req.user._id, { lastActiveAt: new Date() });
+        
         const isPremiumUser = req.user.isPremium; 
         let memory = await loadMemory(req.user._id, character); 
         memory.user_profile = memory.user_profile || {}; 
@@ -3691,6 +3733,10 @@ app.get('/admin/analytics', ensureAuthenticated, async (req, res) => {
             }}
         ]);
         
+        // Số người dùng đang hoạt động (hoạt động trong vòng 15 phút gần đây)
+        const activeUsersThreshold = new Date(Date.now() - 15 * 60 * 1000); // 15 phút
+        const activeUsers = await User.countDocuments({ lastActiveAt: { $gte: activeUsersThreshold } });
+        
         const dailyStats = await Visit.aggregate([
             { $match: { createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } },
             { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
@@ -3769,6 +3815,10 @@ app.get('/admin/analytics', ensureAuthenticated, async (req, res) => {
             <div class="stat-card">
                 <h3>Người dùng Premium</h3>
                 <div class="value">${userStats[0]?.premium[0]?.count || 0}</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h3 style="color: rgba(255,255,255,0.9);">🟢 Người dùng đang hoạt động</h3>
+                <div class="value" style="color: white;">${activeUsers}</div>
             </div>
         </div>
         
