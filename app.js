@@ -146,17 +146,37 @@ app.use(async (req, res, next) => {
                 });
             }
         } else {
-            // Với user chưa đăng nhập: track như bình thường (có thể cải thiện sau nếu cần)
-            const ip = req.ip || req.connection.remoteAddress || 'unknown';
-            const userAgent = req.get('user-agent') || 'unknown';
-            
-            await Visit.create({
-                userId: null,
-                ip: ip,
-                userAgent: userAgent,
-                path: req.path,
-                isAuthenticated: false
-            });
+            // Với user chưa đăng nhập: chỉ track khi truy cập trang chính và giới hạn 1 lần/ngày cho mỗi IP
+            // Chỉ track khi truy cập trang chính (path === '/')
+            if (req.path === '/' || req.path === '') {
+                const ip = req.ip || req.connection.remoteAddress || 'unknown';
+                
+                // Kiểm tra xem IP này đã được track trong ngày hôm nay chưa
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                
+                const existingVisit = await Visit.findOne({
+                    userId: null,
+                    ip: ip,
+                    isAuthenticated: false,
+                    createdAt: { $gte: today, $lt: tomorrow }
+                });
+                
+                // Chỉ track nếu chưa có visit trong ngày hôm nay cho IP này
+                if (!existingVisit) {
+                    const userAgent = req.get('user-agent') || 'unknown';
+                    
+                    await Visit.create({
+                        userId: null,
+                        ip: ip,
+                        userAgent: userAgent,
+                        path: req.path,
+                        isAuthenticated: false
+                    });
+                }
+            }
         }
     } catch (err) {
         // Không làm gián đoạn request nếu tracking lỗi
@@ -3715,12 +3735,20 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
 // Trang admin analytics
 app.get('/admin/analytics', ensureAuthenticated, async (req, res) => {
     try {
+        // Tính toán thời gian chính xác
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const thisWeek = new Date(today);
+        thisWeek.setDate(thisWeek.getDate() - 7);
+        const thisMonth = new Date(today);
+        thisMonth.setMonth(thisMonth.getMonth() - 1);
+        
         const stats = await Visit.aggregate([
             { $facet: {
                 total: [{ $count: 'count' }],
-                today: [{ $match: { createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }, { $count: 'count' }],
-                thisWeek: [{ $match: { createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } }, { $count: 'count' }],
-                thisMonth: [{ $match: { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }, { $count: 'count' }],
+                today: [{ $match: { createdAt: { $gte: today } } }, { $count: 'count' }],
+                thisWeek: [{ $match: { createdAt: { $gte: thisWeek } } }, { $count: 'count' }],
+                thisMonth: [{ $match: { createdAt: { $gte: thisMonth } } }, { $count: 'count' }],
                 authenticated: [{ $match: { isAuthenticated: true } }, { $count: 'count' }],
                 anonymous: [{ $match: { isAuthenticated: false } }, { $count: 'count' }]
             }}
