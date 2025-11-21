@@ -113,8 +113,8 @@ function updateChatBackground(character) {
     document.documentElement.style.setProperty('--chat-background-image', `url('${backgroundImage}')`);
     // Dùng cover để phủ kín toàn bộ nền
     document.documentElement.style.setProperty('--chat-background-size', 'cover');
-    // Overlay mờ để dễ đọc tin nhắn
-    document.documentElement.style.setProperty('--chat-background-overlay', 'rgba(255, 255, 255, 0.75)');
+    // Không dùng overlay (để nền hiển thị rõ như mặc định)
+    document.documentElement.style.setProperty('--chat-background-overlay', 'rgba(255, 255, 255, 0)');
 }
 
 async function setupCharacter(char) {

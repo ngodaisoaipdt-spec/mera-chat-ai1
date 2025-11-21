@@ -22,7 +22,7 @@
     --mera-bubble-color: #f3f4f6; 
     /* Background image cho chat - Thay đổi URL này để đặt hình ảnh nền */
     --chat-background-image: none; /* Ví dụ: url('images/chat-background.jpg') */
-    --chat-background-overlay: rgba(255, 255, 255, 0.85); /* Overlay để làm mờ nền (0.85 = 85% opacity) */
+    --chat-background-overlay: rgba(255, 255, 255, 0); /* Overlay mặc định: không mờ (0 = trong suốt) */
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; background-color: #e3e8f2; }
