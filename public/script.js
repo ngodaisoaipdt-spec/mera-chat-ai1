@@ -101,6 +101,22 @@ function showCharacterSelection() {
 document.getElementById('selectMera').addEventListener('click', () => setupCharacter('mera'));
 document.getElementById('selectThang').addEventListener('click', () => setupCharacter('thang'));
 
+// Hàm để thay đổi background image theo nhân vật
+function updateChatBackground(character) {
+    const chatBox = DOMElements.chatBox;
+    if (!chatBox) return;
+    
+    const isMera = character === 'mera';
+    const backgroundImage = isMera ? 'nen-mera.jpg' : 'nen-truongthang.jpg';
+    
+    // Cập nhật CSS variables
+    document.documentElement.style.setProperty('--chat-background-image', `url('${backgroundImage}')`);
+    // Dùng cover để phủ kín toàn bộ nền
+    document.documentElement.style.setProperty('--chat-background-size', 'cover');
+    // Overlay mờ để dễ đọc tin nhắn
+    document.documentElement.style.setProperty('--chat-background-overlay', 'rgba(255, 255, 255, 0.75)');
+}
+
 async function setupCharacter(char) {
     currentCharacter = char;
     const isMera = char === 'mera';
@@ -123,6 +139,10 @@ async function setupCharacter(char) {
             }
         }
     });
+    
+    // Cập nhật background image theo nhân vật
+    updateChatBackground(char);
+    
     DOMElements.chatBox.innerHTML = '';
 
     DOMElements.characterSelectionScreen.classList.remove('active');
@@ -138,6 +158,9 @@ async function setupCharacter(char) {
 
 async function loadChatData() {
     try {
+        // Đảm bảo background được cập nhật khi load lại
+        updateChatBackground(currentCharacter);
+        
         const response = await fetch(`/api/chat-data/${currentCharacter}`);
         if (!response.ok) throw new Error('Không thể tải dữ liệu.');
         const data = await response.json();
