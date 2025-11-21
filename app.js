@@ -31,6 +31,15 @@ const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
+const visitSchema = new mongoose.Schema({ 
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, 
+    ip: String, 
+    userAgent: String, 
+    path: String, 
+    isAuthenticated: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now } 
+});
+const Visit = mongoose.model('Visit', visitSchema);
 
 const RELATIONSHIP_RULES = [
     { stage: 'stranger', minMessages: 0, requiresPremium: false },
@@ -87,6 +96,43 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Middleware để track visits (bỏ qua các file tĩnh và API analytics)
+app.use(async (req, res, next) => {
+    // Bỏ qua tracking cho các file tĩnh, API analytics, và các route không cần thiết
+    if (req.path.startsWith('/api/analytics') || 
+        req.path.startsWith('/yorluv-logo.png') || 
+        req.path.startsWith('/manifest.json') ||
+        req.path.startsWith('/service-worker.js') ||
+        req.path.startsWith('/icons/') ||
+        req.path.startsWith('/google_logo.png') ||
+        req.path.startsWith('/style.css') ||
+        req.path.startsWith('/script.js') ||
+        req.path.startsWith('/index.html') ||
+        req.path === '/favicon.ico') {
+        return next();
+    }
+    
+    try {
+        const ip = req.ip || req.connection.remoteAddress || 'unknown';
+        const userAgent = req.get('user-agent') || 'unknown';
+        const isAuthenticated = req.isAuthenticated() || false;
+        const userId = req.user ? req.user._id : null;
+        
+        await Visit.create({
+            userId: userId,
+            ip: ip,
+            userAgent: userAgent,
+            path: req.path,
+            isAuthenticated: isAuthenticated
+        });
+    } catch (err) {
+        // Không làm gián đoạn request nếu tracking lỗi
+        console.error('Lỗi tracking visit:', err);
+    }
+    
+    next();
+});
+
 passport.use(new GoogleStrategy({ clientID: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET, callbackURL: "/auth/google/callback" }, async (accessToken, refreshToken, profile, done) => { try { let user = await User.findOne({ googleId: profile.id }); if (!user) { user = await new User({ googleId: profile.id, displayName: profile.displayName, email: profile.emails[0].value, avatar: profile.photos[0].value }).save(); } return done(null, user); } catch (err) { console.error("Lỗi trong GoogleStrategy:", err); return done(err, null); } }));
 passport.serializeUser((user, done) => { done(null, user.id); });
 passport.deserializeUser(async (id, done) => { try { const user = await User.findById(id); done(null, user); } catch (err) { done(err, null); } });
@@ -96,6 +142,79 @@ app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'em
 app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/?login_error=true' }), (req, res) => { res.redirect('/?login=success'); });
 app.get('/api/current_user', (req, res) => { if (req.user) res.json(req.user); else res.status(401).json(null); });
 app.get('/logout', (req, res, next) => { req.logout(err => { if (err) { return next(err); } res.redirect('/'); }); });
+
+// API Analytics - Xem thống kê truy cập
+app.get('/api/analytics/stats', ensureAuthenticated, async (req, res) => {
+    try {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const thisWeek = new Date(today);
+        thisWeek.setDate(thisWeek.getDate() - 7);
+        const thisMonth = new Date(today);
+        thisMonth.setMonth(thisMonth.getMonth() - 1);
+        
+        // Tổng số lượt truy cập
+        const totalVisits = await Visit.countDocuments();
+        
+        // Số lượt truy cập hôm nay
+        const visitsToday = await Visit.countDocuments({ createdAt: { $gte: today } });
+        
+        // Số lượt truy cập tuần này
+        const visitsThisWeek = await Visit.countDocuments({ createdAt: { $gte: thisWeek } });
+        
+        // Số lượt truy cập tháng này
+        const visitsThisMonth = await Visit.countDocuments({ createdAt: { $gte: thisMonth } });
+        
+        // Số người dùng đã đăng nhập
+        const totalUsers = await User.countDocuments();
+        
+        // Số người dùng premium
+        const premiumUsers = await User.countDocuments({ isPremium: true });
+        
+        // Số lượt truy cập từ người đã đăng nhập
+        const authenticatedVisits = await Visit.countDocuments({ isAuthenticated: true });
+        
+        // Số lượt truy cập từ người chưa đăng nhập
+        const anonymousVisits = await Visit.countDocuments({ isAuthenticated: false });
+        
+        // Top 10 người dùng truy cập nhiều nhất
+        const topUsers = await Visit.aggregate([
+            { $match: { userId: { $ne: null } } },
+            { $group: { _id: '$userId', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 },
+            { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+            { $unwind: '$user' },
+            { $project: { userId: '$_id', displayName: '$user.displayName', email: '$user.email', visitCount: '$count' } }
+        ]);
+        
+        // Thống kê theo ngày (7 ngày gần nhất)
+        const dailyStats = await Visit.aggregate([
+            { $match: { createdAt: { $gte: thisWeek } } },
+            { $group: { 
+                _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, 
+                count: { $sum: 1 } 
+            } },
+            { $sort: { _id: 1 } }
+        ]);
+        
+        res.json({
+            totalVisits,
+            visitsToday,
+            visitsThisWeek,
+            visitsThisMonth,
+            totalUsers,
+            premiumUsers,
+            authenticatedVisits,
+            anonymousVisits,
+            topUsers,
+            dailyStats
+        });
+    } catch (err) {
+        console.error('Lỗi khi lấy thống kê:', err);
+        res.status(500).json({ error: 'Lỗi khi lấy thống kê' });
+    }
+});
 
 const PREMIUM_PRICE = 58000;
 
@@ -3551,7 +3670,161 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
     }
 }
 
+// Trang admin analytics
+app.get('/admin/analytics', ensureAuthenticated, async (req, res) => {
+    try {
+        const stats = await Visit.aggregate([
+            { $facet: {
+                total: [{ $count: 'count' }],
+                today: [{ $match: { createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }, { $count: 'count' }],
+                thisWeek: [{ $match: { createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } }, { $count: 'count' }],
+                thisMonth: [{ $match: { createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }, { $count: 'count' }],
+                authenticated: [{ $match: { isAuthenticated: true } }, { $count: 'count' }],
+                anonymous: [{ $match: { isAuthenticated: false } }, { $count: 'count' }]
+            }}
+        ]);
+        
+        const userStats = await User.aggregate([
+            { $facet: {
+                total: [{ $count: 'count' }],
+                premium: [{ $match: { isPremium: true } }, { $count: 'count' }]
+            }}
+        ]);
+        
+        const dailyStats = await Visit.aggregate([
+            { $match: { createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } },
+            { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+        ]);
+        
+        const topUsers = await Visit.aggregate([
+            { $match: { userId: { $ne: null } } },
+            { $group: { _id: '$userId', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 },
+            { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+            { $unwind: '$user' },
+            { $project: { displayName: '$user.displayName', email: '$user.email', visitCount: '$count' } }
+        ]);
+        
+        const html = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - YorLuv Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: white; margin-bottom: 30px; text-align: center; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .stat-card h3 { color: #666; font-size: 14px; margin-bottom: 10px; }
+        .stat-card .value { font-size: 32px; font-weight: bold; color: #667eea; }
+        .section { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .section h2 { color: #333; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f5f5f5; font-weight: 600; color: #333; }
+        .chart-bar { background: #667eea; height: 30px; border-radius: 5px; margin: 5px 0; display: flex; align-items: center; padding: 0 10px; color: white; font-weight: bold; }
+        .back-btn { display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: white; color: #667eea; text-decoration: none; border-radius: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-btn">← Quay lại</a>
+        <h1>📊 Thống Kê Truy Cập - YorLuv Chat</h1>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Tổng lượt truy cập</h3>
+                <div class="value">${stats[0]?.total[0]?.count || 0}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Hôm nay</h3>
+                <div class="value">${stats[0]?.today[0]?.count || 0}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Tuần này</h3>
+                <div class="value">${stats[0]?.thisWeek[0]?.count || 0}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Tháng này</h3>
+                <div class="value">${stats[0]?.thisMonth[0]?.count || 0}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Đã đăng nhập</h3>
+                <div class="value">${stats[0]?.authenticated[0]?.count || 0}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Chưa đăng nhập</h3>
+                <div class="value">${stats[0]?.anonymous[0]?.count || 0}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Tổng người dùng</h3>
+                <div class="value">${userStats[0]?.total[0]?.count || 0}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Người dùng Premium</h3>
+                <div class="value">${userStats[0]?.premium[0]?.count || 0}</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📈 Thống kê 7 ngày gần nhất</h2>
+            ${dailyStats.map(day => `
+                <div style="margin: 10px 0;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span>${day._id}</span>
+                        <span><strong>${day.count}</strong> lượt</span>
+                    </div>
+                    <div class="chart-bar" style="width: ${(day.count / Math.max(...dailyStats.map(d => d.count), 1)) * 100}%;">
+                        ${day.count}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+        
+        <div class="section">
+            <h2>👥 Top 10 người dùng truy cập nhiều nhất</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Tên</th>
+                        <th>Email</th>
+                        <th>Số lượt truy cập</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${topUsers.map((user, index) => `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${user.displayName || 'N/A'}</td>
+                            <td>${user.email || 'N/A'}</td>
+                            <td><strong>${user.visitCount}</strong></td>
+                        </tr>
+                    `).join('')}
+                    ${topUsers.length === 0 ? '<tr><td colspan="4" style="text-align: center; color: #999;">Chưa có dữ liệu</td></tr>' : ''}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
+        `;
+        
+        res.send(html);
+    } catch (err) {
+        console.error('Lỗi khi load trang analytics:', err);
+        res.status(500).send('Lỗi khi tải trang analytics');
+    }
+});
+
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
+
 app.listen(port, () => { console.log(`🚀 Server đang chạy tại cổng ${port}`); });
 
 // =========================
