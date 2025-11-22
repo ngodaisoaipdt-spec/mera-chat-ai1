@@ -3374,12 +3374,12 @@ async function createElevenLabsVoice(textToSpeak, character) {
         // KHÔNG dùng turbo_v2 hay v1 vì sẽ đọc như tiếng Anh
         const modelId = 'eleven_multilingual_v2';
         
-        // Voice settings cho Nhu - truyền cảm và tự nhiên
-        // Style cao hơn để có cảm xúc, không chỉ đọc sách
+        // Voice settings cho Nhu - tự nhiên và có cảm xúc vừa phải
+        // Style vừa phải để tự nhiên nhưng không quá khô khan
         const voiceSettings = {
             stability: 0.5,         // Độ ổn định (0.5 = cân bằng)
-            similarity_boost: 0.9,  // Độ giống với voice gốc (cao = giống hơn)
-            style: 0.8,             // Style (0.8 = truyền cảm, có cảm xúc)
+            similarity_boost: 0.75, // Độ giống với voice gốc (0.75 = vừa phải)
+            style: 0.5,             // Style (0.5 = tự nhiên, có cảm xúc nhẹ)
             use_speaker_boost: true // Tăng cường chất lượng giọng nói
         };
         
