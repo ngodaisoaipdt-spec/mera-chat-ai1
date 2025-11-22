@@ -3369,8 +3369,9 @@ async function createElevenLabsVoice(textToSpeak, character) {
             return null;
         }
         
-        // Model v3 alpha (thế hệ thứ 3) - Expressive và multilingual, giống với web ElevenLabs
-        const modelId = 'eleven_v3';
+        // Model v2 (thế hệ thứ 2) - Multilingual, ổn định hơn v3 alpha
+        // V3 alpha có thể cần cấu hình đặc biệt, thử v2 trước
+        const modelId = 'eleven_multilingual_v2';
         
         // Voice settings cho Nhu - bình tĩnh và tự tin
         // Điều chỉnh để giống với bản demo trên web ElevenLabs
@@ -3421,15 +3422,25 @@ async function createElevenLabsVoice(textToSpeak, character) {
                 console.error("   ⚠️ Lỗi xác thực: API key không hợp lệ");
             } else if (status === 429) {
                 console.error("   ⚠️ Quota hết: Đã vượt quá giới hạn token");
+            } else if (status === 400) {
+                console.error("   ⚠️ Lỗi request: Có thể model không hỗ trợ hoặc thiếu parameters");
             } else if (error.response.data) {
                 try {
                     const errorText = Buffer.from(error.response.data).toString('utf-8');
                     const errorJson = JSON.parse(errorText);
-                    console.error("   Dữ liệu lỗi:", errorJson);
+                    console.error("   Dữ liệu lỗi:", JSON.stringify(errorJson, null, 2));
+                    if (errorJson.detail && errorJson.detail.message) {
+                        console.error("   Chi tiết lỗi:", errorJson.detail.message);
+                    }
                 } catch (e) {
-                    console.error("   Dữ liệu lỗi:", error.response.data);
+                    console.error("   Dữ liệu lỗi (raw):", error.response.data);
                 }
             }
+        } else if (error.request) {
+            console.error("   ⚠️ Không nhận được response từ ElevenLabs API");
+            console.error("   Có thể do timeout hoặc lỗi kết nối");
+        } else {
+            console.error("   ⚠️ Lỗi:", error.message);
         }
         return null;
     }
