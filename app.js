@@ -3385,14 +3385,35 @@ async function createElevenLabsVoice(textToSpeak, character) {
         // Model này cho phép kiểm soát cảm xúc và cách diễn đạt tốt hơn
         const modelId = 'eleven_v3';
         
-        // Voice settings cho Nhu - có cảm xúc, nhấn nhá, biểu cảm như người thật
-        // Điều chỉnh để giống với web ElevenLabs
-        const voiceSettings = {
-            stability: 0.5,         // Độ ổn định (0.5 = cân bằng, như trên web)
-            similarity_boost: 0.75, // Độ giống với voice gốc (vừa phải)
-            style: 0.6,             // Style (0.6 = có cảm xúc, biểu cảm)
-            use_speaker_boost: true // Tăng cường chất lượng giọng nói
-        };
+        // Voice settings - tùy chỉnh theo character để tự nhiên như người thật
+        // Mera (Nhu - nữ): nhẹ nhàng, có cảm xúc
+        // Trương Thắng (Triệu Dương - nam): tự tin, mạnh mẽ, tự nhiên như nói chuyện
+        let voiceSettings;
+        if (character === 'mera') {
+            // Voice settings cho Nhu (nữ) - nhẹ nhàng, có cảm xúc
+            voiceSettings = {
+                stability: 0.5,         // Độ ổn định (0.5 = cân bằng)
+                similarity_boost: 0.75, // Độ giống với voice gốc (vừa phải)
+                style: 0.6,             // Style (0.6 = có cảm xúc, biểu cảm)
+                use_speaker_boost: true // Tăng cường chất lượng giọng nói
+            };
+        } else if (character === 'thang') {
+            // Voice settings cho Triệu Dương (nam) - tự tin, mạnh mẽ, tự nhiên như nói chuyện
+            voiceSettings = {
+                stability: 0.5,         // Độ ổn định (0.5 = cân bằng)
+                similarity_boost: 0.75, // Độ giống với voice gốc (vừa phải)
+                style: 0.6,             // Style (0.6 = có cảm xúc, tự nhiên như nói chuyện)
+                use_speaker_boost: true // Tăng cường chất lượng giọng nói
+            };
+        } else {
+            // Default settings
+            voiceSettings = {
+                stability: 0.5,
+                similarity_boost: 0.75,
+                style: 0.6,
+                use_speaker_boost: true
+            };
+        }
         
         // Endpoint ElevenLabs API
         const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
