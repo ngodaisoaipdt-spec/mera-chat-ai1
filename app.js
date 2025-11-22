@@ -3369,17 +3369,16 @@ async function createElevenLabsVoice(textToSpeak, character) {
             return null;
         }
         
-        // Model turbo v2.5 - Voice "Nhu" đã được fine-tuned cho model này
-        // High Quality Base Model IDs: ['eleven_turbo_v2_5', 'eleven_v2_5_flash', 'eleven_flash_v2_5']
-        // Model này sẽ cho chất lượng tốt hơn với Vietnamese voice
-        const modelId = 'eleven_turbo_v2_5';
+        // Model v3 alpha - Giống với web ElevenLabs để có cảm xúc và biểu cảm
+        // Model này cho phép kiểm soát cảm xúc và cách diễn đạt tốt hơn
+        const modelId = 'eleven_v3';
         
-        // Voice settings cho Nhu - bình tĩnh và tự tin
-        // Cấu hình ban đầu khi giọng đọc tiếng Việt đã ổn
+        // Voice settings cho Nhu - có cảm xúc, nhấn nhá, biểu cảm như người thật
+        // Điều chỉnh để giống với web ElevenLabs
         const voiceSettings = {
-            stability: 0.4,         // Độ ổn định (thấp hơn = tự nhiên hơn)
-            similarity_boost: 0.9,  // Độ giống với voice gốc (cao hơn = giống hơn)
-            style: 0.0,             // Style (0.0 = mặc định, tự nhiên)
+            stability: 0.5,         // Độ ổn định (0.5 = cân bằng, như trên web)
+            similarity_boost: 0.75, // Độ giống với voice gốc (vừa phải)
+            style: 0.6,             // Style (0.6 = có cảm xúc, biểu cảm)
             use_speaker_boost: true // Tăng cường chất lượng giọng nói
         };
         
