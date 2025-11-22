@@ -2442,7 +2442,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); 
 } });
 
-// Endpoint tạo TTS on-demand - Sẽ tích hợp ElevenLabs sau
+// Endpoint tạo TTS on-demand với ElevenLabs
 app.post('/api/tts', ensureAuthenticated, async (req, res) => {
     try {
         const { text, character } = req.body;
@@ -2450,8 +2450,31 @@ app.post('/api/tts', ensureAuthenticated, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Thiếu text hoặc character' });
         }
         
-        // TTS sẽ tích hợp ElevenLabs sau
-        res.json({ success: false, message: 'TTS đang được nâng cấp, vui lòng thử lại sau', audio: null });
+        console.log(`🔊 Tạo TTS on-demand với ElevenLabs cho: "${text.substring(0, 50)}..." (character: ${character})`);
+        
+        // Tạo TTS với timeout tổng 40s
+        let audioDataUri = null;
+        try {
+            const ttsPromise = createElevenLabsVoice(text, character);
+            const timeoutPromise = new Promise((resolve) => {
+                setTimeout(() => {
+                    console.warn("⏱️ TTS timeout tổng 40s");
+                    resolve(null);
+                }, 40000);
+            });
+            audioDataUri = await Promise.race([ttsPromise, timeoutPromise]);
+        } catch (error) {
+            console.error("❌ Lỗi trong quá trình tạo TTS:", error.message);
+            audioDataUri = null;
+        }
+        
+        if (audioDataUri) {
+            console.log(`✅ TTS on-demand thành công!`);
+            res.json({ success: true, audio: audioDataUri });
+        } else {
+            console.error("❌ TTS on-demand thất bại");
+            res.status(500).json({ success: false, message: 'Không thể tạo TTS. Vui lòng kiểm tra API key và Voice ID.', audio: null });
+        }
     } catch (error) {
         console.error("❌ Lỗi trong /api/tts:", error);
         res.status(500).json({ success: false, message: 'Lỗi server', audio: null });
@@ -3324,7 +3347,93 @@ ${relationshipStage === 'lover'
     return masterPrompt;
 }
 
-// TTS functions đã được xóa - sẽ tích hợp ElevenLabs sau
+// ===== ELEVENLABS TTS FUNCTIONS =====
+async function createElevenLabsVoice(textToSpeak, character) {
+    try {
+        const trimmed = (textToSpeak || '').trim();
+        if (!trimmed) return null;
+        
+        // Lấy API key từ env
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) {
+            console.warn("⚠️ Chưa cấu hình ELEVENLABS_API_KEY, bỏ qua sinh giọng nói.");
+            return null;
+        }
+        
+        // Voice ID của Nhu (sẽ được cập nhật sau khi chạy script get_elevenlabs_voices.js)
+        // Tạm thời dùng placeholder, user sẽ cập nhật sau
+        const voiceId = process.env.ELEVENLABS_VOICE_ID_NHU || 'PLACEHOLDER_VOICE_ID';
+        
+        if (voiceId === 'PLACEHOLDER_VOICE_ID') {
+            console.warn("⚠️ Chưa cấu hình ELEVENLABS_VOICE_ID_NHU, vui lòng chạy script get_elevenlabs_voices.js để lấy Voice ID");
+            return null;
+        }
+        
+        // Model v2 (thế hệ thứ 2) - Multilingual
+        const modelId = 'eleven_multilingual_v2';
+        
+        // Voice settings cho Nhu - bình tĩnh và tự tin
+        const voiceSettings = {
+            stability: 0.5,        // Độ ổn định (0.0 - 1.0)
+            similarity_boost: 0.75, // Độ giống với voice gốc (0.0 - 1.0)
+            style: 0.0,            // Style (0.0 - 1.0)
+            use_speaker_boost: true // Tăng cường chất lượng giọng nói
+        };
+        
+        // Endpoint ElevenLabs API
+        const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+        
+        console.log(`🔊 Đang gọi ElevenLabs TTS với voice: ${voiceId}, model: ${modelId}`);
+        console.log(`   📝 Text: "${trimmed.substring(0, 100)}..."`);
+        
+        const response = await axios.post(ttsUrl, {
+            text: trimmed,
+            model_id: modelId,
+            voice_settings: voiceSettings
+        }, {
+            headers: {
+                'xi-api-key': apiKey,
+                'Content-Type': 'application/json',
+                'accept': 'audio/mpeg'
+            },
+            responseType: 'arraybuffer', // Nhận binary audio data
+            timeout: 30000 // 30s timeout
+        });
+        
+        if (response.status === 200 && response.data) {
+            // Convert binary audio data sang base64
+            const base64Audio = Buffer.from(response.data).toString('base64');
+            console.log(`✅ Tạo giọng nói ElevenLabs thành công! Audio size: ${response.data.length} bytes`);
+            return `data:audio/mpeg;base64,${base64Audio}`;
+        } else {
+            console.error("❌ Response không hợp lệ từ ElevenLabs");
+            return null;
+        }
+        
+    } catch (error) {
+        console.error("❌ Lỗi tạo giọng nói ElevenLabs:", error.message);
+        if (error.response) {
+            const status = error.response.status;
+            console.error("   Trạng thái:", status);
+            
+            if (status === 401) {
+                console.error("   ⚠️ Lỗi xác thực: API key không hợp lệ");
+            } else if (status === 429) {
+                console.error("   ⚠️ Quota hết: Đã vượt quá giới hạn token");
+            } else if (error.response.data) {
+                try {
+                    const errorText = Buffer.from(error.response.data).toString('utf-8');
+                    const errorJson = JSON.parse(errorText);
+                    console.error("   Dữ liệu lỗi:", errorJson);
+                } catch (e) {
+                    console.error("   Dữ liệu lỗi:", error.response.data);
+                }
+            }
+        }
+        return null;
+    }
+}
+// ===== END ELEVENLABS TTS FUNCTIONS =====
 
 async function sendMediaFile(memory, character, mediaType, topic, subject) {
     try {
