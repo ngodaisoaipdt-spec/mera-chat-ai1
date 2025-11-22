@@ -3369,17 +3369,17 @@ async function createElevenLabsVoice(textToSpeak, character) {
             return null;
         }
         
-        // Model turbo v2.5 - Voice "Nhu" đã được fine-tuned cho model này
-        // High Quality Base Model IDs: ['eleven_turbo_v2_5', 'eleven_v2_5_flash', 'eleven_flash_v2_5']
-        // Model này sẽ cho chất lượng tốt hơn với Vietnamese voice
-        const modelId = 'eleven_turbo_v2_5';
+        // Model multilingual v2 - BẮT BUỘC dùng cho tiếng Việt
+        // Model này là model duy nhất đọc tiếng Việt chuẩn như người thật
+        // KHÔNG dùng turbo_v2 hay v1 vì sẽ đọc như tiếng Anh
+        const modelId = 'eleven_multilingual_v2';
         
-        // Voice settings cho Nhu - bình tĩnh và tự tin
-        // Điều chỉnh để giống với bản demo trên web ElevenLabs
+        // Voice settings cho Nhu - truyền cảm và tự nhiên
+        // Style cao hơn để có cảm xúc, không chỉ đọc sách
         const voiceSettings = {
-            stability: 0.4,         // Độ ổn định (thấp hơn = tự nhiên hơn)
-            similarity_boost: 0.9,  // Độ giống với voice gốc (cao hơn = giống hơn)
-            style: 0.0,             // Style (0.0 = mặc định)
+            stability: 0.5,         // Độ ổn định (0.5 = cân bằng)
+            similarity_boost: 0.9,  // Độ giống với voice gốc (cao = giống hơn)
+            style: 0.8,             // Style (0.8 = truyền cảm, có cảm xúc)
             use_speaker_boost: true // Tăng cường chất lượng giọng nói
         };
         
@@ -3392,7 +3392,8 @@ async function createElevenLabsVoice(textToSpeak, character) {
         const response = await axios.post(ttsUrl, {
             text: trimmed,
             model_id: modelId,
-            voice_settings: voiceSettings
+            voice_settings: voiceSettings,
+            language: 'vi'  // Ép nhận diện là tiếng Việt để đọc chuẩn
         }, {
             headers: {
                 'xi-api-key': apiKey,
