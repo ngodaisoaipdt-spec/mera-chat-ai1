@@ -3373,10 +3373,11 @@ async function createElevenLabsVoice(textToSpeak, character) {
         const modelId = 'eleven_multilingual_v2';
         
         // Voice settings cho Nhu - bình tĩnh và tự tin
+        // Điều chỉnh để giống với bản demo trên web ElevenLabs
         const voiceSettings = {
-            stability: 0.5,        // Độ ổn định (0.0 - 1.0)
-            similarity_boost: 0.75, // Độ giống với voice gốc (0.0 - 1.0)
-            style: 0.0,            // Style (0.0 - 1.0)
+            stability: 0.4,         // Độ ổn định (thấp hơn = tự nhiên hơn)
+            similarity_boost: 0.9,  // Độ giống với voice gốc (cao hơn = giống hơn)
+            style: 0.0,             // Style (0.0 = mặc định)
             use_speaker_boost: true // Tăng cường chất lượng giọng nói
         };
         
