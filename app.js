@@ -3360,12 +3360,24 @@ async function createElevenLabsVoice(textToSpeak, character) {
             return null;
         }
         
-        // Voice ID của Nhu (sẽ được cập nhật sau khi chạy script get_elevenlabs_voices.js)
-        // Tạm thời dùng placeholder, user sẽ cập nhật sau
-        const voiceId = process.env.ELEVENLABS_VOICE_ID_NHU || 'PLACEHOLDER_VOICE_ID';
-        
-        if (voiceId === 'PLACEHOLDER_VOICE_ID') {
-            console.warn("⚠️ Chưa cấu hình ELEVENLABS_VOICE_ID_NHU, vui lòng chạy script get_elevenlabs_voices.js để lấy Voice ID");
+        // Chọn Voice ID dựa trên character
+        // Mera -> Nhu (ELEVENLABS_VOICE_ID_NHU)
+        // Trương Thắng -> Triệu Dương (ELEVENLABS_VOICE_ID_TRUONG_THANG)
+        let voiceId;
+        if (character === 'mera') {
+            voiceId = process.env.ELEVENLABS_VOICE_ID_NHU || 'PLACEHOLDER_VOICE_ID';
+            if (voiceId === 'PLACEHOLDER_VOICE_ID') {
+                console.warn("⚠️ Chưa cấu hình ELEVENLABS_VOICE_ID_NHU cho Mera, vui lòng thêm vào .env");
+                return null;
+            }
+        } else if (character === 'thang') {
+            voiceId = process.env.ELEVENLABS_VOICE_ID_TRUONG_THANG || 'PLACEHOLDER_VOICE_ID';
+            if (voiceId === 'PLACEHOLDER_VOICE_ID') {
+                console.warn("⚠️ Chưa cấu hình ELEVENLABS_VOICE_ID_TRUONG_THANG cho Trương Thắng, vui lòng thêm vào .env");
+                return null;
+            }
+        } else {
+            console.warn(`⚠️ Character không hợp lệ: ${character}`);
             return null;
         }
         
