@@ -1894,7 +1894,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         const isPremiumUser = req.user.isPremium; 
         let memory = await loadMemory(req.user._id, character); 
         memory.user_profile = memory.user_profile || {}; 
-        let userProfile = memory.user_profile;
+        let userProfile = memory.user_profile; 
         
         // Kiểm tra và reset daily message count (reset lúc 6h sáng)
         userProfile = checkAndResetDailyMessageCount(userProfile);
@@ -2044,7 +2044,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
         
         if (memory.history.length > 50) memory.history = memory.history.slice(memory.history.length - 50);
         await memory.save();
-        const audioDataUri = await createViettelVoice(fallback, character);
+        const audioDataUri = null; // TTS sẽ tích hợp ElevenLabs sau
         return res.json({
             displayReply: fallback,
             historyReply: fallback,
@@ -2442,7 +2442,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); 
 } });
 
-// Endpoint tạo TTS on-demand (chỉ khi user click nút play) để tiết kiệm quota
+// Endpoint tạo TTS on-demand - Sẽ tích hợp ElevenLabs sau
 app.post('/api/tts', ensureAuthenticated, async (req, res) => {
     try {
         const { text, character } = req.body;
@@ -2450,34 +2450,11 @@ app.post('/api/tts', ensureAuthenticated, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Thiếu text hoặc character' });
         }
         
-        console.log(`🔊 Tạo TTS on-demand cho: "${text.substring(0, 50)}..." (character: ${character})`);
-        
-        // Tạo TTS với timeout tổng 40s
-        let audioDataUri = null;
-        try {
-            const ttsPromise = createViettelVoice(text, character);
-            const timeoutPromise = new Promise((resolve) => {
-                setTimeout(() => {
-                    console.warn("⏱️ TTS timeout tổng 40s");
-                    resolve(null);
-                }, 40000);
-            });
-            audioDataUri = await Promise.race([ttsPromise, timeoutPromise]);
-        } catch (error) {
-            console.error("❌ Lỗi trong quá trình tạo TTS:", error.message);
-            audioDataUri = null;
-        }
-        
-        if (audioDataUri) {
-            console.log(`✅ TTS on-demand thành công!`);
-            res.json({ success: true, audio: audioDataUri });
-        } else {
-            console.error("❌ TTS on-demand thất bại");
-            res.status(500).json({ success: false, message: 'Không thể tạo TTS' });
-        }
+        // TTS sẽ tích hợp ElevenLabs sau
+        res.json({ success: false, message: 'TTS đang được nâng cấp, vui lòng thử lại sau', audio: null });
     } catch (error) {
         console.error("❌ Lỗi trong /api/tts:", error);
-        res.status(500).json({ success: false, message: 'Lỗi server' });
+        res.status(500).json({ success: false, message: 'Lỗi server', audio: null });
     }
 });
 
@@ -3347,281 +3324,7 @@ ${relationshipStage === 'lover'
     return masterPrompt;
 }
 
-// Hàm phát hiện cảm xúc và tính toán speed/pitch phù hợp
-function calculateVoiceParams(text, character) {
-    const lowerText = text.toLowerCase();
-    
-    // Tốc độ mặc định: chậm hơn để tự nhiên hơn (0.85 thay vì 1.0)
-    let speed = 0.85;
-    let pitch = 0; // Pitch mặc định (nếu API hỗ trợ)
-    
-    // Phát hiện cảm xúc vui, hào hứng
-    const happyKeywords = ['hihi', 'haha', 'hehe', '😊', '😄', '😁', 'vui', 'thích', 'yêu', '❤️', '💕', '🥰', '😘', '💋', '✨', '🌟'];
-    const excitedKeywords = ['wow', 'tuyệt', 'đã', 'thích quá', 'yêu quá', '🔥', '💯'];
-    
-    // Phát hiện cảm xúc buồn, nhẹ nhàng
-    const sadKeywords = ['buồn', 'nhớ', '😢', '😔', '💔', 'sao', 'tại sao'];
-    const gentleKeywords = ['nhẹ nhàng', 'dịu dàng', 'từ tốn', 'thì thầm', 'bên tai'];
-    
-    // Phát hiện cảm xúc tình cảm, ngọt ngào
-    const romanticKeywords = ['yêu', 'thương', 'nhớ', 'vợ', 'chồng', 'anh', 'em', '❤️', '💕', '🥰', '😘', '💋'];
-    
-    // Phát hiện cảm xúc mạnh mẽ, quyết đoán
-    const strongKeywords = ['chắc chắn', 'nhất định', 'phải', 'sẽ', '🔥', '💯', 'mạnh mẽ'];
-    
-    // Đếm số từ khóa xuất hiện
-    let happyCount = happyKeywords.filter(kw => lowerText.includes(kw)).length;
-    let excitedCount = excitedKeywords.filter(kw => lowerText.includes(kw)).length;
-    let sadCount = sadKeywords.filter(kw => lowerText.includes(kw)).length;
-    let gentleCount = gentleKeywords.filter(kw => lowerText.includes(kw)).length;
-    let romanticCount = romanticKeywords.filter(kw => lowerText.includes(kw)).length;
-    let strongCount = strongKeywords.filter(kw => lowerText.includes(kw)).length;
-    
-    // Điều chỉnh speed dựa trên cảm xúc
-    if (happyCount > 0 || excitedCount > 0) {
-        // Vui, hào hứng: nhanh hơn một chút nhưng vẫn tự nhiên
-        speed = 0.90;
-    } else if (sadCount > 0 || gentleCount > 0) {
-        // Buồn, nhẹ nhàng: chậm hơn, từ tốn
-        speed = 0.75;
-    } else if (romanticCount > 2) {
-        // Tình cảm, ngọt ngào: chậm, nhẹ nhàng
-        speed = 0.80;
-    } else if (strongCount > 0) {
-        // Mạnh mẽ, quyết đoán: vừa phải
-        speed = 0.88;
-    }
-    
-    // Đảm bảo speed trong khoảng hợp lý (0.7 - 1.0)
-    speed = Math.max(0.70, Math.min(1.0, speed));
-    
-    return { speed, pitch };
-}
-
-// Hàm normalize text để TTS đọc tự nhiên hơn (xử lý các từ kéo dài và thêm ngắt nghỉ)
-function normalizeTextForTTS(text) {
-    if (!text) return text;
-    
-    let normalized = text;
-    
-    // Danh sách từ có nghĩa cần giữ nguyên (như "hihi", "hehe")
-    const meaningfulWords = ['hihi', 'hehe', 'haha', 'hoho'];
-    
-    // Bước 1: Xử lý các từ kéo dài (nhaaa~, áaa) - thay bằng 1 chữ + dấu ngã
-    normalized = normalized.replace(/([a-zàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ])\1{2,}(~?)/gi, (match, char, tilde) => {
-        const lowerMatch = match.toLowerCase();
-        if (meaningfulWords.some(word => lowerMatch.includes(word))) {
-            return match; // Giữ nguyên
-        }
-        return char + '~';
-    });
-    
-    // Xử lý trường hợp đặc biệt: "nhaaa~"
-    normalized = normalized.replace(/nha{3,}~/gi, 'nha~');
-    
-    // Bước 2: Thêm ngắt nghỉ tự nhiên để TTS đọc có ngữ điệu
-    // Thêm dấu phẩy sau các từ kéo dài (nếu chưa có dấu câu)
-    normalized = normalized.replace(/([a-zàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]~)([^,\.!?~\s])/gi, '$1, $2');
-    
-    // Thêm dấu phẩy sau emoji phổ biến (để tạo pause tự nhiên)
-    // Match các emoji phổ biến được sử dụng trong chat
-    const commonEmojis = ['😊', '😄', '😁', '🥰', '😘', '💋', '❤️', '💕', '💖', '✨', '🌟', '🔥', '💯', '😏', '🙈', '😟', '😢', '😔', '💔'];
-    commonEmojis.forEach(emoji => {
-        normalized = normalized.replace(new RegExp(`(${emoji.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})([^,\.!?~\\s])`, 'g'), '$1, $2');
-    });
-    
-    // Thêm dấu phẩy trước các từ cảm thán phổ biến (nếu chưa có)
-    normalized = normalized.replace(/([^,\.!?~\s])(\s+)(nhaaa|nha~|áaa|á~|àaa|à~)([^,\.!?~])/gi, '$1,$2$3, $4');
-    
-    // Thêm khoảng trắng và dấu phẩy sau "hihi~", "hehe~" để tạo ngắt nghỉ
-    normalized = normalized.replace(/(hihi~|hehe~|haha~)([^,\.!?~\s])/gi, '$1, $2');
-    
-    // Bước 3: Đảm bảo có khoảng trắng sau dấu phẩy
-    normalized = normalized.replace(/,(?!\s)/g, ', ');
-    
-    // Bước 4: Thêm dấu chấm hoặc dấu phẩy ở cuối câu nếu thiếu (để TTS dừng lại)
-    // Nhưng không thêm nếu đã có dấu câu
-    if (!/[.!?]$/.test(normalized.trim())) {
-        normalized = normalized.trim() + '.';
-    }
-    
-    return normalized;
-}
-
-async function createViettelVoice(textToSpeak, character) {
-    try {
-        const trimmed = (textToSpeak || '').trim();
-        if (!trimmed) return null;
-        
-        // Lấy token từ env (có thể là VIETTEL_API_KEY hoặc VIETTEL_AI_TOKEN)
-        const token = process.env.VIETTEL_AI_TOKEN || process.env.VIETTEL_API_KEY;
-        if (!token) {
-            console.warn("⚠️ Chưa cấu hình token Viettel AI, bỏ qua sinh giọng nói.");
-            return null;
-        }
-        
-        // Lấy voice từ character config
-        const voice = characters[character]?.voice || 'hn-phuongtrang';
-        
-        // Tính toán speed và pitch dựa trên nội dung và character
-        const voiceParams = calculateVoiceParams(trimmed, character);
-        
-        // Normalize text để TTS đọc tự nhiên hơn (xử lý các từ kéo dài)
-        const normalizedText = normalizeTextForTTS(trimmed);
-        
-        // Endpoint đúng theo tài liệu Viettel AI
-        const ttsUrl = process.env.VIETTEL_AI_TTS_URL || 'https://viettelai.vn/tts/speech_synthesis';
-        
-        // Payload theo đúng format của Viettel AI (token trong body, không phải header!)
-        const payload = {
-            text: normalizedText, // Dùng normalized text cho TTS
-            voice: voice,
-            speed: voiceParams.speed, // Tốc độ điều chỉnh động
-            tts_return_option: 3, // 3 = mp3, 2 = wav
-            token: token, // Token gửi trong body, không phải header!
-            without_filter: false
-        };
-        
-        console.log(`🔊 Đang gọi Viettel AI TTS với voice: ${voice}, speed: ${voiceParams.speed}`);
-        if (normalizedText !== trimmed) {
-            console.log(`   📝 Text gốc: "${trimmed.substring(0, 150)}"`);
-            console.log(`   ✨ Text normalized: "${normalizedText.substring(0, 150)}"`);
-        } else {
-            console.log(`   📝 Text (không thay đổi): "${trimmed.substring(0, 150)}"`);
-        }
-        
-        // Hàm gọi API với timeout - dùng 8s để đảm bảo thành công, retry nếu cần
-        const makeRequest = (timeoutMs = 8000) => axios.post(ttsUrl, payload, {
-            headers: {
-                'Content-Type': 'application/json',
-                'accept': '*/*'
-            },
-            responseType: 'arraybuffer', // Nhận binary data
-            timeout: timeoutMs
-        });
-        
-        // Retry logic: thử tối đa 3 lần với timeout ngắn để phản hồi nhanh
-        let response;
-        let lastError;
-        const maxRetries = 3;
-        const timeouts = [8000, 12000, 15000]; // Tăng dần: 8s, 12s, 15s - đảm bảo thành công
-        
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-                console.log(`🔄 TTS attempt ${attempt + 1}/${maxRetries} với timeout ${timeouts[attempt]}ms...`);
-                response = await makeRequest(timeouts[attempt]);
-                if (response && response.status === 200) {
-                    if (attempt > 0) {
-                        console.log(`✅ TTS thành công sau ${attempt + 1} lần thử!`);
-                    }
-                    break; // Thành công, thoát vòng lặp
-                }
-            } catch (error) {
-                lastError = error;
-                const isTimeoutOrNetwork = error.code === 'ECONNABORTED' || 
-                                         error.message.includes('timeout') || 
-                                         (!error.response && error.request);
-                
-                // Nếu là lỗi HTTP (403, 500, etc.) - không retry, throw ngay
-                if (error.response && error.response.status) {
-                    throw error;
-                }
-                
-                // Nếu là timeout/network và chưa hết số lần thử
-                if (isTimeoutOrNetwork && attempt < maxRetries - 1) {
-                    console.warn(`⚠️ TTS attempt ${attempt + 1} thất bại (${error.message}), thử lại...`);
-                    // Đợi 1s trước khi retry
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    continue;
-                } else if (attempt === maxRetries - 1) {
-                    // Đã hết số lần thử
-                    console.error(`❌ TTS thất bại sau ${maxRetries} lần thử:`, error.message);
-                    throw error;
-                }
-            }
-        }
-        
-        // Nếu không có response sau tất cả các lần thử
-        if (!response) {
-            throw lastError || new Error('TTS không trả về response sau nhiều lần thử');
-        }
-        
-        // Kiểm tra response status
-        if (response.status === 200 && response.data) {
-            // Convert binary audio data sang base64
-            const base64Audio = Buffer.from(response.data).toString('base64');
-            console.log(`✅ Tạo giọng nói thành công! Audio size: ${response.data.length} bytes`);
-            return `data:audio/mp3;base64,${base64Audio}`;
-        } else {
-            // Nếu response không phải audio (có thể là JSON error)
-            try {
-                const errorText = Buffer.from(response.data).toString('utf-8');
-                const errorJson = JSON.parse(errorText);
-                console.error("❌ Lỗi từ Viettel AI:", errorJson);
-                return null;
-            } catch (e) {
-                console.error("❌ Response không hợp lệ từ Viettel AI");
-                return null;
-            }
-        }
-    } catch (error) {
-        // Xử lý timeout riêng
-        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-            console.error("⏱️ TTS timeout: API không phản hồi kịp thời gian");
-            console.error("   💡 Đã thử retry nhưng vẫn timeout, bỏ qua TTS để trả response nhanh");
-            return null;
-        }
-        
-        console.error("❌ Lỗi tạo giọng nói Viettel:", error.message);
-        if (error.response) {
-            const status = error.response.status;
-            console.error("   Trạng thái:", status);
-            
-            // Xử lý lỗi 403 (quota hết)
-            if (status === 403) {
-                try {
-                    let errorMessage = '';
-                    if (error.response.data) {
-                        if (typeof error.response.data === 'object') {
-                            errorMessage = JSON.stringify(error.response.data);
-                        } else {
-                            const errorText = Buffer.from(error.response.data).toString('utf-8');
-                            errorMessage = errorText;
-                            // Thử parse JSON nếu có
-                            try {
-                                const errorJson = JSON.parse(errorText);
-                                if (errorJson.vi_message) {
-                                    console.error("   ⚠️ LỖI QUOTA: " + errorJson.vi_message);
-                                    console.error("   💡 Giải pháp: Nâng cấp gói Viettel AI để tiếp tục sử dụng TTS");
-                                } else if (errorJson.en_message) {
-                                    console.error("   ⚠️ QUOTA ERROR: " + errorJson.en_message);
-                                }
-                            } catch (e) {
-                                console.error("   Dữ liệu lỗi:", errorText);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error("   Lỗi 403: Hạn mức Viettel AI đã hết");
-                }
-            } else {
-                // Xử lý các lỗi khác
-            if (error.response.data && typeof error.response.data === 'object') {
-                    console.error("   Dữ liệu lỗi:", JSON.stringify(error.response.data));
-            } else if (error.response.data) {
-                try {
-                    const errorText = Buffer.from(error.response.data).toString('utf-8');
-                        console.error("   Dữ liệu lỗi:", errorText);
-                } catch (e) {
-                        console.error("   Dữ liệu lỗi (binary):", error.response.data.length, "bytes");
-                }
-            }
-        }
-        }
-        // Trả về null để tiếp tục hoạt động bình thường (không có âm thanh)
-        return null;
-    }
-}
+// TTS functions đã được xóa - sẽ tích hợp ElevenLabs sau
 
 async function sendMediaFile(memory, character, mediaType, topic, subject) {
     try {
