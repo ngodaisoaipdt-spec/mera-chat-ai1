@@ -3369,9 +3369,10 @@ async function createElevenLabsVoice(textToSpeak, character) {
             return null;
         }
         
-        // Model v2 (thế hệ thứ 2) - Multilingual, ổn định hơn v3 alpha
-        // V3 alpha có thể cần cấu hình đặc biệt, thử v2 trước
-        const modelId = 'eleven_multilingual_v2';
+        // Model turbo v2.5 - Voice "Nhu" đã được fine-tuned cho model này
+        // High Quality Base Model IDs: ['eleven_turbo_v2_5', 'eleven_v2_5_flash', 'eleven_flash_v2_5']
+        // Model này sẽ cho chất lượng tốt hơn với Vietnamese voice
+        const modelId = 'eleven_turbo_v2_5';
         
         // Voice settings cho Nhu - bình tĩnh và tự tin
         // Điều chỉnh để giống với bản demo trên web ElevenLabs
