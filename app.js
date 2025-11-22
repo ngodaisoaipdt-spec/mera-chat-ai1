@@ -2419,17 +2419,73 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     await memory.save(); 
     
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
-    const audioDataUri = null; // TTS on-demand
+    
+    // Logic để quyết định khi nào gửi voice message tự động
+    // 1. Khi user gửi voice message (có thể detect qua một flag trong request)
+    // 2. Trong một số tình huống đặc biệt (ví dụ: khi user buồn, AI có thể gửi voice message để an ủi)
+    // 3. Trong giai đoạn lover, có thể gửi voice message thường xuyên hơn
+    let shouldSendVoiceMessage = false;
+    let voiceMessageAudio = null;
+    
+    // Kiểm tra nếu user gửi voice message (có thể thêm flag trong request sau)
+    const userSentVoiceMessage = req.body.isVoiceMessage === true;
+    
+    // Tình huống đặc biệt: user buồn → gửi voice message để an ủi
+    // Kiểm tra lại userIsSad (biến đã được khai báo ở trên nhưng trong scope khác)
+    const voiceSadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met'];
+    const voiceUserIsSad = voiceSadKeywords.some(k => message.toLowerCase().includes(k));
+    
+    // Tình huống đặc biệt: trong giai đoạn lover, có thể gửi voice message thường xuyên hơn
+    const isLoverStage = currentRelationshipStage === 'lover';
+    
+    // Quyết định gửi voice message nếu:
+    // - User gửi voice message (30% chance)
+    // - User buồn và ở friend/lover stage (50% chance)
+    // - Ở lover stage và message ngắn (< 100 ký tự) (20% chance)
+    if (userSentVoiceMessage && Math.random() < 0.3) {
+        shouldSendVoiceMessage = true;
+    } else if (voiceUserIsSad && (relationshipStage === 'friend' || relationshipStage === 'lover') && Math.random() < 0.5) {
+        shouldSendVoiceMessage = true;
+    } else if (isLoverStage && rawReply.length < 100 && Math.random() < 0.2) {
+        shouldSendVoiceMessage = true;
+    }
+    
+    // Tạo voice message nếu cần
+    if (shouldSendVoiceMessage) {
+        try {
+            console.log(`🎤 Tạo voice message tự động cho: "${rawReply.substring(0, 50)}..."`);
+            const voicePromise = createElevenLabsVoice(rawReply, character);
+            const timeoutPromise = new Promise((resolve) => {
+                setTimeout(() => {
+                    console.warn("⏱️ Voice message timeout 30s");
+                    resolve(null);
+                }, 30000);
+            });
+            voiceMessageAudio = await Promise.race([voicePromise, timeoutPromise]);
+            
+            if (voiceMessageAudio) {
+                console.log(`✅ Đã tạo voice message tự động thành công!`);
+            } else {
+                console.warn(`⚠️ Không thể tạo voice message tự động (timeout hoặc lỗi)`);
+            }
+        } catch (error) {
+            console.error("❌ Lỗi khi tạo voice message tự động:", error.message);
+            voiceMessageAudio = null;
+        }
+    }
+    
+    const audioDataUri = null; // TTS on-demand (cho nút speaker)
     
     // Trả về relationship_stage hiện tại
     const currentRelationshipStage = userProfile.relationship_stage || 'stranger';
     
-    console.log(`✅ Response: relationship_stage=${currentRelationshipStage}, message_count=${userProfile.message_count}`);
+    console.log(`✅ Response: relationship_stage=${currentRelationshipStage}, message_count=${userProfile.message_count}, voiceMessage=${!!voiceMessageAudio}`);
     
     res.json({ 
         displayReply, 
         historyReply: rawReply, 
-        audio: audioDataUri, 
+        audio: audioDataUri, // TTS on-demand cho nút speaker
+        voiceMessage: voiceMessageAudio, // Voice message tự động (nếu có)
         mediaUrl, 
         mediaType,
         daily_message_count: userProfile.daily_message_count || 0, 
@@ -2478,6 +2534,44 @@ app.post('/api/tts', ensureAuthenticated, async (req, res) => {
     } catch (error) {
         console.error("❌ Lỗi trong /api/tts:", error);
         res.status(500).json({ success: false, message: 'Lỗi server', audio: null });
+    }
+});
+
+// Endpoint xử lý voice message từ user
+app.post('/api/voice-message', ensureAuthenticated, async (req, res) => {
+    try {
+        const { audio, character, audioFormat } = req.body;
+        
+        if (!audio || !character) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Thiếu audio hoặc character' 
+            });
+        }
+        
+        console.log(`🎤 Nhận voice message từ user (character: ${character}, format: ${audioFormat || 'webm'})`);
+        
+        // TODO: Thêm Speech-to-Text API để chuyển đổi audio thành text
+        // Tạm thời, trả về message yêu cầu user gửi text
+        // Hoặc có thể dùng Google Cloud Speech-to-Text, Azure Speech, hoặc Whisper API
+        
+        // Tạm thời: Trả về message thông báo
+        // Sau này sẽ thêm speech-to-text và xử lý như endpoint /chat
+        
+        return res.json({
+            success: true,
+            displayReply: "Xin lỗi, tính năng chuyển đổi giọng nói thành văn bản đang được phát triển. Vui lòng gửi tin nhắn bằng văn bản trong lúc này nhé! 💬",
+            mediaUrl: null,
+            mediaType: null,
+            relationship_stage: null
+        });
+        
+    } catch (error) {
+        console.error("❌ Lỗi trong /api/voice-message:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Lỗi server khi xử lý voice message' 
+        });
     }
 });
 

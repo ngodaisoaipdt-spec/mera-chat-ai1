@@ -669,13 +669,178 @@ function initializeChatApp() {
             }
         }; 
         
-        // Khi click vào nút mic
-        DOMElements.micBtnText.addEventListener('click', () => { 
+        // Voice recording state
+        let isRecording = false;
+        let recordingStartTime = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        
+        // Hàm bắt đầu ghi âm
+        async function startVoiceRecording() {
+            if (isRecording || isProcessing) return;
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await sendVoiceMessage(audioBlob);
+                    
+                    // Stop all tracks
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                recordingStartTime = Date.now();
+                
+                // Update UI
+                if (DOMElements.micBtnText) {
+                    DOMElements.micBtnText.classList.add('recording');
+                    DOMElements.micBtnText.title = 'Đang ghi âm... (Thả ra để gửi)';
+                }
+                
+                console.log('🎤 Bắt đầu ghi âm voice message...');
+            } catch (error) {
+                console.error('❌ Lỗi khi bắt đầu ghi âm:', error);
+                alert('Không thể truy cập microphone. Vui lòng kiểm tra quyền truy cập.');
+            }
+        }
+        
+        // Hàm dừng ghi âm và gửi
+        function stopVoiceRecording() {
+            if (!isRecording || !mediaRecorder) return;
+            
+            mediaRecorder.stop();
+            isRecording = false;
+            
+            // Update UI
+            if (DOMElements.micBtnText) {
+                DOMElements.micBtnText.classList.remove('recording');
+                DOMElements.micBtnText.title = 'Nhắn bằng giọng nói';
+            }
+            
+            const duration = Date.now() - recordingStartTime;
+            console.log(`🎤 Đã ghi âm ${(duration / 1000).toFixed(1)}s`);
+        }
+        
+        // Hàm gửi voice message
+        async function sendVoiceMessage(audioBlob) {
+            if (audioBlob.size === 0) {
+                console.warn('⚠️ Voice message rỗng, không gửi');
+                return;
+            }
+            
+            // Convert blob to base64
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64Audio = reader.result.split(',')[1];
+                
+                try {
+                    setProcessing(true);
+                    
+                    // Hiển thị voice message trong chat
+                    const voiceMessageId = addVoiceMessage(DOMElements.chatBox, "Bạn", base64Audio, audioBlob);
+                    
+                    // Hiển thị loading message
+                    const loadingId = addMessage(DOMElements.chatBox, currentCharacter, "💭 Đang nghe voice message...", null, true);
+                    
+                    // Gửi lên server để AI xử lý (dùng JSON với base64)
+                    const response = await fetch('/api/voice-message', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+                        },
+                        body: JSON.stringify({
+                            audio: base64Audio,
+                            character: currentCharacter,
+                            audioFormat: 'webm'
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Lỗi khi gửi voice message');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Xóa loading message
+                    if (loadingId) removeMessage(loadingId);
+                    
+                    // Hiển thị response từ AI
+                    if (data.displayReply) {
+                        const messages = data.displayReply.split('<NEXT_MESSAGE>');
+                        for (let i = 0; i < messages.length; i++) {
+                            const msg = messages[i].trim();
+                            if (msg) {
+                                addMessage(DOMElements.chatBox, currentCharacter, msg, null, false, null, 
+                                    (i === messages.length - 1) ? data.mediaUrl : null, 
+                                    (i === messages.length - 1) ? data.mediaType : null);
+                                if (i < messages.length - 1) {
+                                    await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30));
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ Lỗi gửi voice message:', error);
+                    alert('Không thể gửi voice message. Vui lòng thử lại.');
+                } finally {
+                    setProcessing(false);
+                }
+            };
+            reader.readAsDataURL(audioBlob);
+        }
+        
+        // Hold to record - Desktop (mousedown/mouseup)
+        DOMElements.micBtnText.addEventListener('mousedown', (e) => {
+            e.preventDefault();
             if (!isProcessing) {
+                startVoiceRecording();
+            }
+        });
+        
+        DOMElements.micBtnText.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            stopVoiceRecording();
+        });
+        
+        DOMElements.micBtnText.addEventListener('mouseleave', (e) => {
+            e.preventDefault();
+            stopVoiceRecording();
+        });
+        
+        // Hold to record - Mobile (touchstart/touchend)
+        DOMElements.micBtnText.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!isProcessing) {
+                startVoiceRecording();
+            }
+        });
+        
+        DOMElements.micBtnText.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopVoiceRecording();
+        });
+        
+        // Fallback: Click để dùng Speech Recognition (như cũ)
+        // Giữ lại để tương thích với các trình duyệt không hỗ trợ MediaRecorder
+        DOMElements.micBtnText.addEventListener('click', (e) => {
+            // Chỉ dùng Speech Recognition nếu không có MediaRecorder
+            if (!MediaRecorder && SpeechRecognition && !isProcessing) {
                 try { 
                     recognition.start(); 
-                } catch (e) {
-                    console.error("Lỗi khởi động recognition:", e);
+                } catch (err) {
+                    console.error("Lỗi khởi động recognition:", err);
                 }
             }
         }); 
@@ -902,10 +1067,21 @@ async function sendMessageToServer(messageText, loadingId) {
         
         removeMessage(loadingId);
         const messages = data.displayReply.split('<NEXT_MESSAGE>').filter(m => m.trim().length > 0);
+        
+        // Kiểm tra nếu có voice message từ AI
+        if (data.voiceMessage) {
+            // Hiển thị voice message từ AI
+            console.log('🎤 Nhận voice message từ AI');
+            addVoiceMessage(DOMElements.chatBox, currentCharacter, data.voiceMessage);
+        }
+        
+        // Hiển thị text messages như bình thường
         for (let i = 0; i < messages.length; i++) {
             const msg = messages[i].trim();
-            addMessage(DOMElements.chatBox, currentCharacter, msg, (i === 0) ? data.audio : null, false, null, (i === messages.length - 1) ? data.mediaUrl : null, (i === messages.length - 1) ? data.mediaType : null);
-            if (i < messages.length - 1) await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30));
+            if (msg) {
+                addMessage(DOMElements.chatBox, currentCharacter, msg, (i === 0) ? data.audio : null, false, null, (i === messages.length - 1) ? data.mediaUrl : null, (i === messages.length - 1) ? data.mediaType : null);
+                if (i < messages.length - 1) await new Promise(resolve => setTimeout(resolve, 800 + msg.length * 30));
+            }
         }
     } catch (error) {
         console.error("Lỗi gửi tin nhắn:", error);
@@ -1003,28 +1179,28 @@ async function toggleAudio(messageId) {
             
             // Tạo audio và phát
             const audio = new Audio(data.audio);
-            activeAudios[messageId] = audio;
-            
-            // Xử lý khi audio kết thúc
-            audio.onended = () => {
-                btn.classList.remove('playing');
+        activeAudios[messageId] = audio;
+        
+        // Xử lý khi audio kết thúc
+        audio.onended = () => {
+            btn.classList.remove('playing');
                 btn.title = 'Nghe';
                 btn.disabled = false;
-                delete activeAudios[messageId];
-            };
-            
-            // Xử lý lỗi
-            audio.onerror = () => {
-                btn.classList.remove('playing');
+            delete activeAudios[messageId];
+        };
+        
+        // Xử lý lỗi
+        audio.onerror = () => {
+            btn.classList.remove('playing');
                 btn.title = 'Nghe';
                 btn.disabled = false;
-                delete activeAudios[messageId];
+            delete activeAudios[messageId];
                 console.error('Lỗi phát audio');
-            };
-            
-            audio.play();
-            btn.classList.add('playing');
-            btn.title = 'Dừng';
+        };
+        
+        audio.play();
+        btn.classList.add('playing');
+        btn.title = 'Dừng';
             btn.disabled = false;
         } catch (error) {
             console.error('Lỗi tạo TTS:', error);
@@ -1083,6 +1259,112 @@ function addMessage(chatBox, sender, text, audioBase64 = null, isLoading = false
     
     return id; 
 }
+// Hàm thêm voice message vào chat
+function addVoiceMessage(chatBox, sender, audioBase64, audioBlob = null) {
+    const id = `voice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const msgClass = sender === "Bạn" ? "user" : "mera";
+    
+    // Tạo audio URL từ base64 hoặc blob
+    let audioUrl;
+    if (audioBase64) {
+        audioUrl = `data:audio/webm;base64,${audioBase64}`;
+    } else if (audioBlob) {
+        audioUrl = URL.createObjectURL(audioBlob);
+    } else {
+        console.error('❌ Không có audio data để hiển thị voice message');
+        return null;
+    }
+    
+    // Tính duration nếu có audioBlob
+    let duration = '0:00';
+    if (audioBlob) {
+        const audio = new Audio();
+        audio.src = audioUrl;
+        audio.onloadedmetadata = () => {
+            const dur = audio.duration;
+            const minutes = Math.floor(dur / 60);
+            const seconds = Math.floor(dur % 60);
+            const durationEl = document.querySelector(`#${id} .voice-duration`);
+            if (durationEl) {
+                durationEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+        };
+    }
+    
+    const html = `
+        <div id="${id}" class="message ${msgClass} voice-message">
+            <div class="voice-message-container">
+                <button class="voice-play-btn" onclick='playVoiceMessage("${id}")' title="Phát">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                </button>
+                <div class="voice-waveform">
+                    <div class="voice-waveform-bar"></div>
+                    <div class="voice-waveform-bar"></div>
+                    <div class="voice-waveform-bar"></div>
+                    <div class="voice-waveform-bar"></div>
+                    <div class="voice-waveform-bar"></div>
+                </div>
+                <span class="voice-duration">${duration}</span>
+            </div>
+            <audio id="voice-audio-${id}" src="${audioUrl}" preload="metadata"></audio>
+        </div>
+    `;
+    
+    chatBox.insertAdjacentHTML('beforeend', html);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    
+    return id;
+}
+
+// Hàm phát voice message
+function playVoiceMessage(messageId) {
+    const audio = document.getElementById(`voice-audio-${messageId}`);
+    const btn = document.querySelector(`#${messageId} .voice-play-btn`);
+    
+    if (!audio || !btn) return;
+    
+    if (audio.paused) {
+        // Phát audio
+        audio.play();
+        btn.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+            </svg>
+        `;
+        btn.title = "Tạm dừng";
+        btn.classList.add('playing');
+        
+        // Animate waveform
+        const waveform = document.querySelector(`#${messageId} .voice-waveform`);
+        if (waveform) waveform.classList.add('playing');
+        
+        audio.onended = () => {
+            btn.innerHTML = `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+            `;
+            btn.title = "Phát";
+            btn.classList.remove('playing');
+            if (waveform) waveform.classList.remove('playing');
+        };
+    } else {
+        // Tạm dừng
+        audio.pause();
+        btn.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+            </svg>
+        `;
+        btn.title = "Phát";
+        btn.classList.remove('playing');
+        const waveform = document.querySelector(`#${messageId} .voice-waveform`);
+        if (waveform) waveform.classList.remove('playing');
+    }
+}
+
 function removeMessage(id) { 
     // Dừng audio nếu đang phát
     if (activeAudios[id]) {
@@ -1090,6 +1372,14 @@ function removeMessage(id) {
         activeAudios[id].currentTime = 0;
         delete activeAudios[id];
     }
+    
+    // Dừng voice message nếu đang phát
+    const voiceAudio = document.getElementById(`voice-audio-${id}`);
+    if (voiceAudio) {
+        voiceAudio.pause();
+        voiceAudio.currentTime = 0;
+    }
+    
     const el = document.getElementById(id);
     if (el) el.remove();
 }
