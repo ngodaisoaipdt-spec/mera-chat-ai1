@@ -3369,8 +3369,8 @@ async function createElevenLabsVoice(textToSpeak, character) {
             return null;
         }
         
-        // Model v2 (thế hệ thứ 2) - Multilingual
-        const modelId = 'eleven_multilingual_v2';
+        // Model v3 alpha (thế hệ thứ 3) - Expressive và multilingual, giống với web ElevenLabs
+        const modelId = 'eleven_v3';
         
         // Voice settings cho Nhu - bình tĩnh và tự tin
         // Điều chỉnh để giống với bản demo trên web ElevenLabs
