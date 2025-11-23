@@ -203,19 +203,34 @@ async function updateChatBackground(character) {
         console.warn('Không thể preload ảnh nền:', error);
     }
     
-    // Cập nhật CSS variables
+    // Cập nhật CSS variables - QUAN TRỌNG: phải set overlay = 0 để không che background
     document.documentElement.style.setProperty('--chat-background-image', `url('${imageUrl}')`);
     document.documentElement.style.setProperty('--chat-background-size', 'cover');
-    document.documentElement.style.setProperty('--chat-background-overlay', 'rgba(255, 255, 255, 0)');
+    document.documentElement.style.setProperty('--chat-background-overlay', 'rgba(255, 255, 255, 0)', 'important');
     
-    // Set trực tiếp vào element với URL mới (có timestamp)
-    chatBox.style.backgroundImage = `url('${imageUrl}')`;
-    chatBox.style.backgroundSize = 'cover';
-    chatBox.style.backgroundPosition = 'center';
-    chatBox.style.backgroundRepeat = 'no-repeat';
+    // Set trực tiếp vào element với URL mới (có timestamp) - dùng !important để override CSS
+    chatBox.style.setProperty('background-image', `url('${imageUrl}')`, 'important');
+    chatBox.style.setProperty('background-size', 'cover', 'important');
+    chatBox.style.setProperty('background-position', 'center', 'important');
+    chatBox.style.setProperty('background-repeat', 'no-repeat', 'important');
     // Trên mobile, background-attachment: fixed có thể không hoạt động tốt
     const isMobile = window.innerWidth <= 480;
-    chatBox.style.backgroundAttachment = isMobile ? 'scroll' : 'fixed';
+    chatBox.style.setProperty('background-attachment', isMobile ? 'scroll' : 'fixed', 'important');
+    
+    // Force clear overlay của ::before bằng cách set trực tiếp
+    const chatBoxBefore = window.getComputedStyle(chatBox, '::before');
+    // Tạo một style element để override ::before nếu cần
+    let styleOverride = document.getElementById('chat-background-override');
+    if (!styleOverride) {
+        styleOverride = document.createElement('style');
+        styleOverride.id = 'chat-background-override';
+        document.head.appendChild(styleOverride);
+    }
+    styleOverride.textContent = `
+        #chatBox::before {
+            background-color: rgba(255, 255, 255, 0) !important;
+        }
+    `;
     
     // Force multiple reflows để đảm bảo CSS được apply
     void chatBox.offsetHeight;

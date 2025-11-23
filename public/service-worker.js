@@ -24,6 +24,12 @@ self.addEventListener('install', (event) => {
 
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
+  // Không cache ảnh nền - luôn fetch từ network để đảm bảo mới nhất
+  if (event.request.url.includes('nen-mera.jpg') || event.request.url.includes('nen-truongthang.jpg')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
   event.respondWith(
     caches.match(event.request)
       .then((response) => {

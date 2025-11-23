@@ -68,7 +68,7 @@ body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; backgroun
     /* Đảm bảo background được render */
     will-change: background-image;
 }
-/* Overlay để làm mờ nền nếu cần */
+/* Overlay để làm mờ nền nếu cần - mặc định trong suốt */
 .chat-box::before {
     content: '';
     position: absolute;
@@ -76,7 +76,7 @@ body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; backgroun
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: var(--chat-background-overlay, rgba(255, 255, 255, 0.75));
+    background-color: var(--chat-background-overlay, rgba(255, 255, 255, 0));
     z-index: 0;
     pointer-events: none;
 }
