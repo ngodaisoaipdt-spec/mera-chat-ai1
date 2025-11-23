@@ -44,10 +44,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedCharacter = localStorage.getItem('currentCharacter');
     if (savedCharacter && (savedCharacter === 'mera' || savedCharacter === 'thang')) {
         currentCharacter = savedCharacter;
-        // Set background ngay khi DOM ready
+        // Set background ngay khi DOM ready - nhiều lần để chắc chắn
         setTimeout(() => {
             updateChatBackground(currentCharacter);
         }, 10);
+        setTimeout(() => {
+            updateChatBackground(currentCharacter);
+        }, 100);
+        setTimeout(() => {
+            updateChatBackground(currentCharacter);
+        }, 300);
+    }
+    
+    // Sử dụng MutationObserver để theo dõi khi appContainer được hiển thị
+    const appContainer = document.getElementById('appContainer');
+    if (appContainer) {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                    const display = appContainer.style.display;
+                    if (display === 'block' && currentCharacter) {
+                        // Khi appContainer được hiển thị, set background ngay
+                        setTimeout(() => {
+                            updateChatBackground(currentCharacter);
+                        }, 50);
+                    }
+                }
+            });
+        });
+        
+        observer.observe(appContainer, {
+            attributes: true,
+            attributeFilter: ['style']
+        });
     }
 });
 
@@ -145,44 +174,59 @@ async function updateChatBackground(character) {
     const isMera = character === 'mera';
     const backgroundImage = isMera ? 'nen-mera.jpg' : 'nen-truongthang.jpg';
     
-    // Sử dụng version cố định để browser có thể cache nhưng vẫn load đúng ảnh
-    const imageUrl = `${backgroundImage}?v=1.0`;
+    // Sử dụng timestamp để force browser load lại ảnh mỗi lần (tránh cache)
+    const timestamp = Date.now();
+    const imageUrl = `${backgroundImage}?v=${timestamp}`;
+    
+    // Force browser to reload background image - set trực tiếp vào element
+    const chatBox = document.getElementById('chatBox');
+    if (!chatBox) {
+        // Nếu chatBox chưa có, đợi một chút rồi thử lại
+        setTimeout(() => updateChatBackground(character), 100);
+        return;
+    }
+    
+    // Clear background trước để force reload
+    chatBox.style.backgroundImage = 'none';
+    chatBox.style.backgroundSize = '';
+    chatBox.style.backgroundPosition = '';
+    chatBox.style.backgroundRepeat = '';
+    chatBox.style.backgroundAttachment = '';
+    
+    // Trigger reflow để clear background
+    void chatBox.offsetHeight;
     
     try {
-        // Preload ảnh để đảm bảo nó sẵn sàng trước khi set background
+        // Preload ảnh với timestamp mới để đảm bảo nó sẵn sàng
         await preloadBackgroundImage(imageUrl);
     } catch (error) {
         console.warn('Không thể preload ảnh nền:', error);
     }
     
-    // Cập nhật CSS variables ngay lập tức
+    // Cập nhật CSS variables
     document.documentElement.style.setProperty('--chat-background-image', `url('${imageUrl}')`);
-    // Dùng cover để phủ kín toàn bộ nền
     document.documentElement.style.setProperty('--chat-background-size', 'cover');
-    // Không dùng overlay (để nền hiển thị rõ như mặc định)
     document.documentElement.style.setProperty('--chat-background-overlay', 'rgba(255, 255, 255, 0)');
     
-    // Force browser to reload background image - set trực tiếp vào element
-    const chatBox = document.getElementById('chatBox');
-    if (chatBox) {
-        // Set trực tiếp vào element để đảm bảo được apply
-        chatBox.style.backgroundImage = `url('${imageUrl}')`;
-        chatBox.style.backgroundSize = 'cover';
-        chatBox.style.backgroundPosition = 'center';
-        chatBox.style.backgroundRepeat = 'no-repeat';
-        // Trên mobile, background-attachment: fixed có thể không hoạt động tốt
-        // Nên dùng scroll thay vì fixed
-        const isMobile = window.innerWidth <= 480;
-        chatBox.style.backgroundAttachment = isMobile ? 'scroll' : 'fixed';
-        
-        // Trigger reflow để đảm bảo CSS được apply
-        void chatBox.offsetHeight;
-        
-        // Force repaint để đảm bảo background được render
-        chatBox.style.display = 'none';
-        void chatBox.offsetHeight;
-        chatBox.style.display = '';
-    }
+    // Set trực tiếp vào element với URL mới (có timestamp)
+    chatBox.style.backgroundImage = `url('${imageUrl}')`;
+    chatBox.style.backgroundSize = 'cover';
+    chatBox.style.backgroundPosition = 'center';
+    chatBox.style.backgroundRepeat = 'no-repeat';
+    // Trên mobile, background-attachment: fixed có thể không hoạt động tốt
+    const isMobile = window.innerWidth <= 480;
+    chatBox.style.backgroundAttachment = isMobile ? 'scroll' : 'fixed';
+    
+    // Force multiple reflows để đảm bảo CSS được apply
+    void chatBox.offsetHeight;
+    void chatBox.offsetWidth;
+    
+    // Force repaint bằng cách toggle display
+    const originalDisplay = chatBox.style.display;
+    chatBox.style.display = 'none';
+    void chatBox.offsetHeight;
+    chatBox.style.display = originalDisplay || '';
+    void chatBox.offsetHeight;
 }
 
 async function setupCharacter(char) {
@@ -216,19 +260,25 @@ async function setupCharacter(char) {
     DOMElements.characterSelectionScreen.classList.remove('active');
     DOMElements.appContainer.style.display = 'block';
     
+    // Đợi một chút để đảm bảo DOM đã render
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     // Cập nhật background image theo nhân vật - gọi ngay lập tức
     await updateChatBackground(char);
     
     // Đảm bảo background được set lại sau khi DOM render (nhiều lần để chắc chắn)
     setTimeout(() => {
         updateChatBackground(char);
-    }, 50);
+    }, 100);
     setTimeout(() => {
         updateChatBackground(char);
-    }, 150);
+    }, 200);
     setTimeout(() => {
         updateChatBackground(char);
-    }, 300);
+    }, 400);
+    setTimeout(() => {
+        updateChatBackground(char);
+    }, 800);
 
     if (!window.chatAppInitialized) {
         initializeChatApp();
@@ -262,12 +312,13 @@ async function loadChatData() {
         conversationHistory = currentMemory.history || [];
         DOMElements.chatBox.innerHTML = '';
         
-        // Đảm bảo background được set lại sau khi DOM đã render
-        setTimeout(async () => {
-            if (currentCharacter) {
-                await updateChatBackground(currentCharacter);
-            }
-        }, 100);
+        // Đảm bảo background được set lại sau khi DOM đã render (nhiều lần)
+        if (currentCharacter) {
+            setTimeout(() => updateChatBackground(currentCharacter), 50);
+            setTimeout(() => updateChatBackground(currentCharacter), 150);
+            setTimeout(() => updateChatBackground(currentCharacter), 300);
+            setTimeout(() => updateChatBackground(currentCharacter), 600);
+        }
         if (conversationHistory.length === 0) {
             addMessage(DOMElements.chatBox, currentCharacter, currentCharacter === 'mera' ? "Chào anh, em là Mera nè. 🥰" : "Chào em, anh là Trương Thắng.");
         } else {
