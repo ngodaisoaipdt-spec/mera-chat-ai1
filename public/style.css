@@ -58,13 +58,15 @@ body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; backgroun
     display: flex; 
     flex-direction: column; 
     gap: 12px; 
-    /* Background image cho chat box */
+    /* Background image cho chat box - sẽ được set bằng JavaScript */
     background-image: var(--chat-background-image, none);
-    background-size: var(--chat-background-size, contain);
+    background-size: var(--chat-background-size, cover);
     background-position: center;
     background-repeat: no-repeat;
     background-attachment: fixed;
     position: relative;
+    /* Đảm bảo background được render */
+    will-change: background-image;
 }
 /* Overlay để làm mờ nền nếu cần */
 .chat-box::before {
