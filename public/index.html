@@ -19,6 +19,37 @@
 </head>
 <body>
 
+    <!-- Modal hướng dẫn mở trên trình duyệt khác (cho TikTok WebView) -->
+    <div id="tiktokBrowserModal" class="tiktok-modal-overlay">
+        <div class="tiktok-modal-box">
+            <div class="tiktok-modal-header">
+                <h2>⚠️ Cần mở trên trình duyệt khác</h2>
+                <button class="tiktok-modal-close" onclick="closeTikTokBrowserModal()">×</button>
+            </div>
+            <div class="tiktok-modal-content">
+                <p style="font-size: 1.1em; margin-bottom: 15px; color: #333;">
+                    Bạn đang truy cập từ <strong>TikTok</strong>. Google không cho phép đăng nhập từ trình duyệt trong ứng dụng này.
+                </p>
+                <p style="font-size: 1em; margin-bottom: 20px; color: #666;">
+                    Vui lòng mở trang web trên trình duyệt khác (Chrome, Safari, Firefox) để đăng nhập:
+                </p>
+                <ol style="text-align: left; margin: 0 auto 25px auto; max-width: 400px; color: #555; line-height: 1.8;">
+                    <li>Nhấn vào <strong>3 chấm (⋮)</strong> ở góc trên bên phải</li>
+                    <li>Chọn <strong>"Mở trên trình duyệt khác"</strong> hoặc <strong>"Mở trong Chrome/Safari"</strong></li>
+                    <li>Hoặc copy link và mở trên trình duyệt khác</li>
+                </ol>
+                <div class="tiktok-modal-buttons">
+                    <button class="tiktok-modal-btn-primary" onclick="openInExternalBrowser()">
+                        📋 Copy Link & Hướng Dẫn
+                    </button>
+                    <button class="tiktok-modal-btn-secondary" onclick="closeTikTokBrowserModal()">
+                        Đã hiểu
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="loginScreen" class="selection-screen">
         <div class="selection-box login-box">
             <h1>Chào mừng đến với YorLuv Chat</h1>
