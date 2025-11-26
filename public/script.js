@@ -38,63 +38,6 @@ const DOMElements = {
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-// Function để detect TikTok WebView
-function isTikTokWebView() {
-    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-    // TikTok WebView thường có các dấu hiệu sau:
-    // - Có "TikTok" trong user agent
-    // - Hoặc có "WebView" và không phải Chrome/Safari thông thường
-    // - Hoặc có các pattern đặc biệt của TikTok
-    const isTikTok = /TikTok|ByteDance|Musical/i.test(userAgent);
-    const isWebView = /wv|WebView/i.test(userAgent);
-    const isNotStandardBrowser = !/Chrome|Safari|Firefox|Edge/i.test(userAgent) || (isWebView && !/Chrome\/[0-9]/i.test(userAgent));
-    
-    return isTikTok || (isWebView && isNotStandardBrowser);
-}
-
-// Function để hiển thị modal hướng dẫn mở trên trình duyệt khác
-function showTikTokBrowserModal() {
-    const modal = document.getElementById('tiktokBrowserModal');
-    if (modal) {
-        modal.classList.add('active');
-    }
-}
-
-// Function để đóng modal
-function closeTikTokBrowserModal() {
-    const modal = document.getElementById('tiktokBrowserModal');
-    if (modal) {
-        modal.classList.remove('active');
-    }
-}
-
-// Function để copy link và mở trên trình duyệt khác
-function openInExternalBrowser() {
-    const currentUrl = window.location.href;
-    // Thử copy link vào clipboard
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(currentUrl).then(() => {
-            alert('✅ Đã copy link!\n\nVui lòng:\n1. Mở trình duyệt khác (Chrome, Safari, Firefox)\n2. Dán link vào thanh địa chỉ\n3. Đăng nhập bằng Google');
-        }).catch(() => {
-            // Fallback: hiển thị link để người dùng copy thủ công
-            const link = prompt('Vui lòng copy link này và mở trên trình duyệt khác:', currentUrl);
-            if (link) {
-                alert('Vui lòng mở trình duyệt khác (Chrome, Safari, Firefox) và dán link vào thanh địa chỉ.');
-            }
-        });
-    } else {
-        // Fallback: hiển thị link để người dùng copy thủ công
-        const link = prompt('Vui lòng copy link này và mở trên trình duyệt khác:', currentUrl);
-        if (link) {
-            alert('Vui lòng mở trình duyệt khác (Chrome, Safari, Firefox) và dán link vào thanh địa chỉ.');
-        }
-    }
-}
-
-// Expose functions globally để có thể gọi từ HTML onclick
-window.closeTikTokBrowserModal = closeTikTokBrowserModal;
-window.openInExternalBrowser = openInExternalBrowser;
-
 // Set background ngay khi DOM ready (sớm hơn window.onload)
 document.addEventListener('DOMContentLoaded', () => {
     // Khôi phục character từ localStorage nếu có
@@ -138,21 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.onload = async () => {
-    // Kiểm tra TikTok WebView ngay khi trang load
-    if (isTikTokWebView()) {
-        console.log('⚠️ Phát hiện TikTok WebView - Google OAuth có thể không hoạt động');
-    }
-    
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('login_error')) {
-        // Nếu có lỗi đăng nhập và đang ở TikTok WebView, hiển thị modal hướng dẫn
-        if (isTikTokWebView()) {
-            setTimeout(() => {
-                showTikTokBrowserModal();
-            }, 500);
-        } else {
-            alert("Đăng nhập thất bại.");
-        }
+        alert("Đăng nhập thất bại.");
         window.history.replaceState({}, document.title, "/");
     }
     if (urlParams.has('login')) {
@@ -206,14 +137,6 @@ function showLoginScreen() {
     DOMElements.loginScreen.classList.add('active');
     DOMElements.characterSelectionScreen.classList.remove('active');
     DOMElements.appContainer.style.display = 'none';
-    
-    // Kiểm tra nếu đang ở TikTok WebView và chưa đăng nhập
-    if (isTikTokWebView() && !currentUser) {
-        // Hiển thị modal hướng dẫn sau một chút để đảm bảo UI đã load
-        setTimeout(() => {
-            showTikTokBrowserModal();
-        }, 500);
-    }
 }
 
 function showCharacterSelection() {
