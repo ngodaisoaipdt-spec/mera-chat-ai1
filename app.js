@@ -4018,9 +4018,11 @@ async function checkAndSendAutoMessages() {
         }
         
         // 1. Check follow-up messages (sau 1-2 giờ không chat)
+        // Chỉ gửi cho user đã chat ít nhất 1 lần (có message_count > 0)
         const memoriesForFollowUp = await Memory.find({
             last_message_time: { $exists: true, $ne: null },
-            last_user_message: { $exists: true, $ne: '' }
+            last_user_message: { $exists: true, $ne: '' },
+            'user_profile.message_count': { $gt: 0 }
         });
         
         for (const memory of memoriesForFollowUp) {
@@ -4059,13 +4061,15 @@ async function checkAndSendAutoMessages() {
         
         // 2. Check greeting messages
         // Buổi sáng: 5h30 - 9h (5h30 = 5.5)
+        // Chỉ gửi cho user đã chat ít nhất 1 lần
         if (currentHour >= 5 && currentHour < 9) {
             const memoriesForMorning = await Memory.find({
                 $or: [
                     { last_greeting_sent: { $ne: 'morning' } },
                     { last_greeting_date: { $ne: currentDate } },
                     { last_greeting_date: { $exists: false } }
-                ]
+                ],
+                'user_profile.message_count': { $gt: 0 }
             });
             
             for (const memory of memoriesForMorning) {
@@ -4087,13 +4091,15 @@ async function checkAndSendAutoMessages() {
         }
         
         // Buổi tối: 21h - 22h
+        // Chỉ gửi cho user đã chat ít nhất 1 lần
         if (currentHour >= 21 && currentHour < 22) {
             const memoriesForNight = await Memory.find({
                 $or: [
                     { last_greeting_sent: { $ne: 'night' } },
                     { last_greeting_date: { $ne: currentDate } },
                     { last_greeting_date: { $exists: false } }
-                ]
+                ],
+                'user_profile.message_count': { $gt: 0 }
             });
             
             for (const memory of memoriesForNight) {
