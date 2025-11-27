@@ -2490,15 +2490,9 @@ app.get('/api/check-new-messages', ensureAuthenticated, async (req, res) => {
                 }
             }
         } else {
-            // Nếu không có lastMessageId, lấy từ tin nhắn cuối cùng (không phải auto message)
-            // Tìm tin nhắn assistant cuối cùng không phải auto message
-            for (let i = memory.history.length - 1; i >= 0; i--) {
-                const msg = memory.history[i];
-                if (msg.role === 'assistant' && !msg.isAutoMessage) {
-                    startIndex = i + 1;
-                    break;
-                }
-            }
+            // Nếu không có lastMessageId, bắt đầu từ đầu history
+            // (Frontend sẽ set lastMessageId sau khi load xong)
+            startIndex = 0;
         }
         
         console.log(`🔍 [CHECK-MSG] Start index: ${startIndex}, history length: ${memory.history.length}`);

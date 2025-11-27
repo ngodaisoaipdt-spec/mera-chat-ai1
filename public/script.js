@@ -337,7 +337,7 @@ async function loadChatData() {
         if (conversationHistory.length === 0) {
             addMessage(DOMElements.chatBox, currentCharacter, currentCharacter === 'mera' ? "Chào anh, em là Mera nè. 🥰" : "Chào em, anh là Trương Thắng.");
         } else {
-            conversationHistory.forEach(msg => {
+            conversationHistory.forEach((msg, index) => {
                 if (msg.role === 'user') {
                     addMessage(DOMElements.chatBox, "Bạn", msg.content);
                 } else if (msg.role === 'assistant') {
@@ -345,6 +345,14 @@ async function loadChatData() {
                     const mediaUrl = msg.mediaUrl || null;
                     const mediaType = msg.mediaType || null;
                     addMessage(DOMElements.chatBox, currentCharacter, msg.content, null, false, null, mediaUrl, mediaType);
+                    
+                    // Nếu là auto message, đánh dấu để không check lại
+                    if (msg.isAutoMessage) {
+                        const msgId = `msg-${index}`;
+                        if (!lastMessageId || parseInt(msgId.replace('msg-', '')) > parseInt((lastMessageId || 'msg--1').replace('msg-', ''))) {
+                            lastMessageId = msgId;
+                        }
+                    }
                 }
             });
         }
@@ -1379,22 +1387,12 @@ const originalLoadChatData = loadChatData;
 loadChatData = async function() {
     await originalLoadChatData();
     
-    // Set lastMessageId từ tin nhắn cuối cùng (không phải auto message)
+    // Set lastMessageId từ tin nhắn cuối cùng (bao gồm cả auto messages)
+    // Để đảm bảo chỉ check tin nhắn mới sau khi load
     if (conversationHistory && conversationHistory.length > 0) {
-        // Tìm tin nhắn cuối cùng không phải auto message
-        for (let i = conversationHistory.length - 1; i >= 0; i--) {
-            const msg = conversationHistory[i];
-            if (msg.role === 'assistant' && !msg.isAutoMessage) {
-                lastMessageId = `msg-${i}`;
-                console.log(`✅ [POLLING] Set lastMessageId từ loadChatData: ${lastMessageId}`);
-                break;
-            }
-        }
-        // Nếu không tìm thấy, dùng tin nhắn cuối cùng
-        if (!lastMessageId && conversationHistory.length > 0) {
-            lastMessageId = `msg-${conversationHistory.length - 1}`;
-            console.log(`✅ [POLLING] Set lastMessageId từ tin nhắn cuối: ${lastMessageId}`);
-        }
+        // Set từ tin nhắn cuối cùng (bất kỳ loại nào)
+        lastMessageId = `msg-${conversationHistory.length - 1}`;
+        console.log(`✅ [POLLING] Set lastMessageId từ loadChatData: ${lastMessageId} (total: ${conversationHistory.length})`);
     }
     
     // Start polling nếu chưa start
