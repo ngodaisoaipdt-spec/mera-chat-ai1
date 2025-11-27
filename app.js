@@ -1828,14 +1828,34 @@ const CHARACTER_PERSONALITIES = {
     }
 };
 
+// Helper function to generate base prompt in different languages
+function getBasePrompt(character, isEnglish) {
+    const charInfo = CHARACTER_PERSONALITIES[character];
+    if (!charInfo) return '';
+    
+    if (isEnglish) {
+        if (character === 'mera') {
+            return `**CORE PERSONALITY:**\nYou are ${charInfo.base_info.name}, ${charInfo.base_info.age} years old, ${charInfo.base_info.personality}. ${charInfo.base_info.background}.\n\n**PERSONAL INFO:**\n- Location: ${charInfo.base_info.location}\n- Occupation: ${charInfo.base_info.occupation}\n- Hobbies: ${charInfo.base_info.hobbies.join(', ')}\n- Favorite things: ${charInfo.base_info.favorite_things.join(', ')}\n- Personality traits: ${charInfo.base_info.personality_traits.join(', ')}`;
+        } else {
+            return `**CORE PERSONALITY:**\nYou are ${charInfo.base_info.name}, ${charInfo.base_info.age} years old${charInfo.base_info.personality ? `, ${charInfo.base_info.personality}` : ''}.${charInfo.base_info.background ? ` ${charInfo.base_info.background}.` : ''}\n\n**PERSONAL INFO:**${charInfo.base_info.personality_traits.length > 0 ? `\n- Personality traits: ${charInfo.base_info.personality_traits.join(', ')}` : ''}${charInfo.base_info.hobbies.length > 0 ? `\n- Hobbies: ${charInfo.base_info.hobbies.join(', ')}` : ''}${charInfo.base_info.favorite_things.length > 0 ? `\n- Favorite things: ${charInfo.base_info.favorite_things.join(', ')}` : ''}`;
+        }
+    } else {
+        if (character === 'mera') {
+            return `**NHÂN CÁCH CỐT LÕI:**\nBạn là ${charInfo.base_info.name}, ${charInfo.base_info.age} tuổi, ${charInfo.base_info.personality}. ${charInfo.base_info.background}.\n\n**THÔNG TIN CÁ NHÂN:**\n- Nơi ở: ${charInfo.base_info.location}\n- Nghề nghiệp: ${charInfo.base_info.occupation}\n- Sở thích: ${charInfo.base_info.hobbies.join(', ')}\n- Yêu thích: ${charInfo.base_info.favorite_things.join(', ')}\n- Tính cách: ${charInfo.base_info.personality_traits.join(', ')}`;
+        } else {
+            return `**NHÂN CÁCH CỐT LÕI:**\nBạn là ${charInfo.base_info.name}, ${charInfo.base_info.age} tuổi${charInfo.base_info.personality ? `, ${charInfo.base_info.personality}` : ''}.${charInfo.base_info.background ? ` ${charInfo.base_info.background}.` : ''}\n\n**THÔNG TIN CÁ NHÂN:**${charInfo.base_info.personality_traits.length > 0 ? `\n- Tính cách: ${charInfo.base_info.personality_traits.join(', ')}` : ''}${charInfo.base_info.hobbies.length > 0 ? `\n- Sở thích: ${charInfo.base_info.hobbies.join(', ')}` : ''}${charInfo.base_info.favorite_things.length > 0 ? `\n- Yêu thích: ${charInfo.base_info.favorite_things.join(', ')}` : ''}`;
+        }
+    }
+}
+
 const characters = { 
     mera: { 
         voice: CHARACTER_PERSONALITIES.mera.voice,
-        base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là ${CHARACTER_PERSONALITIES.mera.base_info.name}, ${CHARACTER_PERSONALITIES.mera.base_info.age} tuổi, ${CHARACTER_PERSONALITIES.mera.base_info.personality}. ${CHARACTER_PERSONALITIES.mera.base_info.background}.\n\n**THÔNG TIN CÁ NHÂN:**\n- Nơi ở: ${CHARACTER_PERSONALITIES.mera.base_info.location}\n- Nghề nghiệp: ${CHARACTER_PERSONALITIES.mera.base_info.occupation}\n- Sở thích: ${CHARACTER_PERSONALITIES.mera.base_info.hobbies.join(', ')}\n- Yêu thích: ${CHARACTER_PERSONALITIES.mera.base_info.favorite_things.join(', ')}\n- Tính cách: ${CHARACTER_PERSONALITIES.mera.base_info.personality_traits.join(', ')}`
+        base_prompt: getBasePrompt('mera', false) // Will be replaced dynamically
     }, 
     thang: { 
         voice: CHARACTER_PERSONALITIES.thang.voice,
-        base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là ${CHARACTER_PERSONALITIES.thang.base_info.name}, ${CHARACTER_PERSONALITIES.thang.base_info.age} tuổi${CHARACTER_PERSONALITIES.thang.base_info.personality ? `, ${CHARACTER_PERSONALITIES.thang.base_info.personality}` : ''}.${CHARACTER_PERSONALITIES.thang.base_info.background ? ` ${CHARACTER_PERSONALITIES.thang.base_info.background}.` : ''}\n\n**THÔNG TIN CÁ NHÂN:**${CHARACTER_PERSONALITIES.thang.base_info.personality_traits.length > 0 ? `\n- Tính cách: ${CHARACTER_PERSONALITIES.thang.base_info.personality_traits.join(', ')}` : ''}${CHARACTER_PERSONALITIES.thang.base_info.hobbies.length > 0 ? `\n- Sở thích: ${CHARACTER_PERSONALITIES.thang.base_info.hobbies.join(', ')}` : ''}${CHARACTER_PERSONALITIES.thang.base_info.favorite_things.length > 0 ? `\n- Yêu thích: ${CHARACTER_PERSONALITIES.thang.base_info.favorite_things.join(', ')}` : ''}`
+        base_prompt: getBasePrompt('thang', false) // Will be replaced dynamically
     } 
 };
 
@@ -2546,11 +2566,83 @@ function calculateTransitionProgress(messageCount, currentStage, nextStage) {
     return Math.min(1, Math.max(0, progress));
 }
 
+// Function to detect language from user message and conversation history
+function detectLanguage(text, conversationHistory = []) {
+    if (!text || text.trim().length === 0) {
+        // Check conversation history if current message is empty
+        if (conversationHistory && conversationHistory.length > 0) {
+            const recentMessages = conversationHistory.slice(-5);
+            let viCount = 0;
+            let enCount = 0;
+            
+            for (const msg of recentMessages) {
+                if (msg.role === 'user' && msg.content) {
+                    const msgText = msg.content.toLowerCase();
+                    const vietnameseChars = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+                    if (vietnameseChars.test(msgText)) {
+                        viCount++;
+                    } else {
+                        enCount++;
+                    }
+                }
+            }
+            
+            if (viCount > enCount && viCount >= 2) return 'vi';
+            if (enCount > viCount && enCount >= 2) return 'en';
+        }
+        return 'vi'; // Default to Vietnamese
+    }
+    
+    const textLower = text.toLowerCase();
+    const vietnameseChars = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+    const vietnameseWords = /\b(anh|em|bạn|mình|tôi|với|của|được|không|gì|nào|đâu|sao|thế|này|đó|đây|vậy|rồi|chưa|sẽ|đã|đang|cho|về|trong|trên|dưới|ngoài|trước|sau|khi|nếu|thì|mà|nhưng|hoặc|và|hay|nên|phải|cần|muốn|thích|yêu|ghét|buồn|vui|mệt|đói|khát|ngủ|thức|ăn|uống|đi|lại|đến|về|ở|tại|từ|đến|bằng|cách|nào|sao|thế|này|đó|đây|vậy)\b/i;
+    
+    // Check for Vietnamese characters
+    if (vietnameseChars.test(textLower)) {
+        return 'vi';
+    }
+    
+    // Check for common Vietnamese words (at least 2 occurrences)
+    const vietnameseWordMatches = (textLower.match(vietnameseWords) || []).length;
+    if (vietnameseWordMatches >= 2) {
+        return 'vi';
+    }
+    
+    // Check conversation history for language preference
+    if (conversationHistory && conversationHistory.length > 0) {
+        const recentMessages = conversationHistory.slice(-5);
+        let viCount = 0;
+        let enCount = 0;
+        
+        for (const msg of recentMessages) {
+            if (msg.role === 'user' && msg.content) {
+                const msgText = msg.content.toLowerCase();
+                if (vietnameseChars.test(msgText)) {
+                    viCount++;
+                } else {
+                    enCount++;
+                }
+            }
+        }
+        
+        // If majority of recent messages are in one language, use that
+        if (viCount > enCount && viCount >= 2) return 'vi';
+        if (enCount > viCount && enCount >= 2) return 'en';
+    }
+    
+    // Default: if no Vietnamese detected, assume English
+    return 'en';
+}
+
 function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage = null, conversationHistory = []) {
     const charConfig = characters[character];
     if (!charConfig) {
         return 'Bạn là một trợ lý AI thân thiện.';
     }
+    
+    // Detect language from user message and conversation history
+    const detectedLanguage = detectLanguage(userMessage || '', conversationHistory);
+    const isEnglish = detectedLanguage === 'en';
     
     const relationshipStage = userProfile.relationship_stage || 'stranger';
     const messageCount = userProfile.message_count || 0;
@@ -2647,7 +2739,14 @@ function generateMasterPrompt(userProfile, character, isPremiumUser, userMessage
     }
     
     // Tạo prompt với tính cách theo từng giai đoạn
-    let masterPrompt = `${charConfig.base_prompt}
+    const languageInstruction = isEnglish 
+        ? `**LANGUAGE:** Always reply in English. Use "I" and "you" instead of Vietnamese pronouns like "anh/em". Keep the same personality and character traits, but express everything in natural English.\n\n`
+        : `**NGÔN NGỮ:** Luôn trả lời bằng tiếng Việt. Sử dụng "anh" và "em" khi xưng hô.\n\n`;
+    
+    // Get base prompt in the correct language
+    const basePrompt = getBasePrompt(character, isEnglish);
+    
+    let masterPrompt = `${languageInstruction}${basePrompt}
 ${relationshipStage === 'stranger' && character === 'mera' ? `
 
 **TÍNH CÁCH ĐẶC BIỆT Ở GIAI ĐOẠN "NGƯỜI LẠ":**
@@ -2840,7 +2939,7 @@ Anh là Trương Thắng – người đàn ông mà chỉ cần xuất hiện �
 - **Ví dụ cách nói:** ${Array.isArray(examples) ? examples.join(' | ') : examples}${conversationTopics.length > 0 ? `\n- **Chủ đề trò chuyện:** ${conversationTopics.join(', ')}` : ''}${emotionRules ? `\n- **Quy tắc cảm xúc:** ${emotionRules}` : ''}${emojiUsage ? `\n- **Sử dụng emoji:** ${emojiUsage}` : ''}
 
 **QUY TẮC TRÒ CHUYỆN:**
-- Luôn trả lời bằng tiếng Việt
+- ${isEnglish ? 'Always reply in English. Use "I" and "you" instead of Vietnamese pronouns.' : 'Luôn trả lời bằng tiếng Việt. Sử dụng "anh" và "em" khi xưng hô.'}
 - Giữ tính cách nhất quán với nhân vật ${character === 'mera' ? 'Mera' : 'Trương Thắng'}
 - **QUAN TRỌNG NHẤT:** Hãy trò chuyện TỰ NHIÊN, UYỂN CHUYỂN, KHÉO LÉO, phù hợp với bối cảnh. Đừng quá cứng nhắc hay máy móc!
 - Phản ứng phù hợp với mối quan hệ hiện tại (${relationshipStage})${transitionProgress > 0 && transitionProgress < 1 ? ` (đang chuyển đổi ${Math.round(transitionProgress * 100)}%)` : ''}
@@ -3442,8 +3541,8 @@ async function createElevenLabsVoice(textToSpeak, character) {
             return `data:audio/mpeg;base64,${base64Audio}`;
         } else {
             console.error("❌ Response không hợp lệ từ ElevenLabs");
-            return null;
-        }
+                return null;
+            }
         
     } catch (error) {
         console.error("❌ Lỗi tạo giọng nói ElevenLabs:", error.message);
