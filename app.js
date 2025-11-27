@@ -3685,6 +3685,36 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
 }
 
 // Trang admin analytics
+// Endpoint để reset auto messages counter (để test lại)
+app.post('/admin/reset-auto-messages', ensureAuthenticated, async (req, res) => {
+    try {
+        const { userId, character } = req.body;
+        
+        if (!userId || !character) {
+            return res.status(400).json({ error: 'Thiếu tham số: userId, character' });
+        }
+        
+        const memory = await Memory.findOne({ userId, character });
+        if (!memory) {
+            return res.status(404).json({ error: 'Không tìm thấy memory' });
+        }
+        
+        // Reset counter
+        memory.auto_messages_sent_today = 0;
+        memory.last_auto_message_date = '';
+        await memory.save();
+        
+        return res.json({
+            success: true,
+            message: 'Đã reset auto messages counter',
+            auto_messages_sent_today: 0
+        });
+    } catch (error) {
+        console.error('❌ Lỗi reset auto messages:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 // Endpoint debug để kiểm tra trạng thái auto messages
 app.get('/admin/debug-auto-messages', ensureAuthenticated, async (req, res) => {
     try {
