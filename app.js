@@ -3930,7 +3930,7 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
 
 **NGỮ CẢNH:**
 Người dùng vừa nói: "${userMessage}"
-Đã qua khoảng 1-2 giờ kể từ tin nhắn đó.
+Đã qua khoảng vài phút kể từ tin nhắn đó.
 
 **NHIỆM VỤ:**
 Hãy tạo một tin nhắn NGẮN GỌN (10-20 từ) để hỏi han, follow-up dựa trên nội dung tin nhắn trước đó của người dùng.
@@ -4106,10 +4106,10 @@ async function checkAndSendAutoMessages() {
             }
             
             const timeSinceLastMessage = now - memory.last_message_time;
-            const hoursSinceLastMessage = timeSinceLastMessage / (1000 * 60 * 60);
+            const minutesSinceLastMessage = timeSinceLastMessage / (1000 * 60);
             
-            // Gửi follow-up sau 1-2 giờ
-            if (hoursSinceLastMessage >= 1 && hoursSinceLastMessage <= 2) {
+            // Gửi follow-up sau 3-5 phút (đã giảm để test, production sẽ là 1-2 giờ)
+            if (minutesSinceLastMessage >= 3 && minutesSinceLastMessage <= 5) {
                 const character = memory.character;
                 const followUpText = await generateFollowUpMessage(
                     memory,
@@ -4193,8 +4193,8 @@ async function checkAndSendAutoMessages() {
     }
 }
 
-// Cron job: Chạy mỗi 5 phút để check và gửi auto messages
-cron.schedule('*/5 * * * *', () => {
+// Cron job: Chạy mỗi 1 phút để check và gửi auto messages (đã giảm để test)
+cron.schedule('*/1 * * * *', () => {
     console.log('⏰ Cron job: Checking auto messages...');
     checkAndSendAutoMessages();
 });
