@@ -1289,14 +1289,24 @@ async function requestNotificationPermission() {
 
 // Function để check tin nhắn mới
 async function checkNewAutoMessages() {
-    if (!currentUser || !currentCharacter) return;
+    if (!currentUser || !currentCharacter) {
+        console.log('⏭️ [POLLING] Skip: chưa có currentUser hoặc currentCharacter');
+        return;
+    }
     
     try {
+        console.log(`🔍 [POLLING] Checking new messages for character: ${currentCharacter}, lastMessageId: ${lastMessageId || 'none'}`);
         const response = await fetch(`/api/check-new-messages?character=${currentCharacter}&lastMessageId=${lastMessageId || ''}`);
-        if (!response.ok) return;
+        if (!response.ok) {
+            console.warn(`⚠️ [POLLING] Response not OK: ${response.status}`);
+            return;
+        }
         
         const data = await response.json();
+        console.log(`📊 [POLLING] Response: hasNewMessages=${data.hasNewMessages}, count=${data.newMessages?.length || 0}`);
+        
         if (data.hasNewMessages && data.newMessages && data.newMessages.length > 0) {
+            console.log(`✅ [POLLING] Có ${data.newMessages.length} tin nhắn mới!`);
             // Có tin nhắn mới
             for (const newMsg of data.newMessages) {
                 // Thêm tin nhắn vào chat box
@@ -1322,9 +1332,11 @@ async function checkNewAutoMessages() {
             
             // Reload chat data để sync với server
             await loadChatData();
+        } else {
+            console.log('ℹ️ [POLLING] Không có tin nhắn mới');
         }
     } catch (error) {
-        console.error('Lỗi check new messages:', error);
+        console.error('❌ [POLLING] Lỗi check new messages:', error);
     }
 }
 
