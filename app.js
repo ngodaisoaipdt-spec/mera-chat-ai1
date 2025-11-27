@@ -4207,12 +4207,16 @@ async function checkAndSendAutoMessages() {
             const timeSinceLastMessage = now - memory.last_message_time;
             const minutesSinceLastMessage = timeSinceLastMessage / (1000 * 60);
             
-            console.log(`⏱️ [AUTO MSG] User ${memory.userId}, character: ${memory.character}, last_message: "${memory.last_user_message?.substring(0, 30)}...", đã qua: ${minutesSinceLastMessage.toFixed(2)} phút, đã gửi: ${memory.auto_messages_sent_today}/3`);
+            console.log(`⏱️ [AUTO MSG] User ${memory.userId}, character: ${memory.character}, last_message: "${memory.last_user_message?.substring(0, 30)}...", đã qua: ${minutesSinceLastMessage.toFixed(2)} phút, đã gửi: ${memory.auto_messages_sent_today}/5`);
             
-            // Gửi follow-up sau 3-5 phút (đã giảm để test, production sẽ là 1-2 giờ)
-            // Mở rộng window để test dễ hơn: >= 3 phút (không giới hạn trên)
-            if (minutesSinceLastMessage >= 3) {
-                console.log(`✅ [AUTO MSG] Đủ điều kiện gửi follow-up cho user ${memory.userId}`);
+            // QUAN TRỌNG: Chỉ gửi 1 follow-up cho mỗi tin nhắn của user
+            // Kiểm tra xem đã gửi follow-up cho tin nhắn này chưa
+            const lastFollowUpMessage = memory.last_followup_message || '';
+            const shouldSendFollowUp = lastFollowUpMessage !== memory.last_user_message;
+            
+            // Gửi follow-up sau 3 phút (đã giảm để test, production sẽ là 1-2 giờ)
+            if (minutesSinceLastMessage >= 3 && shouldSendFollowUp) {
+                console.log(`✅ [AUTO MSG] Đủ điều kiện gửi follow-up cho user ${memory.userId} (tin nhắn mới: "${memory.last_user_message.substring(0, 30)}...")`);
                 const character = memory.character;
                 const followUpText = await generateFollowUpMessage(
                     memory,
@@ -4225,11 +4229,14 @@ async function checkAndSendAutoMessages() {
                     console.log(`📤 [AUTO MSG] Đang gửi follow-up: "${followUpText.substring(0, 50)}..."`);
                     await sendAutoMessage(memory, followUpText, character);
                     memory.auto_messages_sent_today = (memory.auto_messages_sent_today || 0) + 1;
+                    memory.last_followup_message = memory.last_user_message; // Đánh dấu đã gửi follow-up cho tin nhắn này
                     await memory.save();
-                    console.log(`✅ [AUTO MSG] Đã gửi follow-up thành công cho user ${memory.userId}`);
+                    console.log(`✅ [AUTO MSG] Đã gửi follow-up thành công cho user ${memory.userId} (${memory.auto_messages_sent_today}/5)`);
                 } else {
                     console.warn(`⚠️ [AUTO MSG] Không thể generate follow-up text cho user ${memory.userId}`);
                 }
+            } else if (!shouldSendFollowUp) {
+                console.log(`⏭️ [AUTO MSG] Đã gửi follow-up cho tin nhắn này rồi: "${memory.last_user_message.substring(0, 30)}..."`);
             } else {
                 console.log(`⏳ [AUTO MSG] Chưa đủ thời gian (cần >= 3 phút, hiện tại: ${minutesSinceLastMessage.toFixed(2)} phút)`);
             }
