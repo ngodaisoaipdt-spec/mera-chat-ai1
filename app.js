@@ -2371,11 +2371,11 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     memory.last_user_message = message;
     memory.last_message_time = new Date();
     
-    // Nếu tin nhắn mới khác tin nhắn trước, reset counter để có thể gửi follow-up mới
+    // Nếu tin nhắn mới khác tin nhắn trước, reset follow-up tracking
+    // Để mỗi tin nhắn mới có thể nhận 1 follow-up
     if (previousLastMessage !== message) {
-        // Reset counter cho follow-up của tin nhắn mới này
-        // (Giữ nguyên greeting counter vì greeting không phụ thuộc vào tin nhắn cụ thể)
-        console.log(`🔄 [AUTO MSG] User gửi tin nhắn mới, reset follow-up counter để có thể gửi follow-up mới`);
+        memory.last_followup_message = ''; // Reset để có thể gửi follow-up cho tin nhắn mới
+        console.log(`🔄 [AUTO MSG] User gửi tin nhắn mới, reset follow-up tracking để có thể gửi follow-up mới`);
     }
     
     const assistantMessage = { role: 'assistant', content: rawReply };
