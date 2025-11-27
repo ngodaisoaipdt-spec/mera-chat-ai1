@@ -3758,6 +3758,12 @@ app.get('/admin/analytics', ensureAuthenticated, async (req, res) => {
     }
 });
 
+// Route cho trang redirect (link.yorluv.chat)
+app.get('/redirect', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'redirect.html'));
+});
+
+// Route catch-all: trả về index.html cho mọi route khác
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
 app.listen(port, () => { console.log(`🚀 Server đang chạy tại cổng ${port}`); });

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đang chuyển hướng... - YorLuv Chat</title>
+    <meta name="description" content="Đang mở YorLuv Chat trên trình duyệt của bạn">
+    <link rel="icon" type="image/png" href="yorluv-logo.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #8e82ff 0%, #ff6b9d 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .container {
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .loading {
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 25px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        h1 {
+            font-size: 1.8em;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+        
+        p {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            line-height: 1.6;
+            opacity: 0.95;
+        }
+        
+        .subtitle {
+            font-size: 0.95em;
+            opacity: 0.85;
+            margin-top: 20px;
+        }
+        
+        .manual-button {
+            display: none;
+            margin-top: 30px;
+            padding: 15px 30px;
+            background: white;
+            color: #8e82ff;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 1.1em;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .manual-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .manual-button.show {
+            display: inline-block;
+        }
+        
+        .info-box {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 30px;
+            font-size: 0.9em;
+            line-height: 1.8;
+        }
+        
+        .info-box strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 1.05em;
+        }
+        
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.5em;
+            }
+            
+            p {
+                font-size: 1em;
+            }
+            
+            .logo {
+                width: 60px;
+                height: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="yorluv-logo.png" alt="YorLuv Chat" class="logo">
+        <div class="loading">
+            <div class="spinner"></div>
+            <h1>Đang mở trình duyệt...</h1>
+            <p>Vui lòng đợi trong giây lát</p>
+            <p class="subtitle">Nếu không tự động mở, vui lòng nhấn vào nút bên dưới</p>
+            <a href="https://yorluv.chat" class="manual-button" id="manualButton">
+                🚀 Mở YorLuv Chat
+            </a>
+        </div>
+        
+        <div class="info-box" id="infoBox" style="display: none;">
+            <strong>💡 Hướng dẫn:</strong>
+            <div id="instructions"></div>
+        </div>
+    </div>
+
+    <script>
+        const TARGET_URL = 'https://yorluv.chat';
+        
+        function isTikTokWebView() {
+            const ua = navigator.userAgent || '';
+            return /TikTok|ByteDance|Musical/i.test(ua);
+        }
+        
+        function isAndroid() {
+            return /Android/i.test(navigator.userAgent);
+        }
+        
+        function isIOS() {
+            return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        }
+        
+        function redirectToBrowser() {
+            const isTikTok = isTikTokWebView();
+            
+            if (isTikTok) {
+                if (isAndroid()) {
+                    // Android: Dùng Intent URL để mở trình duyệt mặc định
+                    const intentUrl = `intent://yorluv.chat#Intent;scheme=https;action=android.intent.action.VIEW;end`;
+                    
+                    // Thử mở bằng Intent
+                    window.location.href = intentUrl;
+                    
+                    // Fallback: Nếu Intent không hoạt động, redirect trực tiếp sau 500ms
+                    setTimeout(() => {
+                        window.location.href = TARGET_URL;
+                    }, 500);
+                    
+                    // Hiển thị hướng dẫn cho Android
+                    showInstructions('android');
+                } else if (isIOS()) {
+                    // iOS: Universal Link hoặc direct redirect
+                    window.location.href = TARGET_URL;
+                    
+                    // Hiển thị hướng dẫn cho iOS
+                    showInstructions('ios');
+                } else {
+                    // Desktop hoặc khác: redirect trực tiếp
+                    window.location.href = TARGET_URL;
+                }
+            } else {
+                // Không phải TikTok WebView: redirect trực tiếp
+                window.location.href = TARGET_URL;
+            }
+        }
+        
+        function showInstructions(platform) {
+            const infoBox = document.getElementById('infoBox');
+            const instructions = document.getElementById('instructions');
+            
+            if (platform === 'android') {
+                instructions.innerHTML = `
+                    1. Nhấn vào <strong>3 chấm (⋮)</strong> ở góc trên bên phải<br>
+                    2. Chọn <strong>"Mở trên trình duyệt khác"</strong> hoặc <strong>"Mở trong Chrome"</strong><br>
+                    3. Hoặc nhấn nút <strong>"Mở YorLuv Chat"</strong> bên trên
+                `;
+            } else if (platform === 'ios') {
+                instructions.innerHTML = `
+                    1. Nhấn vào <strong>biểu tượng Safari</strong> ở góc dưới<br>
+                    2. Hoặc nhấn vào <strong>3 chấm (⋯)</strong> và chọn <strong>"Mở trong Safari"</strong><br>
+                    3. Hoặc nhấn nút <strong>"Mở YorLuv Chat"</strong> bên trên
+                `;
+            }
+            
+            infoBox.style.display = 'block';
+        }
+        
+        // Tự động redirect ngay khi load
+        window.onload = () => {
+            redirectToBrowser();
+            
+            // Nếu sau 2 giây vẫn chưa redirect, hiển thị nút thủ công
+            setTimeout(() => {
+                const manualButton = document.getElementById('manualButton');
+                if (manualButton) {
+                    manualButton.classList.add('show');
+                }
+            }, 2000);
+        };
+        
+        // Track analytics (optional)
+        try {
+            fetch('/api/redirect-analytics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    source: isTikTokWebView() ? 'tiktok' : 'direct',
+                    platform: isAndroid() ? 'android' : (isIOS() ? 'ios' : 'other'),
+                    userAgent: navigator.userAgent,
+                    timestamp: Date.now()
+                })
+            }).catch(() => {}); // Ignore errors
+        } catch (e) {}
+    </script>
+</body>
+</html>
+
