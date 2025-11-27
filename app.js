@@ -3701,8 +3701,8 @@ app.post('/admin/test-auto-messages', ensureAuthenticated, async (req, res) => {
             if (!memory.last_user_message) {
                 return res.status(400).json({ error: 'User chưa có tin nhắn nào để follow-up' });
             }
-            // Set last_message_time về 1.5 giờ trước để trigger follow-up
-            memory.last_message_time = new Date(Date.now() - 1.5 * 60 * 60 * 1000);
+            // Set last_message_time về 3 phút trước để trigger follow-up (đã giảm để test)
+            memory.last_message_time = new Date(Date.now() - 3 * 60 * 1000);
             await memory.save();
             
             messageText = await generateFollowUpMessage(
