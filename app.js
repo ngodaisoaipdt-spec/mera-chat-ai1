@@ -17,6 +17,7 @@ const MongoStore = require('connect-mongo');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const querystring = require('querystring');
+const cron = require('node-cron');
 
 dotenv.config({ override: true });
 const app = express();
@@ -27,7 +28,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -2362,6 +2363,11 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     } 
     // Lưu history - lưu cả mediaUrl, mediaType, topic, subject để AI biết nội dung ảnh
     memory.history.push({ role: 'user', content: message }); 
+    
+    // Lưu last_user_message và last_message_time để dùng cho auto messages
+    memory.last_user_message = message;
+    memory.last_message_time = new Date();
+    
     const assistantMessage = { role: 'assistant', content: rawReply };
     if (mediaUrl && mediaType) {
         assistantMessage.mediaUrl = mediaUrl;
@@ -2441,6 +2447,83 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     console.error("   Stack:", error.stack);
     res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); 
 } });
+
+// Endpoint để check tin nhắn mới (auto messages)
+app.get('/api/check-new-messages', ensureAuthenticated, async (req, res) => {
+    try {
+        const { character } = req.query;
+        if (!character || (character !== 'mera' && character !== 'thang')) {
+            return res.json({ hasNewMessages: false, newMessages: [] });
+        }
+        
+        const memory = await loadMemory(req.user._id, character);
+        if (!memory || !memory.history || memory.history.length === 0) {
+            return res.json({ hasNewMessages: false, newMessages: [] });
+        }
+        
+        // Lấy lastMessageId từ query (nếu có)
+        const lastMessageId = req.query.lastMessageId || '';
+        
+        // Tìm các tin nhắn mới (auto messages) sau lastMessageId
+        const newMessages = [];
+        let foundLastMessage = !lastMessageId;
+        let startIndex = memory.history.length;
+        
+        // Tìm vị trí của lastMessageId
+        if (lastMessageId) {
+            for (let i = memory.history.length - 1; i >= 0; i--) {
+                const msg = memory.history[i];
+                // Tạo ID từ index nếu không có _id
+                const msgId = msg._id ? msg._id.toString() : `msg-${i}`;
+                if (msgId === lastMessageId) {
+                    startIndex = i + 1;
+                    foundLastMessage = true;
+                    break;
+                }
+            }
+        }
+        
+        // Lấy các tin nhắn mới sau lastMessageId
+        for (let i = startIndex; i < memory.history.length; i++) {
+            const msg = memory.history[i];
+            
+            // Nếu là auto message và là assistant message
+            if (msg.role === 'assistant' && msg.isAutoMessage) {
+                const msgId = msg._id ? msg._id.toString() : `msg-${i}`;
+                newMessages.push({
+                    id: msgId,
+                    content: msg.content,
+                    timestamp: msg.timestamp || new Date(),
+                    isAutoMessage: true
+                });
+            }
+        }
+        
+        // Nếu không có lastMessageId, chỉ trả về tin nhắn auto mới nhất (nếu có)
+        if (!lastMessageId && newMessages.length > 0) {
+            return res.json({
+                hasNewMessages: true,
+                newMessages: [newMessages[newMessages.length - 1]],
+                lastMessageId: newMessages[newMessages.length - 1].id
+            });
+        }
+        
+        // Cập nhật lastMessageId nếu có tin nhắn mới
+        let updatedLastMessageId = lastMessageId;
+        if (newMessages.length > 0) {
+            updatedLastMessageId = newMessages[newMessages.length - 1].id;
+        }
+        
+        return res.json({
+            hasNewMessages: newMessages.length > 0,
+            newMessages: newMessages,
+            lastMessageId: updatedLastMessageId
+        });
+    } catch (error) {
+        console.error('❌ Lỗi check new messages:', error);
+        return res.json({ hasNewMessages: false, newMessages: [] });
+    }
+});
 
 // Endpoint tạo TTS on-demand với ElevenLabs
 app.post('/api/tts', ensureAuthenticated, async (req, res) => {
@@ -3765,6 +3848,287 @@ app.get('/redirect', (req, res) => {
 
 // Route catch-all: trả về index.html cho mọi route khác
 app.get('*', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
+
+// ==================== AUTO MESSAGES SYSTEM ====================
+
+// Function để generate follow-up message dựa trên context
+async function generateFollowUpMessage(memory, character, userMessage, conversationHistory) {
+    try {
+        const userProfile = memory.user_profile || {};
+        const relationshipStage = userProfile.relationship_stage || 'stranger';
+        const isPremiumUser = false; // Auto messages cho tất cả users
+        
+        // Tạo prompt đặc biệt cho follow-up message
+        const followUpPrompt = `Bạn là ${character === 'mera' ? 'Mera' : 'Trương Thắng'}, một người bạn AI thân thiện.
+
+**NGỮ CẢNH:**
+Người dùng vừa nói: "${userMessage}"
+Đã qua khoảng 1-2 giờ kể từ tin nhắn đó.
+
+**NHIỆM VỤ:**
+Hãy tạo một tin nhắn NGẮN GỌN (10-20 từ) để hỏi han, follow-up dựa trên nội dung tin nhắn trước đó của người dùng.
+
+**QUY TẮC:**
+- Tin nhắn phải TỰ NHIÊN, DỄ THƯƠNG, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 'Trương Thắng (thân thiện, cởi mở)'}
+- Giai đoạn quan hệ: ${relationshipStage}
+- Chỉ trả lời bằng tiếng Việt
+- KHÔNG dùng [SEND_MEDIA] trong tin nhắn này
+- Ví dụ: Nếu user nói "thôi anh đi chơi đã nhé" → "Anh đi chơi về chưa? Em nhớ anh quá~ 🥺"
+- Nếu user nói "em đi học đây" → "Em học xong chưa? Anh nhớ em quá~ 🥺"
+
+Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN:`;
+
+        const messages = [
+            { role: 'system', content: followUpPrompt },
+            ...conversationHistory.slice(-10), // Lấy 10 tin nhắn gần nhất
+            { role: 'user', content: `[CONTEXT: ${userMessage}]` }
+        ];
+
+        const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4-fast';
+        const response = await Promise.race([
+            xai.chat.completions.create({ model: modelName, messages }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 30000))
+        ]);
+
+        let followUpText = response.choices[0].message.content.trim();
+        
+        // Loại bỏ [SEND_MEDIA] nếu có
+        followUpText = followUpText.replace(/\[SEND_MEDIA:[^\]]+\]/gi, '').trim();
+        
+        return followUpText;
+    } catch (error) {
+        console.error('❌ Lỗi generate follow-up message:', error);
+        return null;
+    }
+}
+
+// Function để generate greeting message (sáng/tối)
+async function generateGreetingMessage(memory, character, greetingType) {
+    try {
+        const userProfile = memory.user_profile || {};
+        const relationshipStage = userProfile.relationship_stage || 'stranger';
+        
+        let greetingPrompt = '';
+        if (greetingType === 'morning') {
+            greetingPrompt = `Bạn là ${character === 'mera' ? 'Mera' : 'Trương Thắng'}.
+
+**NHIỆM VỤ:**
+Tạo tin nhắn chúc buổi sáng NGẮN GỌN (10-15 từ), dễ thương, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 'Trương Thắng (thân thiện, cởi mở)'}.
+
+**GIAI ĐOẠN:** ${relationshipStage}
+**QUY TẮC:**
+- Chỉ trả lời bằng tiếng Việt
+- KHÔNG dùng [SEND_MEDIA]
+- Ví dụ: "Chào buổi sáng anh yêu~ Em chúc anh một ngày tốt lành nhaaa~ 🥺💕" hoặc "Sáng tốt lành anh! Hôm nay em chúc anh một ngày vui vẻ nhaaa~ 🥺"
+
+Hãy tạo tin nhắn chúc buổi sáng:`;
+        } else if (greetingType === 'night') {
+            greetingPrompt = `Bạn là ${character === 'mera' ? 'Mera' : 'Trương Thắng'}.
+
+**NHIỆM VỤ:**
+Tạo tin nhắn chúc ngủ ngon NGẮN GỌN (10-15 từ), dễ thương, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 'Trương Thắng (thân thiện, cởi mở)'}.
+
+**GIAI ĐOẠN:** ${relationshipStage}
+**QUY TẮC:**
+- Chỉ trả lời bằng tiếng Việt
+- KHÔNG dùng [SEND_MEDIA]
+- Ví dụ: "Chúc anh ngủ ngon nhaaa~ Mơ về em nhé~ 🥺🌙" hoặc "Ngủ ngon anh yêu, em chúc anh giấc mơ đẹp nhaaa~ 🥺💕"
+
+Hãy tạo tin nhắn chúc ngủ ngon:`;
+        }
+
+        const messages = [
+            { role: 'system', content: greetingPrompt }
+        ];
+
+        const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4-fast';
+        const response = await Promise.race([
+            xai.chat.completions.create({ model: modelName, messages }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 30000))
+        ]);
+
+        let greetingText = response.choices[0].message.content.trim();
+        
+        // Loại bỏ [SEND_MEDIA] nếu có
+        greetingText = greetingText.replace(/\[SEND_MEDIA:[^\]]+\]/gi, '').trim();
+        
+        return greetingText;
+    } catch (error) {
+        console.error('❌ Lỗi generate greeting message:', error);
+        return null;
+    }
+}
+
+// Function để gửi auto message vào memory
+async function sendAutoMessage(memory, messageText, character) {
+    try {
+        // Thêm vào history
+        memory.history.push({
+            role: 'assistant',
+            content: messageText,
+            isAutoMessage: true, // Đánh dấu là auto message
+            timestamp: new Date()
+        });
+        
+        // Giới hạn history
+        if (memory.history.length > 50) {
+            memory.history = memory.history.slice(memory.history.length - 50);
+        }
+        
+        await memory.save();
+        console.log(`✅ Đã gửi auto message cho user ${memory.userId}: "${messageText.substring(0, 50)}..."`);
+        return true;
+    } catch (error) {
+        console.error('❌ Lỗi gửi auto message:', error);
+        return false;
+    }
+}
+
+// Function để check và gửi auto messages
+async function checkAndSendAutoMessages() {
+    try {
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        
+        // Kiểm tra khung giờ hoạt động (4h-23h)
+        if (currentHour >= 23 || currentHour < 4) {
+            console.log(`⏰ Không gửi auto messages trong giờ ngủ (${currentHour}h)`);
+            return;
+        }
+        
+        // Reset auto_messages_sent_today nếu đã qua ngày mới
+        const memories = await Memory.find({
+            last_auto_message_date: { $ne: currentDate }
+        });
+        for (const memory of memories) {
+            memory.auto_messages_sent_today = 0;
+            memory.last_auto_message_date = currentDate;
+            await memory.save();
+        }
+        
+        // Reset greeting nếu đã qua ngày mới (chỉ reset, không gửi ngay)
+        const memoriesForGreetingReset = await Memory.find({
+            last_greeting_date: { $exists: true, $ne: currentDate }
+        });
+        for (const memory of memoriesForGreetingReset) {
+            memory.last_greeting_sent = '';
+            memory.last_greeting_date = currentDate;
+            await memory.save();
+        }
+        
+        // 1. Check follow-up messages (sau 1-2 giờ không chat)
+        const memoriesForFollowUp = await Memory.find({
+            last_message_time: { $exists: true, $ne: null },
+            last_user_message: { $exists: true, $ne: '' }
+        });
+        
+        for (const memory of memoriesForFollowUp) {
+            // Reset counter nếu đã qua ngày mới
+            if (memory.last_auto_message_date !== currentDate) {
+                memory.auto_messages_sent_today = 0;
+                memory.last_auto_message_date = currentDate;
+                await memory.save();
+            }
+            
+            // Kiểm tra giới hạn (tối đa 3 follow-up/ngày)
+            if (memory.auto_messages_sent_today >= 3) {
+                continue;
+            }
+            
+            const timeSinceLastMessage = now - memory.last_message_time;
+            const hoursSinceLastMessage = timeSinceLastMessage / (1000 * 60 * 60);
+            
+            // Gửi follow-up sau 1-2 giờ
+            if (hoursSinceLastMessage >= 1 && hoursSinceLastMessage <= 2) {
+                const character = memory.character;
+                const followUpText = await generateFollowUpMessage(
+                    memory,
+                    character,
+                    memory.last_user_message,
+                    memory.history || []
+                );
+                
+                if (followUpText) {
+                    await sendAutoMessage(memory, followUpText, character);
+                    memory.auto_messages_sent_today = (memory.auto_messages_sent_today || 0) + 1;
+                    await memory.save();
+                }
+            }
+        }
+        
+        // 2. Check greeting messages
+        // Buổi sáng: 5h30 - 9h (5h30 = 5.5)
+        if (currentHour >= 5 && currentHour < 9) {
+            const memoriesForMorning = await Memory.find({
+                $or: [
+                    { last_greeting_sent: { $ne: 'morning' } },
+                    { last_greeting_date: { $ne: currentDate } },
+                    { last_greeting_date: { $exists: false } }
+                ]
+            });
+            
+            for (const memory of memoriesForMorning) {
+                // Chỉ gửi nếu chưa gửi greeting sáng hôm nay
+                if (memory.last_greeting_sent === 'morning' && memory.last_greeting_date === currentDate) {
+                    continue;
+                }
+                
+                const character = memory.character;
+                const greetingText = await generateGreetingMessage(memory, character, 'morning');
+                
+                if (greetingText) {
+                    await sendAutoMessage(memory, greetingText, character);
+                    memory.last_greeting_sent = 'morning';
+                    memory.last_greeting_date = currentDate;
+                    await memory.save();
+                }
+            }
+        }
+        
+        // Buổi tối: 21h - 22h
+        if (currentHour >= 21 && currentHour < 22) {
+            const memoriesForNight = await Memory.find({
+                $or: [
+                    { last_greeting_sent: { $ne: 'night' } },
+                    { last_greeting_date: { $ne: currentDate } },
+                    { last_greeting_date: { $exists: false } }
+                ]
+            });
+            
+            for (const memory of memoriesForNight) {
+                // Chỉ gửi nếu chưa gửi greeting tối hôm nay
+                if (memory.last_greeting_sent === 'night' && memory.last_greeting_date === currentDate) {
+                    continue;
+                }
+                
+                const character = memory.character;
+                const greetingText = await generateGreetingMessage(memory, character, 'night');
+                
+                if (greetingText) {
+                    await sendAutoMessage(memory, greetingText, character);
+                    memory.last_greeting_sent = 'night';
+                    memory.last_greeting_date = currentDate;
+                    await memory.save();
+                }
+            }
+        }
+        
+        console.log(`✅ Đã check auto messages (${now.toISOString()})`);
+    } catch (error) {
+        console.error('❌ Lỗi check auto messages:', error);
+    }
+}
+
+// Cron job: Chạy mỗi 5 phút để check và gửi auto messages
+cron.schedule('*/5 * * * *', () => {
+    console.log('⏰ Cron job: Checking auto messages...');
+    checkAndSendAutoMessages();
+});
+
+console.log('✅ Auto messages system đã được khởi động (chạy mỗi 5 phút)');
+
+// ==================== END AUTO MESSAGES SYSTEM ====================
 
 app.listen(port, () => { console.log(`🚀 Server đang chạy tại cổng ${port}`); });
 

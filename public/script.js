@@ -1219,3 +1219,166 @@ function removeMessage(id) {
     const el = document.getElementById(id);
     if (el) el.remove();
 }
+
+// ==================== AUTO MESSAGES POLLING & NOTIFICATION ====================
+
+let autoMessagePollingInterval = null;
+let lastMessageId = null;
+
+// Function để play notification sound
+function playNotificationSound() {
+    try {
+        // Tạo audio context để phát âm thanh notification
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Tạo âm thanh ngắn, dễ thương
+        oscillator.frequency.value = 800; // Tần số cao, dễ thương
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+    } catch (error) {
+        console.warn('Không thể phát notification sound:', error);
+    }
+}
+
+// Function để hiển thị notification
+function showNotification(messageText, characterName) {
+    // Kiểm tra xem browser có hỗ trợ Notification API không
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            const notification = new Notification(`${characterName} nhắn tin`, {
+                body: messageText.substring(0, 100),
+                icon: characterName === 'Mera San' ? 'mera_avatar.png' : 'thang_avatar.png',
+                badge: 'yorluv-logo.png',
+                tag: 'auto-message',
+                requireInteraction: false
+            });
+            
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+            };
+            
+            // Tự động đóng sau 5 giây
+            setTimeout(() => notification.close(), 5000);
+        } catch (error) {
+            console.warn('Không thể hiển thị notification:', error);
+        }
+    }
+}
+
+// Function để request notification permission
+async function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        try {
+            await Notification.requestPermission();
+        } catch (error) {
+            console.warn('Không thể request notification permission:', error);
+        }
+    }
+}
+
+// Function để check tin nhắn mới
+async function checkNewAutoMessages() {
+    if (!currentUser || !currentCharacter) return;
+    
+    try {
+        const response = await fetch(`/api/check-new-messages?character=${currentCharacter}&lastMessageId=${lastMessageId || ''}`);
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        if (data.hasNewMessages && data.newMessages && data.newMessages.length > 0) {
+            // Có tin nhắn mới
+            for (const newMsg of data.newMessages) {
+                // Thêm tin nhắn vào chat box
+                const characterName = currentCharacter === 'mera' ? 'Mera San' : 'Trương Thắng';
+                addMessage(DOMElements.chatBox, currentCharacter, newMsg.content);
+                
+                // Play sound
+                playNotificationSound();
+                
+                // Hiển thị notification
+                showNotification(newMsg.content, characterName);
+                
+                // Scroll to bottom
+                DOMElements.chatBox.scrollTop = DOMElements.chatBox.scrollHeight;
+            }
+            
+            // Cập nhật lastMessageId từ response
+            if (data.lastMessageId) {
+                lastMessageId = data.lastMessageId;
+            } else if (data.newMessages.length > 0) {
+                lastMessageId = data.newMessages[data.newMessages.length - 1].id;
+            }
+            
+            // Reload chat data để sync với server
+            await loadChatData();
+        }
+    } catch (error) {
+        console.error('Lỗi check new messages:', error);
+    }
+}
+
+// Function để start polling
+function startAutoMessagePolling() {
+    // Dừng polling cũ nếu có
+    if (autoMessagePollingInterval) {
+        clearInterval(autoMessagePollingInterval);
+    }
+    
+    // Request notification permission
+    requestNotificationPermission();
+    
+    // Check ngay lập tức
+    checkNewAutoMessages();
+    
+    // Polling mỗi 10 giây
+    autoMessagePollingInterval = setInterval(() => {
+        checkNewAutoMessages();
+    }, 10000); // 10 giây
+    
+    console.log('✅ Auto message polling đã được khởi động');
+}
+
+// Function để stop polling
+function stopAutoMessagePolling() {
+    if (autoMessagePollingInterval) {
+        clearInterval(autoMessagePollingInterval);
+        autoMessagePollingInterval = null;
+    }
+}
+
+// Khởi động polling khi app được khởi tạo
+if (window.chatAppInitialized) {
+    startAutoMessagePolling();
+}
+
+// Khởi động polling khi load chat data
+const originalLoadChatData = loadChatData;
+loadChatData = async function() {
+    await originalLoadChatData();
+    
+    // Set lastMessageId từ tin nhắn cuối cùng
+    if (conversationHistory && conversationHistory.length > 0) {
+        const lastMsg = conversationHistory[conversationHistory.length - 1];
+        if (lastMsg._id) {
+            lastMessageId = lastMsg._id.toString();
+        }
+    }
+    
+    // Start polling nếu chưa start
+    if (!autoMessagePollingInterval) {
+        startAutoMessagePolling();
+    }
+};
+
+// ==================== END AUTO MESSAGES POLLING & NOTIFICATION ====================
