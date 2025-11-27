@@ -141,7 +141,7 @@
             <h1>Đang mở trình duyệt...</h1>
             <p>Vui lòng đợi trong giây lát</p>
             <p class="subtitle">Nếu không tự động mở, vui lòng nhấn vào nút bên dưới</p>
-            <a href="https://yorluv.chat" class="manual-button" id="manualButton">
+            <a href="https://yorluv.chat" class="manual-button" id="manualButton" onclick="openInBrowser(event)">
                 🚀 Mở YorLuv Chat
             </a>
         </div>
@@ -173,25 +173,38 @@
             
             if (isTikTok) {
                 if (isAndroid()) {
-                    // Android: Dùng Intent URL để mở trình duyệt mặc định
-                    const intentUrl = `intent://yorluv.chat#Intent;scheme=https;action=android.intent.action.VIEW;end`;
+                    // Android: Ưu tiên mở Chrome cụ thể
+                    // Package name của Chrome: com.android.chrome
+                    const chromeIntentUrl = `intent://yorluv.chat#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(TARGET_URL)};end`;
                     
-                    // Thử mở bằng Intent
-                    window.location.href = intentUrl;
+                    // Thử mở Chrome trước
+                    window.location.href = chromeIntentUrl;
                     
-                    // Fallback: Nếu Intent không hoạt động, redirect trực tiếp sau 500ms
+                    // Fallback 1: Nếu Chrome không có, thử trình duyệt mặc định
+                    setTimeout(() => {
+                        const fallbackIntent = `intent://yorluv.chat#Intent;scheme=https;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(TARGET_URL)};end`;
+                        window.location.href = fallbackIntent;
+                    }, 300);
+                    
+                    // Fallback 2: Nếu Intent không hoạt động, redirect trực tiếp sau 800ms
                     setTimeout(() => {
                         window.location.href = TARGET_URL;
-                    }, 500);
+                    }, 800);
                     
                     // Hiển thị hướng dẫn cho Android
                     showInstructions('android');
                 } else if (isIOS()) {
-                    // iOS: Universal Link hoặc direct redirect
+                    // iOS: Universal Link sẽ tự động mở Safari
+                    // Thử dùng Universal Link trước (nếu có cấu hình)
+                    // Nếu không, direct redirect sẽ mở Safari trên iOS
+                    
+                    // Phương án 1: Direct redirect (Safari sẽ tự mở nếu là Universal Link)
                     window.location.href = TARGET_URL;
                     
-                    // Hiển thị hướng dẫn cho iOS
-                    showInstructions('ios');
+                    // Fallback: Nếu không tự động mở, hiển thị hướng dẫn
+                    setTimeout(() => {
+                        showInstructions('ios');
+                    }, 1000);
                 } else {
                     // Desktop hoặc khác: redirect trực tiếp
                     window.location.href = TARGET_URL;
@@ -210,17 +223,38 @@
                 instructions.innerHTML = `
                     1. Nhấn vào <strong>3 chấm (⋮)</strong> ở góc trên bên phải<br>
                     2. Chọn <strong>"Mở trên trình duyệt khác"</strong> hoặc <strong>"Mở trong Chrome"</strong><br>
-                    3. Hoặc nhấn nút <strong>"Mở YorLuv Chat"</strong> bên trên
+                    3. Hoặc nhấn nút <strong>"Mở YorLuv Chat"</strong> bên trên để mở Chrome
                 `;
             } else if (platform === 'ios') {
                 instructions.innerHTML = `
                     1. Nhấn vào <strong>biểu tượng Safari</strong> ở góc dưới<br>
                     2. Hoặc nhấn vào <strong>3 chấm (⋯)</strong> và chọn <strong>"Mở trong Safari"</strong><br>
-                    3. Hoặc nhấn nút <strong>"Mở YorLuv Chat"</strong> bên trên
+                    3. Hoặc nhấn nút <strong>"Mở YorLuv Chat"</strong> bên trên để mở Safari
                 `;
             }
             
             infoBox.style.display = 'block';
+        }
+        
+        function openInBrowser(event) {
+            event.preventDefault();
+            
+            if (isAndroid()) {
+                // Android: Mở Chrome cụ thể
+                const chromeIntentUrl = `intent://yorluv.chat#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(TARGET_URL)};end`;
+                window.location.href = chromeIntentUrl;
+                
+                // Fallback sau 500ms
+                setTimeout(() => {
+                    window.location.href = TARGET_URL;
+                }, 500);
+            } else if (isIOS()) {
+                // iOS: Mở Safari (Universal Link hoặc direct)
+                window.location.href = TARGET_URL;
+            } else {
+                // Desktop: redirect trực tiếp
+                window.location.href = TARGET_URL;
+            }
         }
         
         // Tự động redirect ngay khi load
