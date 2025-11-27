@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Auto Messages - YorLuv Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #8e82ff 0%, #ff6b9d 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+        h1 {
+            color: #8e82ff;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #8e82ff;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #8e82ff 0%, #ff6b9d 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .result.show {
+            display: block;
+        }
+        .info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            color: #004085;
+        }
+        .info strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Auto Messages</h1>
+        
+        <div class="info">
+            <strong>📝 Hướng dẫn:</strong>
+            <p>1. Đăng nhập vào app trước</p>
+            <p>2. Gửi ít nhất 1 tin nhắn để có <code>last_user_message</code></p>
+            <p>3. Mở trang này và test các loại auto messages</p>
+        </div>
+        
+        <form id="testForm">
+            <div class="form-group">
+                <label for="userId">User ID (MongoDB ObjectId):</label>
+                <input type="text" id="userId" placeholder="Ví dụ: 507f1f77bcf86cd799439011" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="character">Character:</label>
+                <select id="character" required>
+                    <option value="mera">Mera</option>
+                    <option value="thang">Trương Thắng</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="type">Loại tin nhắn:</label>
+                <select id="type" required>
+                    <option value="followup">Follow-up (dựa trên tin nhắn trước)</option>
+                    <option value="morning">Chúc buổi sáng</option>
+                    <option value="night">Chúc ngủ ngon</option>
+                </select>
+            </div>
+            
+            <button type="submit" id="submitBtn">🚀 Gửi Test Message</button>
+        </form>
+        
+        <div id="result" class="result"></div>
+    </div>
+    
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const resultDiv = document.getElementById('result');
+            
+            const userId = document.getElementById('userId').value.trim();
+            const character = document.getElementById('character').value;
+            const type = document.getElementById('type').value;
+            
+            if (!userId) {
+                showResult('error', 'Vui lòng nhập User ID');
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Đang gửi...';
+            resultDiv.classList.remove('show');
+            
+            try {
+                const response = await fetch('/admin/test-auto-messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ userId, character, type })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('success', `
+                        <strong>✅ Thành công!</strong><br>
+                        <strong>Loại:</strong> ${type}<br>
+                        <strong>Character:</strong> ${character}<br>
+                        <strong>Tin nhắn:</strong> ${data.message}
+                    `);
+                } else {
+                    showResult('error', `<strong>❌ Lỗi:</strong> ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                showResult('error', `<strong>❌ Lỗi kết nối:</strong> ${error.message}`);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 Gửi Test Message';
+            }
+        });
+        
+        function showResult(type, message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = `result ${type} show`;
+            resultDiv.innerHTML = message;
+        }
+        
+        // Lấy User ID từ localStorage nếu có
+        window.onload = () => {
+            // Có thể lấy từ API /api/current_user nếu cần
+            fetch('/api/current_user')
+                .then(res => res.json())
+                .then(user => {
+                    if (user && user._id) {
+                        document.getElementById('userId').value = user._id;
+                    }
+                })
+                .catch(() => {});
+        };
+    </script>
+</body>
+</html>
+

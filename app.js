@@ -3673,6 +3673,73 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
 }
 
 // Trang admin analytics
+// Endpoint admin để test auto messages (trigger thủ công)
+app.post('/admin/test-auto-messages', ensureAuthenticated, async (req, res) => {
+    try {
+        const { userId, character, type } = req.body; // type: 'followup' | 'morning' | 'night'
+        
+        if (!userId || !character || !type) {
+            return res.status(400).json({ error: 'Thiếu tham số: userId, character, type' });
+        }
+        
+        if (character !== 'mera' && character !== 'thang') {
+            return res.status(400).json({ error: 'Character phải là mera hoặc thang' });
+        }
+        
+        if (type !== 'followup' && type !== 'morning' && type !== 'night') {
+            return res.status(400).json({ error: 'Type phải là followup, morning hoặc night' });
+        }
+        
+        const memory = await Memory.findOne({ userId, character });
+        if (!memory) {
+            return res.status(404).json({ error: 'Không tìm thấy memory cho user này' });
+        }
+        
+        let messageText = null;
+        
+        if (type === 'followup') {
+            if (!memory.last_user_message) {
+                return res.status(400).json({ error: 'User chưa có tin nhắn nào để follow-up' });
+            }
+            // Set last_message_time về 1.5 giờ trước để trigger follow-up
+            memory.last_message_time = new Date(Date.now() - 1.5 * 60 * 60 * 1000);
+            await memory.save();
+            
+            messageText = await generateFollowUpMessage(
+                memory,
+                character,
+                memory.last_user_message,
+                memory.history || []
+            );
+        } else if (type === 'morning') {
+            messageText = await generateGreetingMessage(memory, character, 'morning');
+        } else if (type === 'night') {
+            messageText = await generateGreetingMessage(memory, character, 'night');
+        }
+        
+        if (!messageText) {
+            return res.status(500).json({ error: 'Không thể generate message' });
+        }
+        
+        // Gửi auto message
+        const success = await sendAutoMessage(memory, messageText, character);
+        
+        if (success) {
+            return res.json({
+                success: true,
+                message: messageText,
+                type: type,
+                character: character
+            });
+        } else {
+            return res.status(500).json({ error: 'Không thể gửi auto message' });
+        }
+    } catch (error) {
+        console.error('❌ Lỗi test auto messages:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/admin/analytics', ensureAuthenticated, async (req, res) => {
     try {
         // Tính toán thời gian chính xác
