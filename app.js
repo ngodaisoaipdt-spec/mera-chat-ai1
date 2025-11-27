@@ -28,7 +28,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' }, last_followup_time: { type: Date, default: null } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -2375,6 +2375,7 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     // Để mỗi tin nhắn mới có thể nhận 1 follow-up
     if (previousLastMessage !== message) {
         memory.last_followup_message = ''; // Reset để có thể gửi follow-up cho tin nhắn mới
+        memory.last_followup_time = null; // Reset thời gian follow-up để bắt đầu lại từ 20 phút
         console.log(`🔄 [AUTO MSG] User gửi tin nhắn mới, reset follow-up tracking để có thể gửi follow-up mới`);
     }
     
@@ -3757,7 +3758,12 @@ app.get('/admin/debug-auto-messages', ensureAuthenticated, async (req, res) => {
             message_count: memory.user_profile?.message_count || 0,
             relationship_stage: memory.user_profile?.relationship_stage || 'stranger',
             history_count: memory.history?.length || 0,
-            can_send_followup: timeSinceLastMessage !== null && timeSinceLastMessage >= 3 && (memory.auto_messages_sent_today || 0) < 3,
+            can_send_followup: timeSinceLastMessage !== null && (
+                (!memory.last_followup_time && timeSinceLastMessage >= 20) || 
+                (memory.last_followup_time && (now - memory.last_followup_time) / (1000 * 60 * 60) >= 1)
+            ) && (memory.auto_messages_sent_today || 0) < 12,
+            last_followup_time: memory.last_followup_time,
+            hours_since_last_followup: memory.last_followup_time ? (now - memory.last_followup_time) / (1000 * 60 * 60) : null,
             current_time: now.toISOString()
         });
     } catch (error) {
@@ -4018,30 +4024,68 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
         const relationshipStage = userProfile.relationship_stage || 'stranger';
         const isPremiumUser = false; // Auto messages cho tất cả users
         
+        // Xác định tone và cách xưng hô dựa trên giai đoạn quan hệ
+        let relationshipContext = '';
+        let toneGuide = '';
+        
+        if (relationshipStage === 'stranger') {
+            relationshipContext = 'Người lạ - mới quen biết';
+            toneGuide = 'Thân thiện, lịch sự, chưa quá thân mật. Dùng "bạn", "anh/chị" một cách lịch sự.';
+        } else if (relationshipStage === 'friend') {
+            relationshipContext = 'Bạn bè - đã quen biết';
+            toneGuide = 'Thân thiện, cởi mở, gần gũi hơn. Có thể dùng "anh/em" một cách tự nhiên, thể hiện sự quan tâm.';
+        } else if (relationshipStage === 'lover') {
+            relationshipContext = 'Người yêu - mối quan hệ thân mật';
+            toneGuide = 'Ngọt ngào, thân mật, thể hiện tình cảm. Dùng "anh/em" một cách tự nhiên, có thể thêm emoji dễ thương, thể hiện sự nhớ nhung, quan tâm sâu sắc.';
+        }
+        
+        // Lấy nội dung cuộc trò chuyện gần nhất để tạo context
+        const recentContext = conversationHistory.slice(-5).map(msg => {
+            if (msg.role === 'user') {
+                return `User: ${msg.content}`;
+            } else {
+                return `${character === 'mera' ? 'Mera' : 'Trương Thắng'}: ${msg.content.substring(0, 100)}`;
+            }
+        }).join('\n');
+        
         // Tạo prompt đặc biệt cho follow-up message
         const followUpPrompt = `Bạn là ${character === 'mera' ? 'Mera' : 'Trương Thắng'}, một người bạn AI thân thiện.
 
 **NGỮ CẢNH:**
-Người dùng vừa nói: "${userMessage}"
-Đã qua khoảng vài phút kể từ tin nhắn đó.
+- Người dùng vừa nói: "${userMessage}"
+- Đã qua một khoảng thời gian kể từ tin nhắn đó (20 phút hoặc 1 giờ)
+- Giai đoạn quan hệ: ${relationshipContext} (${relationshipStage})
+- Tone: ${toneGuide}
+
+**LỊCH SỬ CUỘC TRÒ CHUYỆN GẦN ĐÂY:**
+${recentContext || 'Chưa có lịch sử'}
 
 **NHIỆM VỤ:**
-Hãy tạo một tin nhắn NGẮN GỌN (10-20 từ) để hỏi han, follow-up dựa trên nội dung tin nhắn trước đó của người dùng.
+Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up dựa trên:
+1. Nội dung tin nhắn trước đó của người dùng: "${userMessage}"
+2. Ngữ cảnh cuộc trò chuyện gần đây
+3. Giai đoạn quan hệ hiện tại (${relationshipStage})
 
 **QUY TẮC:**
-- Tin nhắn phải TỰ NHIÊN, DỄ THƯƠNG, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 'Trương Thắng (thân thiện, cởi mở)'}
-- Giai đoạn quan hệ: ${relationshipStage}
+- Tin nhắn phải TỰ NHIÊN, DỄ THƯƠNG, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào, quan tâm)' : 'Trương Thắng (thân thiện, cởi mở, nhiệt tình)'}
+- Phù hợp với giai đoạn quan hệ: ${relationshipStage} - ${toneGuide}
+- Dựa vào nội dung cuộc trò chuyện để tạo độ gắn kết, thể hiện bạn đã nhớ và quan tâm đến những gì người dùng đã nói
 - Chỉ trả lời bằng tiếng Việt
 - KHÔNG dùng [SEND_MEDIA] trong tin nhắn này
-- Ví dụ: Nếu user nói "thôi anh đi chơi đã nhé" → "Anh đi chơi về chưa? Em nhớ anh quá~ 🥺"
-- Nếu user nói "em đi học đây" → "Em học xong chưa? Anh nhớ em quá~ 🥺"
+- Tạo độ gắn kết: Thể hiện sự nhớ nhung, quan tâm, muốn biết tình hình của người dùng
 
-Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN:`;
+**VÍ DỤ:**
+- Nếu user nói "thôi anh đi chơi đã nhé" và là ${relationshipStage === 'lover' ? 'người yêu' : 'bạn bè'}:
+  ${relationshipStage === 'lover' ? '"Anh đi chơi về chưa? Em nhớ anh quá~ 🥺"' : relationshipStage === 'friend' ? '"Anh đi chơi về chưa? Em đang nhớ anh đây~ 😊"' : '"Anh đi chơi về chưa? Bạn có vui không?"'}
+- Nếu user nói "em đi học đây" và là ${relationshipStage === 'lover' ? 'người yêu' : 'bạn bè'}:
+  ${relationshipStage === 'lover' ? '"Em học xong chưa? Anh nhớ em quá~ 🥺"' : relationshipStage === 'friend' ? '"Em học xong chưa? Anh đang nhớ em đây~ 😊"' : '"Em học xong chưa? Bạn có mệt không?"'}
+
+Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai đoạn quan hệ và nội dung cuộc trò chuyện:`;
 
         const messages = [
             { role: 'system', content: followUpPrompt },
-            ...conversationHistory.slice(-10), // Lấy 10 tin nhắn gần nhất
-            { role: 'user', content: `[CONTEXT: ${userMessage}]` }
+            ...conversationHistory.slice(-10), // Lấy 10 tin nhắn gần nhất để có context đầy đủ
+            { role: 'user', content: `[CONTEXT: Người dùng vừa nói: "${userMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]` }
         ];
 
         const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4-fast';
@@ -4197,26 +4241,57 @@ async function checkAndSendAutoMessages() {
                 await memory.save();
             }
             
-            // Kiểm tra giới hạn (tối đa 5 follow-up/ngày - đã tăng để tự nhiên hơn)
-            // Mỗi tin nhắn mới của user sẽ có thể nhận 1 follow-up
-            if (memory.auto_messages_sent_today >= 5) {
-                console.log(`⏭️ [AUTO MSG] User ${memory.userId} đã đạt giới hạn 5 follow-up/ngày`);
+            // Kiểm tra giới hạn (tối đa 12 follow-up/ngày)
+            if (memory.auto_messages_sent_today >= 12) {
+                console.log(`⏭️ [AUTO MSG] User ${memory.userId} đã đạt giới hạn 12 follow-up/ngày`);
                 continue;
             }
             
             const timeSinceLastMessage = now - memory.last_message_time;
             const minutesSinceLastMessage = timeSinceLastMessage / (1000 * 60);
+            const hoursSinceLastMessage = minutesSinceLastMessage / 60;
             
-            console.log(`⏱️ [AUTO MSG] User ${memory.userId}, character: ${memory.character}, last_message: "${memory.last_user_message?.substring(0, 30)}...", đã qua: ${minutesSinceLastMessage.toFixed(2)} phút, đã gửi: ${memory.auto_messages_sent_today}/5`);
+            // Kiểm tra thời gian từ lần gửi follow-up cuối cùng
+            const timeSinceLastFollowUp = memory.last_followup_time 
+                ? (now - memory.last_followup_time) / (1000 * 60 * 60) // Giờ
+                : null;
             
-            // QUAN TRỌNG: Chỉ gửi 1 follow-up cho mỗi tin nhắn của user
-            // Kiểm tra xem đã gửi follow-up cho tin nhắn này chưa
-            const lastFollowUpMessage = memory.last_followup_message || '';
-            const shouldSendFollowUp = lastFollowUpMessage !== memory.last_user_message;
+            console.log(`⏱️ [AUTO MSG] User ${memory.userId}, character: ${memory.character}, last_message: "${memory.last_user_message?.substring(0, 30)}...", đã qua: ${minutesSinceLastMessage.toFixed(2)} phút, đã gửi: ${memory.auto_messages_sent_today}/12`);
             
-            // Gửi follow-up sau 3 phút (đã giảm để test, production sẽ là 1-2 giờ)
-            if (minutesSinceLastMessage >= 3 && shouldSendFollowUp) {
-                console.log(`✅ [AUTO MSG] Đủ điều kiện gửi follow-up cho user ${memory.userId} (tin nhắn mới: "${memory.last_user_message.substring(0, 30)}...")`);
+            // Logic thời gian:
+            // 1. Lần đầu: Sau 20 phút kể từ tin nhắn cuối cùng
+            // 2. Nếu không phản hồi: Cách 1 giờ gửi tiếp (từ lần gửi follow-up cuối)
+            let shouldSendFollowUp = false;
+            let isFirstFollowUp = !memory.last_followup_time;
+            
+            if (isFirstFollowUp) {
+                // Lần đầu: Sau 20 phút
+                if (minutesSinceLastMessage >= 20) {
+                    shouldSendFollowUp = true;
+                    console.log(`✅ [AUTO MSG] Đủ điều kiện gửi follow-up lần đầu (20 phút)`);
+                } else {
+                    console.log(`⏳ [AUTO MSG] Chưa đủ 20 phút cho follow-up lần đầu (hiện tại: ${minutesSinceLastMessage.toFixed(2)} phút)`);
+                }
+            } else {
+                // Đã gửi follow-up rồi: Kiểm tra xem user có phản hồi không
+                // Nếu last_message_time không thay đổi (user chưa phản hồi) và đã qua 1 giờ từ lần gửi follow-up cuối
+                const userHasResponded = memory.last_message_time > memory.last_followup_time;
+                
+                if (!userHasResponded && timeSinceLastFollowUp >= 1) {
+                    shouldSendFollowUp = true;
+                    console.log(`✅ [AUTO MSG] User chưa phản hồi, gửi follow-up tiếp sau 1 giờ`);
+                } else if (userHasResponded) {
+                    // User đã phản hồi, reset để có thể gửi follow-up mới cho tin nhắn mới
+                    memory.last_followup_time = null;
+                    memory.last_followup_message = '';
+                    await memory.save();
+                    console.log(`🔄 [AUTO MSG] User đã phản hồi, reset follow-up tracking`);
+                } else {
+                    console.log(`⏳ [AUTO MSG] Chưa đủ 1 giờ từ lần follow-up cuối (hiện tại: ${timeSinceLastFollowUp?.toFixed(2)} giờ)`);
+                }
+            }
+            
+            if (shouldSendFollowUp) {
                 const character = memory.character;
                 const followUpText = await generateFollowUpMessage(
                     memory,
@@ -4229,16 +4304,13 @@ async function checkAndSendAutoMessages() {
                     console.log(`📤 [AUTO MSG] Đang gửi follow-up: "${followUpText.substring(0, 50)}..."`);
                     await sendAutoMessage(memory, followUpText, character);
                     memory.auto_messages_sent_today = (memory.auto_messages_sent_today || 0) + 1;
-                    memory.last_followup_message = memory.last_user_message; // Đánh dấu đã gửi follow-up cho tin nhắn này
+                    memory.last_followup_message = memory.last_user_message;
+                    memory.last_followup_time = now; // Lưu thời gian gửi follow-up
                     await memory.save();
-                    console.log(`✅ [AUTO MSG] Đã gửi follow-up thành công cho user ${memory.userId} (${memory.auto_messages_sent_today}/5)`);
+                    console.log(`✅ [AUTO MSG] Đã gửi follow-up thành công cho user ${memory.userId} (${memory.auto_messages_sent_today}/12)`);
                 } else {
                     console.warn(`⚠️ [AUTO MSG] Không thể generate follow-up text cho user ${memory.userId}`);
                 }
-            } else if (!shouldSendFollowUp) {
-                console.log(`⏭️ [AUTO MSG] Đã gửi follow-up cho tin nhắn này rồi: "${memory.last_user_message.substring(0, 30)}..."`);
-            } else {
-                console.log(`⏳ [AUTO MSG] Chưa đủ thời gian (cần >= 3 phút, hiện tại: ${minutesSinceLastMessage.toFixed(2)} phút)`);
             }
         }
         
