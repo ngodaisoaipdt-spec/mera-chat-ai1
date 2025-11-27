@@ -2461,58 +2461,76 @@ app.get('/api/check-new-messages', ensureAuthenticated, async (req, res) => {
             return res.json({ hasNewMessages: false, newMessages: [] });
         }
         
-        // Lấy lastMessageId từ query (nếu có)
+        // Lấy lastMessageId từ query (nếu có) - có thể là index hoặc ID
         const lastMessageId = req.query.lastMessageId || '';
+        
+        console.log(`🔍 [CHECK-MSG] User: ${req.user._id}, character: ${character}, lastMessageId: ${lastMessageId}, history length: ${memory.history.length}`);
         
         // Tìm các tin nhắn mới (auto messages) sau lastMessageId
         const newMessages = [];
-        let foundLastMessage = !lastMessageId;
-        let startIndex = memory.history.length;
+        let startIndex = 0;
         
-        // Tìm vị trí của lastMessageId
+        // Nếu có lastMessageId, tìm vị trí của nó
         if (lastMessageId) {
+            // Thử parse như index trước
+            if (lastMessageId.startsWith('msg-')) {
+                const index = parseInt(lastMessageId.replace('msg-', ''));
+                if (!isNaN(index) && index >= 0) {
+                    startIndex = index + 1;
+                }
+            } else {
+                // Tìm theo _id hoặc index
+                for (let i = memory.history.length - 1; i >= 0; i--) {
+                    const msg = memory.history[i];
+                    const msgId = msg._id ? msg._id.toString() : `msg-${i}`;
+                    if (msgId === lastMessageId) {
+                        startIndex = i + 1;
+                        break;
+                    }
+                }
+            }
+        } else {
+            // Nếu không có lastMessageId, lấy từ tin nhắn cuối cùng (không phải auto message)
+            // Tìm tin nhắn assistant cuối cùng không phải auto message
             for (let i = memory.history.length - 1; i >= 0; i--) {
                 const msg = memory.history[i];
-                // Tạo ID từ index nếu không có _id
-                const msgId = msg._id ? msg._id.toString() : `msg-${i}`;
-                if (msgId === lastMessageId) {
+                if (msg.role === 'assistant' && !msg.isAutoMessage) {
                     startIndex = i + 1;
-                    foundLastMessage = true;
                     break;
                 }
             }
         }
         
-        // Lấy các tin nhắn mới sau lastMessageId
+        console.log(`🔍 [CHECK-MSG] Start index: ${startIndex}, history length: ${memory.history.length}`);
+        
+        // Lấy các tin nhắn mới sau startIndex (chỉ lấy auto messages)
         for (let i = startIndex; i < memory.history.length; i++) {
             const msg = memory.history[i];
             
-            // Nếu là auto message và là assistant message
+            // Chỉ lấy auto messages từ assistant
             if (msg.role === 'assistant' && msg.isAutoMessage) {
-                const msgId = msg._id ? msg._id.toString() : `msg-${i}`;
+                const msgId = `msg-${i}`; // Dùng index làm ID để đơn giản
                 newMessages.push({
                     id: msgId,
                     content: msg.content,
                     timestamp: msg.timestamp || new Date(),
                     isAutoMessage: true
                 });
+                console.log(`✅ [CHECK-MSG] Tìm thấy auto message mới tại index ${i}: "${msg.content.substring(0, 30)}..."`);
             }
         }
         
-        // Nếu không có lastMessageId, chỉ trả về tin nhắn auto mới nhất (nếu có)
-        if (!lastMessageId && newMessages.length > 0) {
-            return res.json({
-                hasNewMessages: true,
-                newMessages: [newMessages[newMessages.length - 1]],
-                lastMessageId: newMessages[newMessages.length - 1].id
-            });
-        }
-        
-        // Cập nhật lastMessageId nếu có tin nhắn mới
+        // Cập nhật lastMessageId
         let updatedLastMessageId = lastMessageId;
         if (newMessages.length > 0) {
             updatedLastMessageId = newMessages[newMessages.length - 1].id;
+        } else if (!lastMessageId && memory.history.length > 0) {
+            // Nếu không có lastMessageId và không có tin nhắn mới, set từ tin nhắn cuối cùng
+            const lastMsg = memory.history[memory.history.length - 1];
+            updatedLastMessageId = `msg-${memory.history.length - 1}`;
         }
+        
+        console.log(`📊 [CHECK-MSG] Kết quả: hasNewMessages=${newMessages.length > 0}, count=${newMessages.length}, lastMessageId=${updatedLastMessageId}`);
         
         return res.json({
             hasNewMessages: newMessages.length > 0,

@@ -1379,11 +1379,21 @@ const originalLoadChatData = loadChatData;
 loadChatData = async function() {
     await originalLoadChatData();
     
-    // Set lastMessageId từ tin nhắn cuối cùng
+    // Set lastMessageId từ tin nhắn cuối cùng (không phải auto message)
     if (conversationHistory && conversationHistory.length > 0) {
-        const lastMsg = conversationHistory[conversationHistory.length - 1];
-        if (lastMsg._id) {
-            lastMessageId = lastMsg._id.toString();
+        // Tìm tin nhắn cuối cùng không phải auto message
+        for (let i = conversationHistory.length - 1; i >= 0; i--) {
+            const msg = conversationHistory[i];
+            if (msg.role === 'assistant' && !msg.isAutoMessage) {
+                lastMessageId = `msg-${i}`;
+                console.log(`✅ [POLLING] Set lastMessageId từ loadChatData: ${lastMessageId}`);
+                break;
+            }
+        }
+        // Nếu không tìm thấy, dùng tin nhắn cuối cùng
+        if (!lastMessageId && conversationHistory.length > 0) {
+            lastMessageId = `msg-${conversationHistory.length - 1}`;
+            console.log(`✅ [POLLING] Set lastMessageId từ tin nhắn cuối: ${lastMessageId}`);
         }
     }
     
