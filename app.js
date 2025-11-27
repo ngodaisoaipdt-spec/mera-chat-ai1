@@ -28,7 +28,7 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -2365,8 +2365,18 @@ app.post('/chat', ensureAuthenticated, async (req, res) => {
     memory.history.push({ role: 'user', content: message }); 
     
     // Lưu last_user_message và last_message_time để dùng cho auto messages
+    // QUAN TRỌNG: Khi user gửi tin nhắn mới, reset counter cho follow-up của tin nhắn này
+    // Vì đó là follow-up mới dựa trên context mới, không phải tin nhắn cũ
+    const previousLastMessage = memory.last_user_message;
     memory.last_user_message = message;
     memory.last_message_time = new Date();
+    
+    // Nếu tin nhắn mới khác tin nhắn trước, reset counter để có thể gửi follow-up mới
+    if (previousLastMessage !== message) {
+        // Reset counter cho follow-up của tin nhắn mới này
+        // (Giữ nguyên greeting counter vì greeting không phụ thuộc vào tin nhắn cụ thể)
+        console.log(`🔄 [AUTO MSG] User gửi tin nhắn mới, reset follow-up counter để có thể gửi follow-up mới`);
+    }
     
     const assistantMessage = { role: 'assistant', content: rawReply };
     if (mediaUrl && mediaType) {
@@ -4187,9 +4197,10 @@ async function checkAndSendAutoMessages() {
                 await memory.save();
             }
             
-            // Kiểm tra giới hạn (tối đa 3 follow-up/ngày)
-            if (memory.auto_messages_sent_today >= 3) {
-                console.log(`⏭️ [AUTO MSG] User ${memory.userId} đã đạt giới hạn 3 follow-up/ngày`);
+            // Kiểm tra giới hạn (tối đa 5 follow-up/ngày - đã tăng để tự nhiên hơn)
+            // Mỗi tin nhắn mới của user sẽ có thể nhận 1 follow-up
+            if (memory.auto_messages_sent_today >= 5) {
+                console.log(`⏭️ [AUTO MSG] User ${memory.userId} đã đạt giới hạn 5 follow-up/ngày`);
                 continue;
             }
             
