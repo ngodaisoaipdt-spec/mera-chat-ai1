@@ -3673,6 +3673,47 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
 }
 
 // Trang admin analytics
+// Endpoint debug để kiểm tra trạng thái auto messages
+app.get('/admin/debug-auto-messages', ensureAuthenticated, async (req, res) => {
+    try {
+        const { userId, character } = req.query;
+        
+        if (!userId || !character) {
+            return res.status(400).json({ error: 'Thiếu tham số: userId, character' });
+        }
+        
+        const memory = await Memory.findOne({ userId, character });
+        if (!memory) {
+            return res.status(404).json({ error: 'Không tìm thấy memory' });
+        }
+        
+        const now = new Date();
+        const timeSinceLastMessage = memory.last_message_time 
+            ? (now - memory.last_message_time) / (1000 * 60) 
+            : null;
+        
+        return res.json({
+            userId: memory.userId,
+            character: memory.character,
+            last_user_message: memory.last_user_message,
+            last_message_time: memory.last_message_time,
+            minutes_since_last_message: timeSinceLastMessage,
+            auto_messages_sent_today: memory.auto_messages_sent_today || 0,
+            last_auto_message_date: memory.last_auto_message_date,
+            last_greeting_sent: memory.last_greeting_sent,
+            last_greeting_date: memory.last_greeting_date,
+            message_count: memory.user_profile?.message_count || 0,
+            relationship_stage: memory.user_profile?.relationship_stage || 'stranger',
+            history_count: memory.history?.length || 0,
+            can_send_followup: timeSinceLastMessage !== null && timeSinceLastMessage >= 3 && (memory.auto_messages_sent_today || 0) < 3,
+            current_time: now.toISOString()
+        });
+    } catch (error) {
+        console.error('❌ Lỗi debug auto messages:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 // Endpoint admin để test auto messages (trigger thủ công)
 app.post('/admin/test-auto-messages', ensureAuthenticated, async (req, res) => {
     try {
