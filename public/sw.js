@@ -32,9 +32,9 @@ self.addEventListener('push', (event) => {
     console.log('[SW] Push event received:', event);
     
     let notificationData = {
-        title: 'Yorluv Chat',
+        title: '💖 YorLuv Chat',
         body: 'Bạn có tin nhắn mới từ Mera',
-        icon: '/mera_avatar.png',
+        icon: '/yorluv-logo.png', // Dùng logo làm icon chính để nổi bật
         badge: '/yorluv-logo.png',
         tag: 'auto-message',
         requireInteraction: false,
@@ -67,23 +67,27 @@ self.addEventListener('push', (event) => {
     }
     
     // Tạo notification với style giống Messenger
+    // Ưu tiên hiển thị logo nếu có, nếu không thì dùng avatar
+    const notificationIcon = notificationData.icon || '/yorluv-logo.png';
+    const notificationImage = notificationData.image || notificationData.icon || '/yorluv-logo.png';
+    
     const notificationOptions = {
         body: notificationData.body,
-        icon: notificationData.icon,
-        badge: notificationData.badge,
+        icon: notificationIcon, // Logo hoặc avatar
+        badge: notificationData.badge || '/yorluv-logo.png', // Logo badge
         tag: notificationData.tag || 'yorluv-chat',
         requireInteraction: notificationData.requireInteraction || false,
         data: notificationData.data,
         vibrate: [200, 100, 200], // Rung khi có notification
         silent: notificationData.silent || false,
-        // Thêm image cho Android (Messaging style)
-        image: notificationData.image || notificationData.icon,
+        // Thêm image cho Android (Messaging style) - ưu tiên avatar nếu có
+        image: notificationImage,
         // Actions (nếu browser hỗ trợ)
         actions: [
             {
                 action: 'open',
-                title: 'Mở chat',
-                icon: '/icons/icon-send.png'
+                title: '💖 Mở YorLuv Chat',
+                icon: '/yorluv-logo.png'
             }
         ]
     };

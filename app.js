@@ -4247,12 +4247,13 @@ async function sendAutoMessage(memory, messageText, character) {
                 const icon = character === 'mera' ? '/mera_avatar.png' : '/thang_avatar.png';
                 
                 // Tạo notification giống Messenger với avatar và tin nhắn
+                // Logo làm icon chính để nổi bật, avatar làm image lớn
                 const payload = JSON.stringify({
-                    title: characterName, // Chỉ hiển thị tên (như "Mera San")
+                    title: `💖 ${characterName} - YorLuv Chat`, // Thêm logo emoji và brand name
                     body: messageText.substring(0, 100), // Nội dung tin nhắn
-                    icon: icon, // Avatar lớn
-                    image: icon, // Image lớn cho Android (Messaging style)
-                    badge: '/yorluv-logo.png',
+                    icon: '/yorluv-logo.png', // Logo làm icon chính (nổi bật)
+                    image: icon, // Avatar làm image lớn cho Android (Messaging style)
+                    badge: '/yorluv-logo.png', // Logo badge
                     tag: `yorluv-${character}`, // Tag để group notifications
                     url: '/',
                     character: character,
