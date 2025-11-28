@@ -3693,6 +3693,18 @@ async function createElevenLabsVoice(textToSpeak, character) {
                 console.warn("⚠️ Chưa cấu hình ELEVENLABS_VOICE_ID_TRUONG_THANG cho Trương Thắng, vui lòng thêm vào .env");
                 return null;
             }
+        } else if (character === 'zoe') {
+            voiceId = process.env.ELEVENLABS_VOICE_ID_ZOE || 'PLACEHOLDER_VOICE_ID';
+            if (voiceId === 'PLACEHOLDER_VOICE_ID') {
+                console.warn("⚠️ Chưa cấu hình ELEVENLABS_VOICE_ID_ZOE cho Zoe, vui lòng thêm vào .env");
+                return null;
+            }
+        } else if (character === 'kai') {
+            voiceId = process.env.ELEVENLABS_VOICE_ID_KAI || 'PLACEHOLDER_VOICE_ID';
+            if (voiceId === 'PLACEHOLDER_VOICE_ID') {
+                console.warn("⚠️ Chưa cấu hình ELEVENLABS_VOICE_ID_KAI cho Kai, vui lòng thêm vào .env");
+                return null;
+            }
         } else {
             console.warn(`⚠️ Character không hợp lệ: ${character}`);
             return null;
@@ -3714,12 +3726,28 @@ async function createElevenLabsVoice(textToSpeak, character) {
                 style: 0.6,             // Style (0.6 = có cảm xúc, biểu cảm)
                 use_speaker_boost: true // Tăng cường chất lượng giọng nói
             };
+        } else if (character === 'zoe') {
+            // Voice settings cho Allison (Zoe - nữ) - warm, friendly, natural conversation
+            voiceSettings = {
+                stability: 0.5,         // Độ ổn định (0.5 = cân bằng, tự nhiên)
+                similarity_boost: 0.75, // Độ giống với voice gốc (vừa phải)
+                style: 0.6,             // Style (0.6 = có cảm xúc, biểu cảm, tự nhiên như đang nói chuyện)
+                use_speaker_boost: true // Tăng cường chất lượng giọng nói
+            };
         } else if (character === 'thang') {
             // Voice settings cho Triệu Dương (nam) - tự tin, mạnh mẽ, tự nhiên như nói chuyện
             voiceSettings = {
                 stability: 0.5,         // Độ ổn định (0.5 = cân bằng)
                 similarity_boost: 0.75, // Độ giống với voice gốc (vừa phải)
                 style: 0.6,             // Style (0.6 = có cảm xúc, tự nhiên như nói chuyện)
+                use_speaker_boost: true // Tăng cường chất lượng giọng nói
+            };
+        } else if (character === 'kai') {
+            // Voice settings cho Mark (Kai - nam) - natural, conversational, easy-going
+            voiceSettings = {
+                stability: 0.5,         // Độ ổn định (0.5 = cân bằng, tự nhiên)
+                similarity_boost: 0.75, // Độ giống với voice gốc (vừa phải)
+                style: 0.6,             // Style (0.6 = có cảm xúc, tự nhiên như đang nói chuyện trực tiếp)
                 use_speaker_boost: true // Tăng cường chất lượng giọng nói
             };
         } else {
