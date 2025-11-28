@@ -1284,11 +1284,107 @@ function showNotification(messageText, characterName) {
     }
 }
 
-// Function để request notification permission
-async function requestNotificationPermission() {
-    if ('Notification' in window && Notification.permission === 'default') {
+// Function để đăng ký Service Worker
+async function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
         try {
-            await Notification.requestPermission();
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            console.log('✅ Service Worker đã được đăng ký:', registration.scope);
+            return registration;
+        } catch (error) {
+            console.warn('⚠️ Không thể đăng ký Service Worker:', error);
+            return null;
+        }
+    } else {
+        console.warn('⚠️ Browser không hỗ trợ Service Worker');
+        return null;
+    }
+}
+
+// Function để đăng ký Push Subscription
+async function subscribeToPush(registration) {
+    if (!registration || !('PushManager' in window)) {
+        console.warn('⚠️ Browser không hỗ trợ Push Manager');
+        return null;
+    }
+    
+    try {
+        // Lấy VAPID public key từ server
+        const vapidResponse = await fetch('/api/vapid-public-key');
+        if (!vapidResponse.ok) {
+            console.warn('⚠️ Không thể lấy VAPID public key');
+            return null;
+        }
+        const { publicKey } = await vapidResponse.json();
+        
+        // Convert VAPID key từ base64 URL-safe sang Uint8Array
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding)
+                .replace(/\-/g, '+')
+                .replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+        
+        // Đăng ký push subscription
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+        
+        // Gửi subscription lên server
+        const subscribeResponse = await fetch('/api/push-subscribe', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ subscription: subscription.toJSON() })
+        });
+        
+        if (subscribeResponse.ok) {
+            console.log('✅ Đã đăng ký push subscription thành công');
+            return subscription;
+        } else {
+            console.warn('⚠️ Không thể lưu push subscription lên server');
+            return null;
+        }
+    } catch (error) {
+        console.warn('⚠️ Lỗi đăng ký push subscription:', error);
+        return null;
+    }
+}
+
+// Function để request notification permission và setup push
+async function requestNotificationPermission() {
+    if ('Notification' in window) {
+        try {
+            let permission = Notification.permission;
+            if (permission === 'default') {
+                permission = await Notification.requestPermission();
+            }
+            
+            if (permission === 'granted') {
+                console.log('✅ Notification permission đã được cấp');
+                
+                // Đăng ký Service Worker và Push Subscription
+                const registration = await registerServiceWorker();
+                if (registration) {
+                    // Kiểm tra xem đã có subscription chưa
+                    const existingSubscription = await registration.pushManager.getSubscription();
+                    if (!existingSubscription) {
+                        await subscribeToPush(registration);
+                    } else {
+                        console.log('ℹ️ Đã có push subscription');
+                    }
+                }
+            } else {
+                console.warn('⚠️ Notification permission bị từ chối');
+            }
         } catch (error) {
             console.warn('Không thể request notification permission:', error);
         }

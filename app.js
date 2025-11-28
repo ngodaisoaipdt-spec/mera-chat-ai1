@@ -18,6 +18,7 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const querystring = require('querystring');
 const cron = require('node-cron');
+const webpush = require('web-push');
 
 dotenv.config({ override: true });
 const app = express();
@@ -26,7 +27,29 @@ app.set('trust proxy', 1);
 
 mongoose.connect(process.env.MONGODB_URI).then(() => console.log("✅ Đã kết nối MongoDB!")).catch(err => { console.error("❌ Lỗi kết nối MongoDB:", err); process.exit(1); });
 
-const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now } });
+// Setup VAPID keys cho Web Push
+if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    console.log('⚠️ Chưa có VAPID keys. Đang tạo keys mới...');
+    const vapidKeys = webpush.generateVAPIDKeys();
+    console.log('📝 VAPID Public Key:', vapidKeys.publicKey);
+    console.log('📝 VAPID Private Key:', vapidKeys.privateKey);
+    console.log('⚠️ Vui lòng thêm vào .env:');
+    console.log(`VAPID_PUBLIC_KEY=${vapidKeys.publicKey}`);
+    console.log(`VAPID_PRIVATE_KEY=${vapidKeys.privateKey}`);
+    console.log('⚠️ Tạm thời sử dụng keys này cho session hiện tại...');
+    process.env.VAPID_PUBLIC_KEY = vapidKeys.publicKey;
+    process.env.VAPID_PRIVATE_KEY = vapidKeys.privateKey;
+}
+
+// Set VAPID details
+const vapidContactEmail = process.env.VAPID_CONTACT_EMAIL || 'mailto:your-email@example.com';
+webpush.setVapidDetails(
+    vapidContactEmail.startsWith('mailto:') ? vapidContactEmail : `mailto:${vapidContactEmail}`,
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+);
+
+const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now }, pushSubscription: { type: Object, default: null } });
 const User = mongoose.model('User', userSchema);
 const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' }, last_followup_time: { type: Date, default: null } });
 const Memory = mongoose.model('Memory', memorySchema);
@@ -2548,6 +2571,36 @@ app.get('/api/check-new-messages', ensureAuthenticated, async (req, res) => {
     }
 });
 
+// API endpoint để lấy VAPID public key
+app.get('/api/vapid-public-key', (req, res) => {
+    const publicKey = process.env.VAPID_PUBLIC_KEY;
+    if (!publicKey) {
+        return res.status(500).json({ error: 'VAPID public key chưa được cấu hình' });
+    }
+    return res.json({ publicKey });
+});
+
+// API endpoint để lưu push subscription
+app.post('/api/push-subscribe', ensureAuthenticated, async (req, res) => {
+    try {
+        const { subscription } = req.body;
+        if (!subscription) {
+            return res.status(400).json({ success: false, message: 'Thiếu subscription' });
+        }
+        
+        // Lưu subscription vào user
+        await User.findByIdAndUpdate(req.user._id, {
+            pushSubscription: subscription
+        });
+        
+        console.log(`✅ Đã lưu push subscription cho user ${req.user._id}`);
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Lỗi lưu push subscription:', error);
+        return res.status(500).json({ success: false, message: 'Lỗi lưu subscription' });
+    }
+});
+
 // Endpoint tạo TTS on-demand với ElevenLabs
 app.post('/api/tts', ensureAuthenticated, async (req, res) => {
     try {
@@ -4163,7 +4216,7 @@ Hãy tạo tin nhắn chúc ngủ ngon:`;
     }
 }
 
-// Function để gửi auto message vào memory
+// Function để gửi auto message vào memory và push notification
 async function sendAutoMessage(memory, messageText, character) {
     try {
         // Thêm vào history
@@ -4181,6 +4234,34 @@ async function sendAutoMessage(memory, messageText, character) {
         
         await memory.save();
         console.log(`✅ Đã gửi auto message cho user ${memory.userId}: "${messageText.substring(0, 50)}..."`);
+        
+        // Gửi push notification nếu user có subscription
+        try {
+            const user = await User.findById(memory.userId);
+            if (user && user.pushSubscription) {
+                const characterName = character === 'mera' ? 'Mera San' : 'Trương Thắng';
+                const icon = character === 'mera' ? '/mera_avatar.png' : '/thang_avatar.png';
+                
+                const payload = JSON.stringify({
+                    title: `${characterName} nhắn tin`,
+                    body: messageText.substring(0, 100),
+                    icon: icon,
+                    badge: '/yorluv-logo.png',
+                    tag: 'auto-message',
+                    url: '/',
+                    character: character
+                });
+                
+                await webpush.sendNotification(user.pushSubscription, payload);
+                console.log(`📤 Đã gửi push notification cho user ${memory.userId}`);
+            } else {
+                console.log(`ℹ️ User ${memory.userId} chưa có push subscription`);
+            }
+        } catch (pushError) {
+            // Không fail nếu push notification lỗi (có thể subscription đã expired)
+            console.warn(`⚠️ Không thể gửi push notification cho user ${memory.userId}:`, pushError.message);
+        }
+        
         return true;
     } catch (error) {
         console.error('❌ Lỗi gửi auto message:', error);

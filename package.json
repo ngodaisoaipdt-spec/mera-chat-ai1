@@ -5,7 +5,8 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate-vapid": "node generate-vapid-keys.js"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +22,7 @@
     "node-cron": "^4.2.1",
     "openai": "^4.17.4",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0"
+    "passport-google-oauth20": "^2.0.0",
+    "web-push": "^3.6.7"
   }
 }
