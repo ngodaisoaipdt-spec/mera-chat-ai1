@@ -20,8 +20,12 @@
 <body>
 
     <div id="loginScreen" class="selection-screen">
-        <div class="selection-box login-box">
-            <h1>Chào mừng đến với YorLuv Chat</h1>
+        <div class="selection-box login-box" style="position: relative;">
+            <!-- Logo ở góc trên bên trái -->
+            <div style="position: absolute; top: 20px; left: 20px;">
+                <img src="yorluv-logo.png" alt="YorLuv Logo" style="width: 50px; height: 50px; object-fit: contain;">
+            </div>
+            <h1 style="margin-top: 20px;">Chào mừng đến với YorLuv Chat</h1>
             <p style="margin-bottom: 30px; color: #666;">Đăng nhập để bắt đầu hành trình của bạn</p>
             <a href="/auth/google" class="google-login-button">
                 <img src="google_logo.png" alt="Google Logo">
@@ -32,8 +36,12 @@
 
     <!-- Modal yêu cầu đăng nhập khi gửi tin nhắn đầu tiên -->
     <div id="loginRequiredModal" class="selection-screen" style="display: none; z-index: 10000;">
-        <div class="selection-box login-box">
-            <h1>💖 Đăng nhập để trò chuyện</h1>
+        <div class="selection-box login-box" style="position: relative;">
+            <!-- Logo ở góc trên bên trái -->
+            <div style="position: absolute; top: 20px; left: 20px;">
+                <img src="yorluv-logo.png" alt="YorLuv Logo" style="width: 50px; height: 50px; object-fit: contain;">
+            </div>
+            <h1 style="margin-top: 20px;">💖 Đăng nhập để trò chuyện</h1>
             <p style="margin-bottom: 30px; color: #666;">Bạn cần đăng nhập bằng tài khoản Google để bắt đầu trò chuyện với Mera San và Trương Thắng.</p>
             <a href="/auth/google" class="google-login-button">
                 <img src="google_logo.png" alt="Google Logo">
