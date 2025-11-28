@@ -30,6 +30,19 @@
         </div>
     </div>
 
+    <!-- Modal yêu cầu đăng nhập khi gửi tin nhắn đầu tiên -->
+    <div id="loginRequiredModal" class="selection-screen" style="display: none; z-index: 10000;">
+        <div class="selection-box login-box">
+            <h1>💖 Đăng nhập để trò chuyện</h1>
+            <p style="margin-bottom: 30px; color: #666;">Bạn cần đăng nhập bằng tài khoản Google để bắt đầu trò chuyện với Mera San và Trương Thắng.</p>
+            <a href="/auth/google" class="google-login-button">
+                <img src="google_logo.png" alt="Google Logo">
+                Đăng nhập bằng Google
+            </a>
+            <button onclick="closeLoginRequiredModal()" style="margin-top: 15px; padding: 10px 20px; background: #f0f0f0; border: none; border-radius: 8px; cursor: pointer; color: #666; font-size: 0.9em; width: 100%;">Hủy</button>
+        </div>
+    </div>
+
     <div id="characterSelectionScreen" class="selection-screen">
         <div class="selection-box character-box">
             <div class="user-profile-area">

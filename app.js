@@ -1893,7 +1893,11 @@ function checkAndResetDailyMessageCount(userProfile) {
     
     return userProfile;
 }
-app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
+app.get('/api/chat-data/:character', async (req, res) => {
+    // Kiểm tra đăng nhập
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: 'LOGIN_REQUIRED' });
+    }
     const { character } = req.params;
     const memory = await loadMemory(req.user._id, character);
     memory.user_profile = memory.user_profile || {};
@@ -1907,7 +1911,15 @@ app.get('/api/chat-data/:character', ensureAuthenticated, async (req, res) => {
     
     res.json({ memory, isPremium: req.user.isPremium });
 });
-app.post('/chat', ensureAuthenticated, async (req, res) => { 
+app.post('/chat', async (req, res) => {
+    // Kiểm tra đăng nhập - nếu chưa đăng nhập thì yêu cầu đăng nhập
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({ 
+            error: 'LOGIN_REQUIRED',
+            message: 'Bạn cần đăng nhập để trò chuyện. Vui lòng đăng nhập bằng tài khoản Google.',
+            requiresLogin: true
+        });
+    } 
     try { 
         const { message, character } = req.body; 
         console.log(`💬 Nhận tin nhắn từ user: "${message}" (character: ${character})`);

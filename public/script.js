@@ -88,6 +88,15 @@ window.onload = async () => {
     }
     if (urlParams.has('login')) {
         window.history.replaceState({}, document.title, "/");
+        // Reload để cập nhật currentUser và load chat data
+        const userResponse = await fetch('/api/current_user');
+        if (userResponse.ok) {
+            currentUser = await userResponse.json();
+            // Nếu đang ở chat screen, reload chat data
+            if (window.chatAppInitialized && currentCharacter) {
+                await loadChatData();
+            }
+        }
     }
     if (urlParams.has('payment')) {
         const paymentStatus = urlParams.get('payment');
@@ -110,25 +119,21 @@ window.onload = async () => {
         const response = await fetch('/api/current_user');
         if (response.ok) {
             currentUser = await response.json();
-            if (currentUser) {
-                // Khôi phục character từ localStorage nếu có
-                const savedCharacter = localStorage.getItem('currentCharacter');
-                if (savedCharacter && (savedCharacter === 'mera' || savedCharacter === 'thang')) {
-                    currentCharacter = savedCharacter;
-                    // Đảm bảo background được set ngay khi trang load
-                    setTimeout(() => {
-                        updateChatBackground(currentCharacter);
-                    }, 50);
-                }
-                showCharacterSelection();
-            } else {
-                showLoginScreen();
+            // Khôi phục character từ localStorage nếu có
+            const savedCharacter = localStorage.getItem('currentCharacter');
+            if (savedCharacter && (savedCharacter === 'mera' || savedCharacter === 'thang')) {
+                currentCharacter = savedCharacter;
+                // Đảm bảo background được set ngay khi trang load
+                setTimeout(() => {
+                    updateChatBackground(currentCharacter);
+                }, 50);
             }
-        } else {
-            showLoginScreen();
         }
+        // Luôn hiển thị character selection screen (không cần login để xem)
+        showCharacterSelection();
     } catch (error) {
-        showLoginScreen();
+        // Ngay cả khi có lỗi, vẫn hiển thị character selection
+        showCharacterSelection();
         console.error("Lỗi kiểm tra session:", error);
     }
 };
@@ -146,11 +151,35 @@ function showCharacterSelection() {
     if (currentUser) {
         DOMElements.userAvatar.src = currentUser.avatar;
         DOMElements.userName.textContent = currentUser.displayName;
+    } else {
+        // Nếu chưa đăng nhập, ẩn phần user profile
+        const userProfileArea = document.querySelector('.user-profile-area');
+        if (userProfileArea) {
+            userProfileArea.style.display = 'none';
+        }
     }
     // Nếu đã có character được chọn trước đó, đảm bảo background được set khi app container hiển thị lại
     const savedCharacter = localStorage.getItem('currentCharacter');
     if (savedCharacter && (savedCharacter === 'mera' || savedCharacter === 'thang')) {
         currentCharacter = savedCharacter;
+    }
+}
+
+// Function để hiển thị modal yêu cầu đăng nhập
+function showLoginRequiredModal() {
+    const modal = document.getElementById('loginRequiredModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.classList.add('active');
+    }
+}
+
+// Function để đóng modal yêu cầu đăng nhập
+function closeLoginRequiredModal() {
+    const modal = document.getElementById('loginRequiredModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
     }
 }
 
@@ -308,6 +337,14 @@ async function loadChatData() {
         // Đảm bảo background được cập nhật khi load lại - set ngay lập tức
         if (currentCharacter) {
             await updateChatBackground(currentCharacter);
+        }
+        
+        // Nếu chưa đăng nhập, chỉ hiển thị message chào mừng
+        if (!currentUser) {
+            conversationHistory = [];
+            DOMElements.chatBox.innerHTML = '';
+            addMessage(DOMElements.chatBox, currentCharacter, currentCharacter === 'mera' ? "Chào anh, em là Mera nè. 🥰 Đăng nhập để bắt đầu trò chuyện với em nhé!" : "Chào em, anh là Trương Thắng. Đăng nhập để bắt đầu trò chuyện với anh nhé!");
+            return;
         }
         
         const response = await fetch(`/api/chat-data/${currentCharacter}`);
@@ -974,6 +1011,18 @@ async function sendMessageToServer(messageText, loadingId) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ message: messageText, character: currentCharacter })
         });
+        
+        // Kiểm tra nếu chưa đăng nhập
+        if (response.status === 401) {
+            const errorData = await response.json();
+            if (errorData.requiresLogin || errorData.error === 'LOGIN_REQUIRED') {
+                removeMessage(loadingId);
+                // Hiển thị modal yêu cầu đăng nhập
+                showLoginRequiredModal();
+                return;
+            }
+        }
+        
         if (!response.ok) throw new Error(`Server trả về lỗi ${response.status}`);
         const data = await response.json();
         
