@@ -103,9 +103,9 @@ body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; backgroun
     z-index: 10;
 }
 #userInput { flex: 1; padding: 15px 20px; border: 1px solid #ddd; border-radius: 25px; font-family: 'Nunito', sans-serif; font-size: 1em; }
-#sendBtn, .mic-btn, .image-btn { width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: #fff; transition: transform 0.2s ease, background-color 0.3s ease; position: relative; z-index: 1; }
+#sendBtn, .mic-btn, .image-btn { width: 70px; height: 70px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: #fff; transition: transform 0.2s ease, background-color 0.3s ease; position: relative; z-index: 1; }
 #sendBtn:hover, .mic-btn:hover, .image-btn:hover { transform: scale(1.05); }
-.mic-btn img, .image-btn img, .image-btn svg { width: 32px; height: 32px; object-fit: contain; }
+.mic-btn img, .image-btn img, .image-btn svg { width: 38px; height: 38px; object-fit: contain; }
 .mic-btn.listening { background-color: #ff6b6b; animation: pulse-mic 1.5s ease-in-out infinite; }
 .mic-btn.listening img { filter: brightness(0) invert(1); }
 @keyframes pulse-mic {
@@ -118,7 +118,7 @@ body { font-family: 'Nunito', sans-serif; margin: 0; overflow: hidden; backgroun
         box-shadow: 0 0 0 10px rgba(255, 107, 107, 0);
     }
 }
-.send-btn img { width: 32px; height: 32px; }
+.send-btn img { width: 38px; height: 38px; }
 .mic-btn:disabled, #sendBtn:disabled { opacity: .5; cursor: not-allowed; }
 .chat-image { max-width: 100%; border-radius: 15px; margin-top: 10px; cursor: pointer; }
 .chat-video { max-width: 100%; border-radius: 15px; margin-top: 10px; max-height: 400px; }
@@ -258,14 +258,14 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
         font-size: 0.95em;
     }
     #sendBtn, .mic-btn, .image-btn {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
+        width: 55px;
+        height: 55px;
+        min-width: 55px;
         flex-shrink: 0;
     }
     .mic-btn img, .send-btn img, .image-btn svg {
-        width: 22px;
-        height: 22px;
+        width: 28px;
+        height: 28px;
     }
     .premium-btn {
         width: 38px;
