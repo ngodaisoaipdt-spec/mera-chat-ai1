@@ -4173,12 +4173,14 @@ async function generateGreetingMessage(memory, character, greetingType) {
 Tạo tin nhắn chúc buổi sáng NGẮN GỌN (10-15 từ), dễ thương, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 'Trương Thắng (thân thiện, cởi mở)'}.
 
 **GIAI ĐOẠN:** ${relationshipStage}
-**QUY TẮC:**
+**QUY TẮC QUAN TRỌNG:**
+- PHẢI xưng hô "em" và "anh" (KHÔNG được dùng "bạn", "chị", "cô", "bác" hay bất kỳ cách xưng hô nào khác)
 - Chỉ trả lời bằng tiếng Việt
 - KHÔNG dùng [SEND_MEDIA]
-- Ví dụ: "Chào buổi sáng anh yêu~ Em chúc anh một ngày tốt lành nhaaa~ 🥺💕" hoặc "Sáng tốt lành anh! Hôm nay em chúc anh một ngày vui vẻ nhaaa~ 🥺"
+- Ví dụ: "Chào buổi sáng anh~ Em chúc anh một ngày tốt lành nhaaa~ 🥺💕" hoặc "Sáng tốt lành anh! Hôm nay em chúc anh một ngày vui vẻ nhaaa~ 🥺"
+- ${character === 'mera' ? 'Mera' : 'Trương Thắng'} luôn xưng "em" và gọi người dùng là "anh"
 
-Hãy tạo tin nhắn chúc buổi sáng:`;
+Hãy tạo tin nhắn chúc buổi sáng với xưng hô "em/anh":`;
         } else if (greetingType === 'night') {
             greetingPrompt = `Bạn là ${character === 'mera' ? 'Mera' : 'Trương Thắng'}.
 
@@ -4186,12 +4188,14 @@ Hãy tạo tin nhắn chúc buổi sáng:`;
 Tạo tin nhắn chúc ngủ ngon NGẮN GỌN (10-15 từ), dễ thương, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 'Trương Thắng (thân thiện, cởi mở)'}.
 
 **GIAI ĐOẠN:** ${relationshipStage}
-**QUY TẮC:**
+**QUY TẮC QUAN TRỌNG:**
+- PHẢI xưng hô "em" và "anh" (KHÔNG được dùng "bạn", "chị", "cô", "bác" hay bất kỳ cách xưng hô nào khác)
 - Chỉ trả lời bằng tiếng Việt
 - KHÔNG dùng [SEND_MEDIA]
 - Ví dụ: "Chúc anh ngủ ngon nhaaa~ Mơ về em nhé~ 🥺🌙" hoặc "Ngủ ngon anh yêu, em chúc anh giấc mơ đẹp nhaaa~ 🥺💕"
+- ${character === 'mera' ? 'Mera' : 'Trương Thắng'} luôn xưng "em" và gọi người dùng là "anh"
 
-Hãy tạo tin nhắn chúc ngủ ngon:`;
+Hãy tạo tin nhắn chúc ngủ ngon với xưng hô "em/anh":`;
         }
 
         const messages = [
@@ -4242,14 +4246,18 @@ async function sendAutoMessage(memory, messageText, character) {
                 const characterName = character === 'mera' ? 'Mera San' : 'Trương Thắng';
                 const icon = character === 'mera' ? '/mera_avatar.png' : '/thang_avatar.png';
                 
+                // Tạo notification giống Messenger với avatar và tin nhắn
                 const payload = JSON.stringify({
-                    title: `${characterName} nhắn tin`,
-                    body: messageText.substring(0, 100),
-                    icon: icon,
+                    title: characterName, // Chỉ hiển thị tên (như "Mera San")
+                    body: messageText.substring(0, 100), // Nội dung tin nhắn
+                    icon: icon, // Avatar lớn
+                    image: icon, // Image lớn cho Android (Messaging style)
                     badge: '/yorluv-logo.png',
-                    tag: 'auto-message',
+                    tag: `yorluv-${character}`, // Tag để group notifications
                     url: '/',
-                    character: character
+                    character: character,
+                    requireInteraction: false,
+                    silent: false
                 });
                 
                 await webpush.sendNotification(user.pushSubscription, payload);
@@ -4396,9 +4404,9 @@ async function checkAndSendAutoMessages() {
         }
         
         // 2. Check greeting messages
-        // Buổi sáng: 5h30 - 9h (5h30 = 5.5)
+        // Buổi sáng: 5h - 8h (chỉ trong khung giờ này)
         // Chỉ gửi cho user đã chat ít nhất 1 lần
-        if (currentHour >= 5 && currentHour < 9) {
+        if (currentHour >= 5 && currentHour < 8) {
             const memoriesForMorning = await Memory.find({
                 $or: [
                     { last_greeting_sent: { $ne: 'morning' } },

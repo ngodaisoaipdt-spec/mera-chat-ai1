@@ -66,17 +66,30 @@ self.addEventListener('push', (event) => {
         }
     }
     
+    // Tạo notification với style giống Messenger
+    const notificationOptions = {
+        body: notificationData.body,
+        icon: notificationData.icon,
+        badge: notificationData.badge,
+        tag: notificationData.tag || 'yorluv-chat',
+        requireInteraction: notificationData.requireInteraction || false,
+        data: notificationData.data,
+        vibrate: [200, 100, 200], // Rung khi có notification
+        silent: notificationData.silent || false,
+        // Thêm image cho Android (Messaging style)
+        image: notificationData.image || notificationData.icon,
+        // Actions (nếu browser hỗ trợ)
+        actions: [
+            {
+                action: 'open',
+                title: 'Mở chat',
+                icon: '/icons/icon-send.png'
+            }
+        ]
+    };
+    
     event.waitUntil(
-        self.registration.showNotification(notificationData.title, {
-            body: notificationData.body,
-            icon: notificationData.icon,
-            badge: notificationData.badge,
-            tag: notificationData.tag,
-            requireInteraction: notificationData.requireInteraction,
-            data: notificationData.data,
-            vibrate: [200, 100, 200], // Rung khi có notification
-            sound: '/notification.mp3' // Âm thanh (nếu có file)
-        })
+        self.registration.showNotification(notificationData.title, notificationOptions)
     );
 });
 
