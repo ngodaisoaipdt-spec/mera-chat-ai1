@@ -185,6 +185,8 @@ function closeLoginRequiredModal() {
 
 document.getElementById('selectMera').addEventListener('click', () => setupCharacter('mera'));
 document.getElementById('selectThang').addEventListener('click', () => setupCharacter('thang'));
+document.getElementById('selectZoe').addEventListener('click', () => setupCharacter('zoe'));
+document.getElementById('selectKai').addEventListener('click', () => setupCharacter('kai'));
 
 // Hàm để preload ảnh nền
 function preloadBackgroundImage(imagePath) {
@@ -200,8 +202,21 @@ function preloadBackgroundImage(imagePath) {
 async function updateChatBackground(character) {
     if (!character) return;
     
+    // Xác định background image theo character
+    let backgroundImage;
+    if (character === 'mera') {
+        backgroundImage = 'nen-mera.jpg';
+    } else if (character === 'thang') {
+        backgroundImage = 'nen-truongthang.jpg';
+    } else if (character === 'zoe') {
+        backgroundImage = 'nen-zoe.jpg'; // Sẽ cần thêm file này
+    } else if (character === 'kai') {
+        backgroundImage = 'nen-kai.jpg'; // Sẽ cần thêm file này
+    } else {
+        backgroundImage = 'nen-mera.jpg'; // Fallback
+    }
+    
     const isMera = character === 'mera';
-    const backgroundImage = isMera ? 'nen-mera.jpg' : 'nen-truongthang.jpg';
     
     // Sử dụng timestamp để force browser load lại ảnh mỗi lần (tránh cache)
     const timestamp = Date.now();
@@ -278,9 +293,27 @@ async function setupCharacter(char) {
     // Lưu character vào localStorage để khôi phục khi reload
     localStorage.setItem('currentCharacter', char);
     
+    // Xác định avatar và tên theo character
+    let avatarSrc, charName;
+    if (char === 'mera') {
+        avatarSrc = 'mera_avatar.png';
+        charName = 'Mera San';
+    } else if (char === 'thang') {
+        avatarSrc = 'thang_avatar.png';
+        charName = 'Trương Thắng';
+    } else if (char === 'zoe') {
+        avatarSrc = 'zoe_avatar.png';
+        charName = 'Zoe';
+    } else if (char === 'kai') {
+        avatarSrc = 'kai_avatar.png';
+        charName = 'Kai';
+    } else {
+        // Fallback
+        avatarSrc = 'mera_avatar.png';
+        charName = 'Mera San';
+    }
+    
     const isMera = char === 'mera';
-    const avatarSrc = isMera ? 'mera_avatar.png' : 'thang_avatar.png';
-    const charName = isMera ? 'Mera San' : 'Trương Thắng';
 
     document.querySelectorAll('.character-avatar').forEach(el => el.src = avatarSrc);
     // Cập nhật tên trong header chat (h2.name.character-name)
@@ -290,10 +323,13 @@ async function setupCharacter(char) {
     }
     // Cập nhật tên trong selection screen
     document.querySelectorAll('.character-card .character-name').forEach(el => {
-        if (el.textContent === 'Mera San' || el.textContent === 'Trương Thắng') {
-            // Chỉ cập nhật nếu là card của character hiện tại
-            const card = el.closest('.character-card');
-            if (card && ((isMera && card.id === 'selectMera') || (!isMera && card.id === 'selectThang'))) {
+        const card = el.closest('.character-card');
+        if (card) {
+            // Cập nhật tên cho card của character hiện tại
+            if ((char === 'mera' && card.id === 'selectMera') ||
+                (char === 'thang' && card.id === 'selectThang') ||
+                (char === 'zoe' && card.id === 'selectZoe') ||
+                (char === 'kai' && card.id === 'selectKai')) {
                 el.textContent = charName;
             }
         }
@@ -343,7 +379,19 @@ async function loadChatData() {
         if (!currentUser) {
             conversationHistory = [];
             DOMElements.chatBox.innerHTML = '';
-            addMessage(DOMElements.chatBox, currentCharacter, currentCharacter === 'mera' ? "Chào anh, em là Mera nè. 🥰 Đăng nhập để bắt đầu trò chuyện với em nhé!" : "Chào em, anh là Trương Thắng. Đăng nhập để bắt đầu trò chuyện với anh nhé!");
+            let greetingMsg = '';
+            if (currentCharacter === 'mera') {
+                greetingMsg = "Chào anh, em là Mera nè. 🥰 Đăng nhập để bắt đầu trò chuyện với em nhé!";
+            } else if (currentCharacter === 'thang') {
+                greetingMsg = "Chào em, anh là Trương Thắng. Đăng nhập để bắt đầu trò chuyện với anh nhé!";
+            } else if (currentCharacter === 'zoe') {
+                greetingMsg = "Hi! I'm Zoe. 🥰 Please log in to start chatting with me!";
+            } else if (currentCharacter === 'kai') {
+                greetingMsg = "Hey! I'm Kai. Please log in to start chatting with me!";
+            } else {
+                greetingMsg = "Chào bạn! Đăng nhập để bắt đầu trò chuyện nhé!";
+            }
+            addMessage(DOMElements.chatBox, currentCharacter, greetingMsg);
             return;
         }
         
@@ -372,7 +420,19 @@ async function loadChatData() {
             setTimeout(() => updateChatBackground(currentCharacter), 600);
         }
         if (conversationHistory.length === 0) {
-            addMessage(DOMElements.chatBox, currentCharacter, currentCharacter === 'mera' ? "Chào anh, em là Mera nè. 🥰" : "Chào em, anh là Trương Thắng.");
+            let greetingMsg = '';
+            if (currentCharacter === 'mera') {
+                greetingMsg = "Chào anh, em là Mera nè. 🥰";
+            } else if (currentCharacter === 'thang') {
+                greetingMsg = "Chào em, anh là Trương Thắng.";
+            } else if (currentCharacter === 'zoe') {
+                greetingMsg = "Hi! I'm Zoe. 🥰 Nice to meet you!";
+            } else if (currentCharacter === 'kai') {
+                greetingMsg = "Hey! I'm Kai. Nice to meet you!";
+            } else {
+                greetingMsg = "Chào bạn!";
+            }
+            addMessage(DOMElements.chatBox, currentCharacter, greetingMsg);
         } else {
             conversationHistory.forEach((msg, index) => {
                 if (msg.role === 'user') {
@@ -787,11 +847,19 @@ function initializeChatApp() {
                     activeAudios = {};
                     currentMemory = data.memory;
                     DOMElements.chatBox.innerHTML = '';
+                    let greetingMsg = '';
                     if (currentCharacter === 'mera') {
-                        addMessage(DOMElements.chatBox, currentCharacter, "Chào anh, em là Mera nè. 🥰");
+                        greetingMsg = "Chào anh, em là Mera nè. 🥰";
+                    } else if (currentCharacter === 'thang') {
+                        greetingMsg = "Chào em, anh là Trương Thắng.";
+                    } else if (currentCharacter === 'zoe') {
+                        greetingMsg = "Hi! I'm Zoe. 🥰 Nice to meet you!";
+                    } else if (currentCharacter === 'kai') {
+                        greetingMsg = "Hey! I'm Kai. Nice to meet you!";
                     } else {
-                        addMessage(DOMElements.chatBox, currentCharacter, "Chào em, anh là Trương Thắng.");
+                        greetingMsg = "Chào bạn!";
                     }
+                    addMessage(DOMElements.chatBox, currentCharacter, greetingMsg);
                     updateRelationshipStatus();
                     if (typeof window.renderRelationshipMenu === 'function') window.renderRelationshipMenu();
                 } else {

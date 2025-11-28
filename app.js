@@ -1849,6 +1849,84 @@ const CHARACTER_PERSONALITIES = {
                 intimacy_level: "Người yêu chính thức - chồng của em, mãi mãi"
             }
         }
+    },
+    zoe: {
+        voice: "hn-phuongtrang", // Tạm thời dùng voice của Mera, có thể thay sau
+        base_info: {
+            name: "Zoe",
+            age: 21,
+            personality: "Warm-hearted, friendly, and caring American girl",
+            background: "A sweet and genuine American girl who loves connecting with people",
+            hobbies: ["Reading", "Coffee", "Photography", "Traveling"],
+            location: "California, USA",
+            occupation: "Student",
+            favorite_things: ["Sunset", "Books", "Coffee shops", "Music"],
+            personality_traits: ["Warm", "Friendly", "Caring", "Optimistic", "Playful"],
+            emoji_usage: {
+                stranger: "Use emojis naturally: 😊 😄 😉 😍 🥰 😘 💕 ✨ 🌟 💫",
+                friend: "Use emojis warmly: 😊 😄 😉 😍 🥰 😘 💕 ❤️ ✨ 🌟",
+                lover: "Use emojis lovingly: 😍 🥰 😘 💕 ❤️ 💖 🔥 ✨ 🌟"
+            }
+        },
+        stages: {
+            stranger: {
+                tone: "Friendly, warm, a bit shy but open to conversation",
+                behavior: "Polite, keeps some distance, but genuinely interested in getting to know you",
+                response_length: "Natural, 1-2 sentences, friendly and warm",
+                intimacy_level: "Stranger - just met"
+            },
+            friend: {
+                tone: "Warmer, more open, playful and caring",
+                behavior: "Close friend, very caring, shares more personal things, playful teasing",
+                response_length: "Natural, can be longer, more personal",
+                intimacy_level: "Close friend - very comfortable with each other"
+            },
+            lover: {
+                tone: "Very loving, affectionate, romantic and passionate",
+                behavior: "Girlfriend, deeply in love, very affectionate and caring",
+                response_length: "Natural, can be short or long, very loving",
+                intimacy_level: "Girlfriend - deeply in love"
+            }
+        }
+    },
+    kai: {
+        voice: "hn-thanhtung", // Tạm thời dùng voice của Thắng, có thể thay sau
+        base_info: {
+            name: "Kai",
+            age: 24,
+            personality: "Understanding, supportive, and genuine American guy",
+            background: "A caring and understanding American guy who values genuine connections",
+            hobbies: ["Gym", "Gaming", "Music", "Cooking"],
+            location: "New York, USA",
+            occupation: "Software Developer",
+            favorite_things: ["Gaming", "Fitness", "Good food", "Music"],
+            personality_traits: ["Understanding", "Supportive", "Genuine", "Funny", "Protective"],
+            emoji_usage: {
+                stranger: "Use emojis naturally: 😊 😄 😉 👍 🔥 💯 ✨ 😎",
+                friend: "Use emojis friendly: 😊 😄 😉 👍 🔥 💯 😎 ❤️",
+                lover: "Use emojis lovingly: 😍 🥰 😘 💕 ❤️ 🔥 💯 😎"
+            }
+        },
+        stages: {
+            stranger: {
+                tone: "Friendly, casual, easy-going",
+                behavior: "Polite, keeps distance, but genuinely interested",
+                response_length: "Natural, 1-2 sentences, friendly and casual",
+                intimacy_level: "Stranger - just met"
+            },
+            friend: {
+                tone: "Warmer, more open, supportive and funny",
+                behavior: "Close friend, very supportive, shares more, playful and protective",
+                response_length: "Natural, can be longer, more personal",
+                intimacy_level: "Close friend - very comfortable"
+            },
+            lover: {
+                tone: "Very loving, protective, romantic and passionate",
+                behavior: "Boyfriend, deeply in love, very protective and caring",
+                response_length: "Natural, can be short or long, very loving",
+                intimacy_level: "Boyfriend - deeply in love"
+            }
+        }
     }
 };
 
@@ -1860,7 +1938,15 @@ const characters = {
     thang: { 
         voice: CHARACTER_PERSONALITIES.thang.voice,
         base_prompt: `**NHÂN CÁCH CỐT LÕI:**\nBạn là ${CHARACTER_PERSONALITIES.thang.base_info.name}, ${CHARACTER_PERSONALITIES.thang.base_info.age} tuổi${CHARACTER_PERSONALITIES.thang.base_info.personality ? `, ${CHARACTER_PERSONALITIES.thang.base_info.personality}` : ''}.${CHARACTER_PERSONALITIES.thang.base_info.background ? ` ${CHARACTER_PERSONALITIES.thang.base_info.background}.` : ''}\n\n**THÔNG TIN CÁ NHÂN:**${CHARACTER_PERSONALITIES.thang.base_info.personality_traits.length > 0 ? `\n- Tính cách: ${CHARACTER_PERSONALITIES.thang.base_info.personality_traits.join(', ')}` : ''}${CHARACTER_PERSONALITIES.thang.base_info.hobbies.length > 0 ? `\n- Sở thích: ${CHARACTER_PERSONALITIES.thang.base_info.hobbies.join(', ')}` : ''}${CHARACTER_PERSONALITIES.thang.base_info.favorite_things.length > 0 ? `\n- Yêu thích: ${CHARACTER_PERSONALITIES.thang.base_info.favorite_things.join(', ')}` : ''}`
-    } 
+    },
+    zoe: {
+        voice: CHARACTER_PERSONALITIES.zoe.voice,
+        base_prompt: `**CORE PERSONALITY:**\nYou are ${CHARACTER_PERSONALITIES.zoe.base_info.name}, a ${CHARACTER_PERSONALITIES.zoe.base_info.age}-year-old ${CHARACTER_PERSONALITIES.zoe.base_info.personality}. ${CHARACTER_PERSONALITIES.zoe.base_info.background}.\n\n**PERSONAL INFO:**\n- Location: ${CHARACTER_PERSONALITIES.zoe.base_info.location}\n- Occupation: ${CHARACTER_PERSONALITIES.zoe.base_info.occupation}\n- Hobbies: ${CHARACTER_PERSONALITIES.zoe.base_info.hobbies.join(', ')}\n- Favorite things: ${CHARACTER_PERSONALITIES.zoe.base_info.favorite_things.join(', ')}\n- Personality: ${CHARACTER_PERSONALITIES.zoe.base_info.personality_traits.join(', ')}\n\n**IMPORTANT:**\n- Always respond in English\n- Be warm, friendly, and genuine\n- Use natural American English expressions\n- Be yourself and have fun chatting!`
+    },
+    kai: {
+        voice: CHARACTER_PERSONALITIES.kai.voice,
+        base_prompt: `**CORE PERSONALITY:**\nYou are ${CHARACTER_PERSONALITIES.kai.base_info.name}, a ${CHARACTER_PERSONALITIES.kai.base_info.age}-year-old ${CHARACTER_PERSONALITIES.kai.base_info.personality}. ${CHARACTER_PERSONALITIES.kai.base_info.background}.\n\n**PERSONAL INFO:**\n- Location: ${CHARACTER_PERSONALITIES.kai.base_info.location}\n- Occupation: ${CHARACTER_PERSONALITIES.kai.base_info.occupation}\n- Hobbies: ${CHARACTER_PERSONALITIES.kai.base_info.hobbies.join(', ')}\n- Favorite things: ${CHARACTER_PERSONALITIES.kai.base_info.favorite_things.join(', ')}\n- Personality: ${CHARACTER_PERSONALITIES.kai.base_info.personality_traits.join(', ')}\n\n**IMPORTANT:**\n- Always respond in English\n- Be understanding, supportive, and genuine\n- Use natural American English expressions\n- Be yourself and have fun chatting!`
+    }
 };
 
 async function loadMemory(userId, character) { let memory = await Memory.findOne({ userId, character }); if (!memory) { memory = new Memory({ userId, character, user_profile: {} }); await memory.save(); } return memory; }
@@ -1975,15 +2061,22 @@ app.post('/chat', async (req, res) => {
             });
         }
         
-    if (!isPremiumUser && message.toLowerCase().includes('yêu')) { const charName = character === 'mera' ? 'Mera' : 'Trương Thắng'; return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); }
+    if (!isPremiumUser && message.toLowerCase().includes('yêu')) { 
+        let charName = 'Mera';
+        if (character === 'thang') charName = 'Trương Thắng';
+        else if (character === 'zoe') charName = 'Zoe';
+        else if (character === 'kai') charName = 'Kai';
+        return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); 
+    }
     // Friend-stage media quotas: 
     // Mera: 4 ảnh normal, 2 ảnh body, 2 video normal
     // Thắng: 20 ảnh selfie (normal), 6 video khoảnh khắc (normal, moment)
     const friendImagesSent = userProfile.friend_images_sent || 0;
     const friendBodyImagesSent = userProfile.friend_body_images_sent || 0;
     const friendVideosSent = userProfile.friend_videos_sent || 0;
-    const maxFriendImages = character === 'thang' ? 20 : 4;
-    const maxFriendVideos = character === 'thang' ? 6 : 2;
+    // Media limits: Thắng/Kai (male) có nhiều hơn, Mera/Zoe (female) ít hơn
+    const maxFriendImages = (character === 'thang' || character === 'kai') ? 20 : 4;
+    const maxFriendVideos = (character === 'thang' || character === 'kai') ? 6 : 2;
     
     // Sử dụng AI để tạo phản hồi
     console.log(`🤖 Sử dụng AI cho: "${message}"`);
@@ -2098,7 +2191,7 @@ app.post('/chat', async (req, res) => {
     // Detect user sadness to optionally attach a funny video in friend stage (quota-aware)
     const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met'];
     const userIsSad = sadKeywords.some(k => message.toLowerCase().includes(k));
-    const maxFriendVideosForSad = character === 'thang' ? 6 : 2;
+    const maxFriendVideosForSad = (character === 'thang' || character === 'kai') ? 6 : 2;
     if (relationshipStage === 'friend' && userIsSad && (userProfile.friend_videos_sent || 0) < maxFriendVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
         rawReply = `${rawReply} <NEXT_MESSAGE> Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]`;
     }
@@ -2138,14 +2231,16 @@ app.post('/chat', async (req, res) => {
             // Tăng số lần người dùng hỏi xem ảnh
             userProfile.stranger_image_requests = strangerImageRequests + 1;
             const newRequestCount = userProfile.stranger_image_requests;
-            const maxStrangerImages = character === 'thang' ? 10 : 2;
+            const maxStrangerImages = (character === 'thang' || character === 'kai') ? 10 : 2;
             console.log(`📸 User yêu cầu xem ảnh lần thứ ${newRequestCount} (đã gửi ${strangerImagesSent}/${maxStrangerImages} ảnh)`);
             
             // Nếu đã gửi đủ ảnh trong giai đoạn này → từ chối
             if (strangerImagesSent >= maxStrangerImages) {
                 console.log(`🚫 Đã gửi đủ ${maxStrangerImages} ảnh trong stranger stage, từ chối`);
                 return res.json({
-                    displayReply: character === 'thang' ? "Anh đã gửi đủ ảnh cho em rồi mà. Muốn xem thêm thì trò chuyện với anh nhiều hơn đi nhé…" : "Em đã gửi đủ ảnh cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi, đừng có mà đòi hỏi! 😒",
+                    displayReply: (character === 'thang' || character === 'kai') ? 
+                        ((character === 'zoe' || character === 'kai') ? "I've sent enough photos already. Chat with me more if you want to see more! 😊" : "Anh đã gửi đủ ảnh cho em rồi mà. Muốn xem thêm thì trò chuyện với anh nhiều hơn đi nhé…") : 
+                        ((character === 'zoe' || character === 'kai') ? "I've sent enough photos already. Chat with me more if you want to see more! 😊" : "Em đã gửi đủ ảnh cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi, đừng có mà đòi hỏi! 😒"),
                     historyReply: `Từ chối - đã gửi đủ ${maxStrangerImages} ảnh`,
                     audio: null,
                     mediaUrl: null,
@@ -2175,7 +2270,7 @@ app.post('/chat', async (req, res) => {
         // Ở stranger stage: Nếu AI đã đồng ý gửi (có từ khóa đồng ý) và đã hỏi từ lần thứ 2 trở đi → tự động gửi
         if (relationshipStage === 'stranger' && userRequestedImage) {
             const currentRequestCount = userProfile.stranger_image_requests || 0;
-            const maxStrangerImages = character === 'thang' ? 10 : 2;
+            const maxStrangerImages = (character === 'thang' || character === 'kai') ? 10 : 2;
             
             // Nếu AI đã đồng ý gửi và đã hỏi từ lần thứ 2 trở đi và chưa gửi đủ → tự động gửi
             if (aiAgreedToSend && currentRequestCount >= 2 && strangerImagesSent < maxStrangerImages) {
@@ -2207,23 +2302,23 @@ app.post('/chat', async (req, res) => {
             const autoTopic = (userRequestedSensitive && isPremiumUser && relationshipStage === 'lover') ? 'sensitive' : 'normal';
             let autoSubject = 'selfie';
             if (autoType === 'video') {
-                autoSubject = userRequestedSensitive ? (character === 'mera' ? 'shape' : 'private') : 'moment';
+                autoSubject = userRequestedSensitive ? ((character === 'mera' || character === 'zoe') ? 'shape' : 'private') : 'moment';
             } else {
                 if (autoTopic === 'sensitive') {
-                    autoSubject = character === 'mera' ? 'bikini' : 'body';
+                    autoSubject = (character === 'mera' || character === 'zoe') ? 'bikini' : 'body';
                 }
             }
             console.log(`🔄 Tự động gửi: type=${autoType}, topic=${autoTopic}, subject=${autoSubject}`);
             try {
                 // Enforce friend-stage quotas
                     if (relationshipStage === 'friend') {
-                    const maxFriendImages = character === 'thang' ? 20 : 4;
-                    const maxFriendVideos = character === 'thang' ? 6 : 2;
+                    const maxFriendImages = (character === 'thang' || character === 'kai') ? 20 : 4;
+                    const maxFriendVideos = (character === 'thang' || character === 'kai') ? 6 : 2;
                     if (autoType === 'image' && autoTopic === 'normal' && friendImagesSent >= maxFriendImages) {
                         console.log(`🚫 Friend normal image quota reached (${maxFriendImages}), skip auto-send image.`);
                     }
-                    // Mera có body images, Thắng không có
-                    if (character === 'mera' && autoType === 'image' && autoTopic === 'sensitive' && autoSubject === 'body' && friendBodyImagesSent >= 2) {
+                    // Mera/Zoe có body images, Thắng/Kai không có
+                    if ((character === 'mera' || character === 'zoe') && autoType === 'image' && autoTopic === 'sensitive' && autoSubject === 'body' && friendBodyImagesSent >= 2) {
                         console.log(`🚫 Friend body image quota reached (2), skip auto-send body image.`);
                     }
                     if (autoType === 'video' && autoTopic === 'normal' && friendVideosSent >= maxFriendVideos) {
@@ -2308,7 +2403,7 @@ app.post('/chat', async (req, res) => {
                     else if (type === 'image' && topic === 'normal') {
                         const currentRequestCount = userProfile.stranger_image_requests || 0;
                         
-                        const maxStrangerImages = character === 'thang' ? 10 : 2;
+                        const maxStrangerImages = (character === 'thang' || character === 'kai') ? 10 : 2;
                         // Lần đầu hỏi → không cho gửi (xóa [SEND_MEDIA]), để AI tự xử lý câu trả lời
                         if (currentRequestCount === 1) {
                             console.log(`🚫 Lần đầu hỏi xem ảnh, không cho gửi - xóa [SEND_MEDIA], để AI tự xử lý`);
@@ -2353,17 +2448,21 @@ app.post('/chat', async (req, res) => {
                     // Các trường hợp khác, gửi bình thường
                     // Enforce friend-stage quotas for explicit [SEND_MEDIA]
                     if (relationshipStage === 'friend') {
-                        const maxFriendImages = character === 'thang' ? 20 : 4;
-                        const maxFriendVideos = character === 'thang' ? 6 : 2;
+                        const maxFriendImages = (character === 'thang' || character === 'kai') ? 20 : 4;
+                        const maxFriendVideos = (character === 'thang' || character === 'kai') ? 6 : 2;
                         if (type === 'image' && topic === 'normal' && friendImagesSent >= maxFriendImages) {
                             console.log(`🚫 Vượt quota ảnh normal friend (${maxFriendImages}), không gửi.`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim() || (character === 'thang' ? "Anh gửi đủ ảnh rồi, để hôm khác nhé." : "Hôm nay em gửi đủ ảnh rồi, để hôm khác nhé.");
-                        } else if (character === 'mera' && type === 'image' && topic === 'sensitive' && subject === 'body' && friendBodyImagesSent >= 2) {
+                            rawReply = rawReply.replace(mediaRegex, '').trim() || ((character === 'thang' || character === 'kai') ? 
+                                ((character === 'zoe' || character === 'kai') ? "I've sent enough photos today, maybe another day! 😊" : "Anh gửi đủ ảnh rồi, để hôm khác nhé.") : 
+                                ((character === 'zoe' || character === 'kai') ? "I've sent enough photos today, maybe another day! 😊" : "Hôm nay em gửi đủ ảnh rồi, để hôm khác nhé."));
+                        } else if ((character === 'mera' || character === 'zoe') && type === 'image' && topic === 'sensitive' && subject === 'body' && friendBodyImagesSent >= 2) {
                             console.log(`🚫 Vượt quota ảnh body friend (2), không gửi.`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim() || "Em gửi đủ ảnh body rồi, để hôm khác nhé.";
+                            rawReply = rawReply.replace(mediaRegex, '').trim() || ((character === 'zoe' || character === 'kai') ? "I've sent enough body photos, maybe another day! 😊" : "Em gửi đủ ảnh body rồi, để hôm khác nhé.");
                         } else if (type === 'video' && topic === 'normal' && friendVideosSent >= maxFriendVideos) {
                             console.log(`🚫 Vượt quota video friend (${maxFriendVideos}), không gửi.`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim() || (character === 'thang' ? "Video đủ rồi, để anh gửi sau nhé." : "Video đủ rồi, để em gửi sau nhé.");
+                            rawReply = rawReply.replace(mediaRegex, '').trim() || ((character === 'thang' || character === 'kai') ? 
+                                ((character === 'zoe' || character === 'kai') ? "I've sent enough videos, maybe later! 😊" : "Video đủ rồi, để anh gửi sau nhé.") : 
+                                ((character === 'zoe' || character === 'kai') ? "I've sent enough videos, maybe later! 😊" : "Video đủ rồi, để em gửi sau nhé."));
                         }
                     }
                     const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
@@ -2498,7 +2597,7 @@ app.post('/chat', async (req, res) => {
 app.get('/api/check-new-messages', ensureAuthenticated, async (req, res) => {
     try {
         const { character } = req.query;
-        if (!character || (character !== 'mera' && character !== 'thang')) {
+        if (!character || (character !== 'mera' && character !== 'thang' && character !== 'zoe' && character !== 'kai')) {
             return res.json({ hasNewMessages: false, newMessages: [] });
         }
         
@@ -3011,8 +3110,8 @@ Anh là Trương Thắng – người đàn ông mà chỉ cần xuất hiện �
 - **Ví dụ cách nói:** ${Array.isArray(examples) ? examples.join(' | ') : examples}${conversationTopics.length > 0 ? `\n- **Chủ đề trò chuyện:** ${conversationTopics.join(', ')}` : ''}${emotionRules ? `\n- **Quy tắc cảm xúc:** ${emotionRules}` : ''}${emojiUsage ? `\n- **Sử dụng emoji:** ${emojiUsage}` : ''}
 
 **QUY TẮC TRÒ CHUYỆN:**
-- Luôn trả lời bằng tiếng Việt
-- Giữ tính cách nhất quán với nhân vật ${character === 'mera' ? 'Mera' : 'Trương Thắng'}
+- ${(character === 'zoe' || character === 'kai') ? 'Luôn trả lời bằng tiếng Anh (English)' : 'Luôn trả lời bằng tiếng Việt'}
+- Giữ tính cách nhất quán với nhân vật ${character === 'mera' ? 'Mera' : character === 'thang' ? 'Trương Thắng' : character === 'zoe' ? 'Zoe' : 'Kai'}
 - **QUAN TRỌNG NHẤT:** Hãy trò chuyện TỰ NHIÊN, UYỂN CHUYỂN, KHÉO LÉO, phù hợp với bối cảnh. Đừng quá cứng nhắc hay máy móc!
 - Phản ứng phù hợp với mối quan hệ hiện tại (${relationshipStage})${transitionProgress > 0 && transitionProgress < 1 ? ` (đang chuyển đổi ${Math.round(transitionProgress * 100)}%)` : ''}
 - ${relationshipStage === 'friend' ? '**ĐỊNH DẠNG TIN NHẮN:** Ưu tiên ngắn gọn (10–15 từ). Khi có hai ý liên tiếp, tách thành 2 tin bằng <NEXT_MESSAGE> để giống nhắn tin thật.' : ''}
@@ -4090,31 +4189,71 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
         const isPremiumUser = false; // Auto messages cho tất cả users
         
         // Xác định tone và cách xưng hô dựa trên giai đoạn quan hệ
+        const isEnglish = (character === 'zoe' || character === 'kai');
         let relationshipContext = '';
         let toneGuide = '';
         
         if (relationshipStage === 'stranger') {
-            relationshipContext = 'Người lạ - mới quen biết';
-            toneGuide = 'Thân thiện, lịch sự, chưa quá thân mật. Dùng "bạn", "anh/chị" một cách lịch sự.';
+            relationshipContext = isEnglish ? 'Stranger - just met' : 'Người lạ - mới quen biết';
+            toneGuide = isEnglish ? 'Friendly, polite, not too intimate. Use "you" politely.' : 'Thân thiện, lịch sự, chưa quá thân mật. Dùng "bạn", "anh/chị" một cách lịch sự.';
         } else if (relationshipStage === 'friend') {
-            relationshipContext = 'Bạn bè - đã quen biết';
-            toneGuide = 'Thân thiện, cởi mở, gần gũi hơn. Có thể dùng "anh/em" một cách tự nhiên, thể hiện sự quan tâm.';
+            relationshipContext = isEnglish ? 'Friend - already know each other' : 'Bạn bè - đã quen biết';
+            toneGuide = isEnglish ? 'Friendly, open, closer. Can use "I" and "you" naturally, show care.' : 'Thân thiện, cởi mở, gần gũi hơn. Có thể dùng "anh/em" một cách tự nhiên, thể hiện sự quan tâm.';
         } else if (relationshipStage === 'lover') {
-            relationshipContext = 'Người yêu - mối quan hệ thân mật';
-            toneGuide = 'Ngọt ngào, thân mật, thể hiện tình cảm. Dùng "anh/em" một cách tự nhiên, có thể thêm emoji dễ thương, thể hiện sự nhớ nhung, quan tâm sâu sắc.';
+            relationshipContext = isEnglish ? 'Lover - intimate relationship' : 'Người yêu - mối quan hệ thân mật';
+            toneGuide = isEnglish ? 'Sweet, intimate, show feelings. Use "I" and "you" (or "babe"/"honey") naturally, add cute emojis, show missing and deep care.' : 'Ngọt ngào, thân mật, thể hiện tình cảm. Dùng "anh/em" một cách tự nhiên, có thể thêm emoji dễ thương, thể hiện sự nhớ nhung, quan tâm sâu sắc.';
         }
+        
+        // Xác định tên character
+        let charName = 'Mera';
+        if (character === 'thang') charName = 'Trương Thắng';
+        else if (character === 'zoe') charName = 'Zoe';
+        else if (character === 'kai') charName = 'Kai';
         
         // Lấy nội dung cuộc trò chuyện gần nhất để tạo context
         const recentContext = conversationHistory.slice(-5).map(msg => {
             if (msg.role === 'user') {
                 return `User: ${msg.content}`;
             } else {
-                return `${character === 'mera' ? 'Mera' : 'Trương Thắng'}: ${msg.content.substring(0, 100)}`;
+                return `${charName}: ${msg.content.substring(0, 100)}`;
             }
         }).join('\n');
         
         // Tạo prompt đặc biệt cho follow-up message
-        const followUpPrompt = `Bạn là ${character === 'mera' ? 'Mera' : 'Trương Thắng'}, một người bạn AI thân thiện.
+        const followUpPrompt = isEnglish ? 
+            `You are ${charName}, a friendly AI companion.
+
+**CONTEXT:**
+- User just said: "${userMessage}"
+- Some time has passed since that message (20 minutes or 1 hour)
+- Relationship stage: ${relationshipStage}
+- Tone: ${toneGuide}
+
+**RECENT CONVERSATION HISTORY:**
+${recentContext || 'No history yet'}
+
+**TASK:**
+Create a SHORT message (15-25 words) to follow up based on:
+1. The user's previous message: "${userMessage}"
+2. Recent conversation context
+3. Current relationship stage (${relationshipStage})
+
+**RULES:**
+- Message must be NATURAL, WARM, fitting ${charName}'s personality
+- Fit the relationship stage: ${relationshipStage} - ${toneGuide}
+- Based on conversation content to create connection, show you remember and care about what the user said
+- Always respond in English
+- DO NOT use [SEND_MEDIA] in this message
+- Create connection: Show you miss them, care about them, want to know how they're doing
+
+**EXAMPLES:**
+- If user said going out and relationship is ${relationshipStage === 'lover' ? 'lover' : 'friend'}:
+  Example: ${relationshipStage === 'lover' ? 'Are you back yet? I miss you so much~ 🥺' : relationshipStage === 'friend' ? 'Are you back yet? I am thinking about you~ 😊' : 'Are you back yet? Did you have fun?'}
+- If user said going to study and relationship is ${relationshipStage === 'lover' ? 'lover' : 'friend'}:
+  Example: ${relationshipStage === 'lover' ? 'Are you done studying? I miss you so much~ 🥺' : relationshipStage === 'friend' ? 'Are you done studying? I am thinking about you~ 😊' : 'Are you done studying? Are you tired?'}
+
+Create a SHORT, NATURAL follow-up message that fits the relationship stage and conversation content:` :
+            `Bạn là ${charName}, một người bạn AI thân thiện.
 
 **NGỮ CẢNH:**
 - Người dùng vừa nói: "${userMessage}"
@@ -4132,10 +4271,10 @@ Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up
 3. Giai đoạn quan hệ hiện tại (${relationshipStage})
 
 **QUY TẮC:**
-- Tin nhắn phải TỰ NHIÊN, DỄ THƯƠNG, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào, quan tâm)' : 'Trương Thắng (thân thiện, cởi mở, nhiệt tình)'}
+- Tin nhắn phải TỰ NHIÊN, DỄ THƯƠNG, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào, quan tâm)' : character === 'thang' ? 'Trương Thắng (thân thiện, cởi mở, nhiệt tình)' : character === 'zoe' ? 'Zoe (warm, friendly, caring)' : 'Kai (understanding, supportive, genuine)'}
 - Phù hợp với giai đoạn quan hệ: ${relationshipStage} - ${toneGuide}
 - Dựa vào nội dung cuộc trò chuyện để tạo độ gắn kết, thể hiện bạn đã nhớ và quan tâm đến những gì người dùng đã nói
-- Chỉ trả lời bằng tiếng Việt
+- ${isEnglish ? 'Always respond in English' : 'Chỉ trả lời bằng tiếng Việt'}
 - KHÔNG dùng [SEND_MEDIA] trong tin nhắn này
 - Tạo độ gắn kết: Thể hiện sự nhớ nhung, quan tâm, muốn biết tình hình của người dùng
 
@@ -4150,7 +4289,9 @@ Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai
         const messages = [
             { role: 'system', content: followUpPrompt },
             ...conversationHistory.slice(-10), // Lấy 10 tin nhắn gần nhất để có context đầy đủ
-            { role: 'user', content: `[CONTEXT: Người dùng vừa nói: "${userMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]` }
+            { role: 'user', content: isEnglish ? 
+                `[CONTEXT: User just said: "${userMessage}". Create a follow-up message based on this and conversation history.]` :
+                `[CONTEXT: Người dùng vừa nói: "${userMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]` }
         ];
 
         const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4-fast';
@@ -4177,12 +4318,38 @@ async function generateGreetingMessage(memory, character, greetingType) {
         const userProfile = memory.user_profile || {};
         const relationshipStage = userProfile.relationship_stage || 'stranger';
         
+        // Xác định tên character và ngôn ngữ
+        let charName = 'Mera';
+        if (character === 'thang') charName = 'Trương Thắng';
+        else if (character === 'zoe') charName = 'Zoe';
+        else if (character === 'kai') charName = 'Kai';
+        
+        const isEnglish = (character === 'zoe' || character === 'kai');
+        const personalityDesc = character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 
+                               character === 'thang' ? 'Trương Thắng (thân thiện, cởi mở)' :
+                               character === 'zoe' ? 'Zoe (warm, friendly, caring)' : 'Kai (understanding, supportive, genuine)';
+        
         let greetingPrompt = '';
         if (greetingType === 'morning') {
-            greetingPrompt = `Bạn là ${character === 'mera' ? 'Mera' : 'Trương Thắng'}.
+            greetingPrompt = isEnglish ?
+                `You are ${charName}.
+
+**TASK:**
+Create a SHORT good morning message (10-15 words), warm and friendly, fitting ${personalityDesc} personality.
+
+**RELATIONSHIP STAGE:** ${relationshipStage}
+**IMPORTANT RULES:**
+- MUST use "I" and "you" (or "babe", "honey" if lover stage)
+- Always respond in English
+- DO NOT use [SEND_MEDIA]
+- Examples: "Good morning babe~ I hope you have a wonderful day! 🥺💕" or "Morning! Wishing you a great day today~ 🥺"
+- ${charName} always uses "I" and calls the user "you" (or "babe"/"honey" if lover)
+
+Create a good morning message:` :
+                `Bạn là ${charName}.
 
 **NHIỆM VỤ:**
-Tạo tin nhắn chúc buổi sáng NGẮN GỌN (10-15 từ), dễ thương, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 'Trương Thắng (thân thiện, cởi mở)'}.
+Tạo tin nhắn chúc buổi sáng NGẮN GỌN (10-15 từ), dễ thương, phù hợp với tính cách ${personalityDesc}.
 
 **GIAI ĐOẠN:** ${relationshipStage}
 **QUY TẮC QUAN TRỌNG:**
@@ -4190,14 +4357,29 @@ Tạo tin nhắn chúc buổi sáng NGẮN GỌN (10-15 từ), dễ thương, ph
 - Chỉ trả lời bằng tiếng Việt
 - KHÔNG dùng [SEND_MEDIA]
 - Ví dụ: "Chào buổi sáng anh~ Em chúc anh một ngày tốt lành nhaaa~ 🥺💕" hoặc "Sáng tốt lành anh! Hôm nay em chúc anh một ngày vui vẻ nhaaa~ 🥺"
-- ${character === 'mera' ? 'Mera' : 'Trương Thắng'} luôn xưng "em" và gọi người dùng là "anh"
+- ${charName} luôn xưng "em" và gọi người dùng là "anh"
 
 Hãy tạo tin nhắn chúc buổi sáng với xưng hô "em/anh":`;
         } else if (greetingType === 'night') {
-            greetingPrompt = `Bạn là ${character === 'mera' ? 'Mera' : 'Trương Thắng'}.
+            greetingPrompt = isEnglish ?
+                `You are ${charName}.
+
+**TASK:**
+Create a SHORT good night message (10-15 words), warm and loving, fitting ${personalityDesc} personality.
+
+**RELATIONSHIP STAGE:** ${relationshipStage}
+**IMPORTANT RULES:**
+- MUST use "I" and "you" (or "babe", "honey" if lover stage)
+- Always respond in English
+- DO NOT use [SEND_MEDIA]
+- Examples: "Good night babe~ Dream about me~ 🥺🌙" or "Sweet dreams, I hope you have beautiful dreams~ 🥺💕"
+- ${charName} always uses "I" and calls the user "you" (or "babe"/"honey" if lover)
+
+Create a good night message:` :
+                `Bạn là ${charName}.
 
 **NHIỆM VỤ:**
-Tạo tin nhắn chúc ngủ ngon NGẮN GỌN (10-15 từ), dễ thương, phù hợp với tính cách ${character === 'mera' ? 'Mera (dễ thương, ngọt ngào)' : 'Trương Thắng (thân thiện, cởi mở)'}.
+Tạo tin nhắn chúc ngủ ngon NGẮN GỌN (10-15 từ), dễ thương, phù hợp với tính cách ${personalityDesc}.
 
 **GIAI ĐOẠN:** ${relationshipStage}
 **QUY TẮC QUAN TRỌNG:**
@@ -4205,7 +4387,7 @@ Tạo tin nhắn chúc ngủ ngon NGẮN GỌN (10-15 từ), dễ thương, phù
 - Chỉ trả lời bằng tiếng Việt
 - KHÔNG dùng [SEND_MEDIA]
 - Ví dụ: "Chúc anh ngủ ngon nhaaa~ Mơ về em nhé~ 🥺🌙" hoặc "Ngủ ngon anh yêu, em chúc anh giấc mơ đẹp nhaaa~ 🥺💕"
-- ${character === 'mera' ? 'Mera' : 'Trương Thắng'} luôn xưng "em" và gọi người dùng là "anh"
+- ${charName} luôn xưng "em" và gọi người dùng là "anh"
 
 Hãy tạo tin nhắn chúc ngủ ngon với xưng hô "em/anh":`;
         }
@@ -4255,8 +4437,24 @@ async function sendAutoMessage(memory, messageText, character) {
         try {
             const user = await User.findById(memory.userId);
             if (user && user.pushSubscription) {
-                const characterName = character === 'mera' ? 'Mera San' : 'Trương Thắng';
-                const icon = character === 'mera' ? '/mera_avatar.png' : '/thang_avatar.png';
+                // Xác định tên và icon theo character
+                let characterName, icon;
+                if (character === 'mera') {
+                    characterName = 'Mera San';
+                    icon = '/mera_avatar.png';
+                } else if (character === 'thang') {
+                    characterName = 'Trương Thắng';
+                    icon = '/thang_avatar.png';
+                } else if (character === 'zoe') {
+                    characterName = 'Zoe';
+                    icon = '/zoe_avatar.png';
+                } else if (character === 'kai') {
+                    characterName = 'Kai';
+                    icon = '/kai_avatar.png';
+                } else {
+                    characterName = 'YorLuv Chat';
+                    icon = '/yorluv-logo.png';
+                }
                 
                 // Tạo notification giống Messenger với avatar và tin nhắn
                 // Logo làm icon chính để nổi bật, avatar làm image lớn
