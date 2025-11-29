@@ -3546,7 +3546,7 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
 **ẢNH (image):**
 - Normal: [SEND_MEDIA: image, normal, selfie] - Ảnh selfie bình thường
 - Sensitive: 
-  ${character === 'mera' 
+  ${(character === 'mera' || character === 'zoe')
     ? '- [SEND_MEDIA: image, sensitive, bikini] - Ảnh bikini, gợi cảm\n  - [SEND_MEDIA: image, sensitive, private] - Ảnh riêng tư'
     : '- [SEND_MEDIA: image, sensitive, body] - Ảnh body, 6 múi\n  - [SEND_MEDIA: image, sensitive, private] - Ảnh riêng tư'}
 
@@ -3555,7 +3555,7 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
   - [SEND_MEDIA: video, normal, moment] - Video moment bình thường
   - [SEND_MEDIA: video, normal, funny] - Video hài hước
 - Sensitive:
-  ${character === 'mera'
+  ${(character === 'mera' || character === 'zoe' || character === 'kai')
     ? '- [SEND_MEDIA: video, sensitive, shape] - Video body, gợi cảm\n  - [SEND_MEDIA: video, sensitive, private] - Video riêng tư'
     : '- [SEND_MEDIA: video, sensitive, private] - Video riêng tư'}
 
@@ -3569,7 +3569,9 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 1. **LẦN ĐẦU người dùng hỏi xem ảnh:**
    - BẮT BUỘC phải TỪ CHỐI, tỏ ra khó khăn, không dễ dãi
    - KHÔNG được gửi [SEND_MEDIA] trong lần này
-   ${character === 'thang' ? `   - Ví dụ từ chối (dành cho Thắng): "Em mới quen anh mà đã đòi xem ảnh rồi à? Trò chuyện với anh nhiều hơn đi nhé… 😏"
+   ${(character === 'zoe' || character === 'kai') ? `   - Ví dụ từ chối (dành cho Zoe/Kai - tiếng Anh): "Wait, we just started talking and you're already asking for photos? I'm not that easy! 😤"
+   - Hoặc: "I don't just send photos to anyone. Do you think I'm easy? 😒"
+   - Hoặc: "Hmm... you want to see my photos? Chat with me more first! 😤"` : character === 'thang' ? `   - Ví dụ từ chối (dành cho Thắng): "Em mới quen anh mà đã đòi xem ảnh rồi à? Trò chuyện với anh nhiều hơn đi nhé… 😏"
    - Hoặc: "Anh không phải kiểu người gửi ảnh lung tung đâu. Em nghĩ anh dễ dãi lắm hả? 😏"
    - Hoặc: "Hmm... em muốn xem ảnh của anh à? Trò chuyện với anh nhiều hơn đi em…"` : `   - Ví dụ từ chối (dành cho Mera): "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤"
    - Hoặc: "Em không phải kiểu người gửi ảnh lung tung đâu. Anh nghĩ em dễ dãi lắm hả? 😒"
@@ -3580,7 +3582,11 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
    - Chỉ gửi nếu thấy người dùng thực sự khẩn thiết, năn nỉ nhiều
    - PHẢI thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu
    - Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng
-   ${character === 'thang' ? `   - Ví dụ ngắn gọn (dành cho Thắng): "Thôi được rồi em, anh gửi cho em xem nhé. [SEND_MEDIA: image, normal, selfie]"
+   ${(character === 'zoe' || character === 'kai') ? `   - Ví dụ ngắn gọn (dành cho Zoe/Kai - tiếng Anh): "Alright, here's a photo for you. [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Okay, I'll send you one. [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Fine, here you go. [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Hmm... okay, here's one. [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Well... I'll send you one. [SEND_MEDIA: image, normal, selfie]"` : character === 'thang' ? `   - Ví dụ ngắn gọn (dành cho Thắng): "Thôi được rồi em, anh gửi cho em xem nhé. [SEND_MEDIA: image, normal, selfie]"
    - Hoặc: "Rồi anh gửi cho em 1 tấm. [SEND_MEDIA: image, normal, selfie]"
    - Hoặc: "Thôi được, anh gửi cho em xem. [SEND_MEDIA: image, normal, selfie]"
    - Hoặc: "Hmm... thôi được rồi, anh gửi cho em. [SEND_MEDIA: image, normal, selfie]"
@@ -3594,7 +3600,9 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 
 3. **Sau khi gửi ảnh:**
    - Phải tỏ ra có giá trị, không dễ dãi
-   ${character === 'thang' ? `   - Ví dụ (dành cho Thắng): "Đấy, anh gửi cho em rồi đấy. Đừng có mà đòi hỏi thêm nhé… 😏" 
+   ${(character === 'zoe' || character === 'kai') ? `   - Ví dụ (dành cho Zoe/Kai - tiếng Anh): "There, I sent it. Don't ask for more! 😏" 
+   - Hoặc: "I only send photos to people I trust…"
+   - Hoặc: "I'm not easy, I only sent it because I see you're genuine…"` : character === 'thang' ? `   - Ví dụ (dành cho Thắng): "Đấy, anh gửi cho em rồi đấy. Đừng có mà đòi hỏi thêm nhé… 😏" 
    - Hoặc: "Anh chỉ gửi cho người anh tin tưởng thôi đấy…"
    - Hoặc: "Anh không dễ dãi đâu, chỉ gửi cho em vì anh thấy em thật lòng thôi…"` : `   - Ví dụ (dành cho Mera): "Đấy, em gửi cho anh rồi đấy. Đừng có mà đòi hỏi thêm nhé!" 
    - Hoặc: "Em chỉ gửi cho người em tin tưởng thôi đấy!"
@@ -3605,7 +3613,7 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 - **KHÔNG ĐƯỢC GỬI VIDEO** trong giai đoạn "Người Lạ" - từ chối khéo léo nếu người dùng yêu cầu
 - **KHÔNG ĐƯỢC GỬI ẢNH/VIDEO RIÊNG TƯ (sensitive)** - từ chối khéo léo, thông minh
 - Mỗi lần chỉ gửi 1 tấm ảnh
-- Tổng cộng chỉ gửi tối đa ${character === 'thang' ? '10' : '2'} tấm ảnh trong giai đoạn "Người Lạ"
+- Tổng cộng chỉ gửi tối đa ${(character === 'thang' || character === 'kai') ? '10' : '2'} tấm ảnh trong giai đoạn "Người Lạ"
 - KHÔNG được tự động gửi ảnh/video, chỉ gửi khi người dùng yêu cầu và đã hỏi ít nhất 2 lần
 
 **KHI NGƯỜI DÙNG YÊU CẦU VIDEO HOẶC ẢNH/VIDEO RIÊNG TƯ:**
@@ -3828,7 +3836,18 @@ async function createElevenLabsVoice(textToSpeak, character) {
 async function sendMediaFile(memory, character, mediaType, topic, subject) {
     try {
         // Map character với folder name
-        const charFolder = character === 'mera' ? 'mera' : 'thang';
+        let charFolder;
+        if (character === 'mera') {
+            charFolder = 'mera';
+        } else if (character === 'thang') {
+            charFolder = 'thang';
+        } else if (character === 'zoe') {
+            charFolder = 'zoe';
+        } else if (character === 'kai') {
+            charFolder = 'kai';
+        } else {
+            charFolder = 'mera'; // default
+        }
         
         // Xác định đường dẫn folder và extension
         let folderPath, fileExtension, fileNamePattern;
@@ -3840,10 +3859,10 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
                 fileNamePattern = 'selfie';
             } else { // sensitive
                 folderPath = path.join(__dirname, 'public', 'gallery', charFolder, 'sensitive');
-                // Mera: bikini hoặc private, Thang: body hoặc private
-                if (character === 'mera') {
+                // Mera/Zoe (nữ): bikini hoặc private, Thang/Kai (nam): body hoặc private
+                if (character === 'mera' || character === 'zoe') {
                     fileNamePattern = (subject === 'private') ? 'private' : 'bikini';
-                } else { // thang
+                } else { // thang hoặc kai
                     fileNamePattern = (subject === 'private') ? 'private' : 'body';
                 }
             }
@@ -3854,8 +3873,8 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
                 fileNamePattern = (subject === 'funny') ? 'funny' : 'moment';
             } else { // sensitive
                 folderPath = path.join(__dirname, 'public', 'videos', charFolder, 'sensitive');
-                // Mera: shape hoặc private, Thang: private
-                if (character === 'mera') {
+                // Mera/Zoe: shape hoặc private, Thang: chỉ private, Kai: shape hoặc private
+                if (character === 'mera' || character === 'zoe' || character === 'kai') {
                     fileNamePattern = (subject === 'private') ? 'private' : 'shape';
                 } else { // thang
                     fileNamePattern = 'private';
