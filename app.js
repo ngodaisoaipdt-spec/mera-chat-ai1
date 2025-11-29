@@ -2199,9 +2199,10 @@ app.post('/chat', async (req, res) => {
     let mediaUrl = null, mediaType = null, mediaTopic = null, mediaSubject = null; 
     
     // Kiểm tra xem user có yêu cầu media không
-    const userRequestedMedia = /(cho.*xem|gửi|send|show).*(ảnh|hình|image|video|vid)/i.test(message);
-    const userRequestedVideo = /(cho.*xem|gửi|send|show).*(video|vid)/i.test(message);
-    const userRequestedImage = /(cho.*xem|gửi|send|show).*(ảnh|hình|image)/i.test(message);
+    // Hỗ trợ cả tiếng Việt và tiếng Anh cho Zoe/Kai
+    const userRequestedMedia = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(ảnh|hình|image|video|vid|picture|photo|pic)/i.test(message);
+    const userRequestedVideo = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(video|vid)/i.test(message);
+    const userRequestedImage = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(ảnh|hình|image|picture|photo|pic)/i.test(message);
     const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape|sexy|18\+|nhạy cảm|sex|xxx)/i.test(message);
     
     
@@ -2263,7 +2264,10 @@ app.post('/chat', async (req, res) => {
     const mediaMatch = rawReply.match(mediaRegex); 
     
     // Kiểm tra xem AI có đồng ý gửi ảnh không (có từ khóa đồng ý trong response)
-    const aiAgreedToSend = /(được rồi|thôi được|rồi|ừm|hmm|ok|okay|gửi|cho.*xem|cho.*anh|cho.*em).*(ảnh|hình|image|tấm|tấm ảnh)/i.test(rawReply);
+    // Hỗ trợ cả tiếng Việt và tiếng Anh cho Zoe/Kai
+    const aiAgreedToSend = (character === 'zoe' || character === 'kai') 
+        ? /(alright|fine|ok|okay|here|here's|here is|sent|send|sending|sends|give|gives|giving).*(photo|picture|pic|image|selfie|one|it)/i.test(rawReply)
+        : /(được rồi|thôi được|rồi|ừm|hmm|ok|okay|gửi|cho.*xem|cho.*anh|cho.*em).*(ảnh|hình|image|tấm|tấm ảnh)/i.test(rawReply);
     
     // Nếu user yêu cầu media nhưng AI không gửi [SEND_MEDIA] → tự động gửi (nhưng có điều kiện)
     if (userRequestedMedia && !mediaMatch) {
