@@ -2266,7 +2266,8 @@ app.post('/chat', async (req, res) => {
     // Kiểm tra xem AI có đồng ý gửi ảnh không (có từ khóa đồng ý trong response)
     // Hỗ trợ cả tiếng Việt và tiếng Anh cho Zoe/Kai
     const aiAgreedToSend = (character === 'zoe' || character === 'kai') 
-        ? /(alright|fine|ok|okay|here|here's|here is|sent|send|sending|sends|give|gives|giving).*(photo|picture|pic|image|selfie|one|it)/i.test(rawReply)
+        ? /(alright|fine|ok|okay|sure|yeah|yes|here|here's|here is|sent|send|sending|sends|give|gives|giving|quick|one more|another).*(photo|picture|pic|image|selfie|one|it|for you|to you)/i.test(rawReply) ||
+          /(photo|picture|pic|image|selfie).*(here|here's|here is|sent|send|sending|sends|give|gives|giving|for you|to you)/i.test(rawReply)
         : /(được rồi|thôi được|rồi|ừm|hmm|ok|okay|gửi|cho.*xem|cho.*anh|cho.*em).*(ảnh|hình|image|tấm|tấm ảnh)/i.test(rawReply);
     
     // Nếu user yêu cầu media nhưng AI không gửi [SEND_MEDIA] → tự động gửi (nhưng có điều kiện)
@@ -2297,6 +2298,10 @@ app.post('/chat', async (req, res) => {
                 }
             } else {
                 console.log(`⚠️ User yêu cầu ảnh ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt (aiAgreedToSend=${aiAgreedToSend}, currentRequestCount=${currentRequestCount}, strangerImagesSent=${strangerImagesSent})`);
+                // Debug: Log rawReply để kiểm tra
+                if (character === 'zoe' || character === 'kai') {
+                    console.log(`🔍 Debug Zoe/Kai - rawReply: "${rawReply.substring(0, 200)}"`);
+                }
             }
         } else if (relationshipStage !== 'stranger') {
             // Các giai đoạn khác, tự động gửi bình thường
