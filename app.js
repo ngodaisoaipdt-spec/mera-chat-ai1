@@ -51,7 +51,7 @@ webpush.setVapidDetails(
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now }, pushSubscription: { type: Object, default: null } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_videos_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, stranger_video_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, friend_body_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' }, last_followup_time: { type: Date, default: null } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_videos_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, stranger_video_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, friend_body_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' }, sad_detected_at: { type: Date, default: null }, messages_since_sad: { type: Number, default: 0 }, funny_video_sent_for_sad: { type: Boolean, default: false } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' }, last_followup_time: { type: Date, default: null } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -2215,17 +2215,44 @@ app.post('/chat', async (req, res) => {
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     console.log(`📝 AI reply (raw): ${rawReply.substring(0, 500)}...`);
     
-    // Detect user sadness to optionally attach a funny video in friend stage (quota-aware)
-    const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met'];
+    // Detect user sadness - lưu trạng thái để gửi video funny sau khi trò chuyện một hồi
+    const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met','sad','depressed','unhappy','upset','fired','lost job','worried','anxious','stressed','tired','exhausted'];
     const userIsSad = sadKeywords.some(k => message.toLowerCase().includes(k));
-    // Zoe/Kai: 4 video, Thắng: 6 video, Mera: 2 video
-    const maxFriendVideosForSad = (character === 'zoe' || character === 'kai') ? 4 : ((character === 'thang') ? 6 : 2);
-    if (relationshipStage === 'friend' && userIsSad && (userProfile.friend_videos_sent || 0) < maxFriendVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
-        // Hỗ trợ cả tiếng Anh cho Zoe/Kai
-        const funnyVideoMessage = (character === 'zoe' || character === 'kai') 
-            ? "Here's something to cheer you up! [SEND_MEDIA: video, normal, funny]"
-            : "Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]";
-        rawReply = `${rawReply} <NEXT_MESSAGE> ${funnyVideoMessage}`;
+    
+    // Nếu phát hiện người dùng buồn → lưu thời điểm và reset counter
+    if (userIsSad && relationshipStage === 'friend') {
+        if (!userProfile.sad_detected_at) {
+            // Lần đầu phát hiện buồn → lưu thời điểm
+            userProfile.sad_detected_at = new Date();
+            userProfile.messages_since_sad = 0;
+            userProfile.funny_video_sent_for_sad = false;
+            console.log(`😢 Phát hiện người dùng buồn, lưu trạng thái để gửi video funny sau khi trò chuyện một hồi`);
+        }
+    } else if (!userIsSad && userProfile.sad_detected_at) {
+        // Người dùng không còn buồn → reset trạng thái
+        userProfile.sad_detected_at = null;
+        userProfile.messages_since_sad = 0;
+        userProfile.funny_video_sent_for_sad = false;
+    }
+    
+    // Nếu đã phát hiện buồn trước đó → tăng counter và kiểm tra xem có nên gửi video không
+    if (userProfile.sad_detected_at && relationshipStage === 'friend' && !userProfile.funny_video_sent_for_sad) {
+        userProfile.messages_since_sad = (userProfile.messages_since_sad || 0) + 1;
+        const messagesSinceSad = userProfile.messages_since_sad;
+        
+        // Sau khi trò chuyện 2-3 tin nhắn → chủ động gửi video funny
+        // Zoe/Kai: 4 video, Thắng: 6 video, Mera: 2 video
+        const maxFriendVideosForSad = (character === 'zoe' || character === 'kai') ? 4 : ((character === 'thang') ? 6 : 2);
+        
+        if (messagesSinceSad >= 2 && messagesSinceSad <= 4 && (userProfile.friend_videos_sent || 0) < maxFriendVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
+            // Chủ động gửi video funny để làm người dùng vui hơn
+            console.log(`😊 Người dùng đã buồn, sau ${messagesSinceSad} tin nhắn → chủ động gửi video funny để làm vui`);
+            const funnyVideoMessage = (character === 'zoe' || character === 'kai') 
+                ? "Here's something to cheer you up! [SEND_MEDIA: video, normal, funny]"
+                : "Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]";
+            rawReply = `${rawReply} <NEXT_MESSAGE> ${funnyVideoMessage}`;
+            userProfile.funny_video_sent_for_sad = true; // Đánh dấu đã gửi để không spam
+        }
     }
     
     let mediaUrl = null, mediaType = null, mediaTopic = null, mediaSubject = null; 
