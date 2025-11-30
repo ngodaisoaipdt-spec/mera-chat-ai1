@@ -2218,9 +2218,14 @@ app.post('/chat', async (req, res) => {
     // Detect user sadness to optionally attach a funny video in friend stage (quota-aware)
     const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met'];
     const userIsSad = sadKeywords.some(k => message.toLowerCase().includes(k));
-    const maxFriendVideosForSad = (character === 'thang' || character === 'kai') ? 6 : 2;
+    // Zoe/Kai: 4 video, Thắng: 6 video, Mera: 2 video
+    const maxFriendVideosForSad = (character === 'zoe' || character === 'kai') ? 4 : ((character === 'thang') ? 6 : 2);
     if (relationshipStage === 'friend' && userIsSad && (userProfile.friend_videos_sent || 0) < maxFriendVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
-        rawReply = `${rawReply} <NEXT_MESSAGE> Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]`;
+        // Hỗ trợ cả tiếng Anh cho Zoe/Kai
+        const funnyVideoMessage = (character === 'zoe' || character === 'kai') 
+            ? "Here's something to cheer you up! [SEND_MEDIA: video, normal, funny]"
+            : "Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]";
+        rawReply = `${rawReply} <NEXT_MESSAGE> ${funnyVideoMessage}`;
     }
     
     let mediaUrl = null, mediaType = null, mediaTopic = null, mediaSubject = null; 
@@ -2291,9 +2296,11 @@ app.post('/chat', async (req, res) => {
             if (strangerImagesSent >= maxStrangerImages) {
                 console.log(`🚫 Đã gửi đủ ${maxStrangerImages} ảnh trong stranger stage, từ chối`);
                 return res.json({
-                    displayReply: (character === 'thang' || character === 'kai') ? 
-                        ((character === 'zoe' || character === 'kai') ? "I've sent enough photos already. Chat with me more if you want to see more! 😊" : "Anh đã gửi đủ ảnh cho em rồi mà. Muốn xem thêm thì trò chuyện với anh nhiều hơn đi nhé…") : 
-                        ((character === 'zoe' || character === 'kai') ? "I've sent enough photos already. Chat with me more if you want to see more! 😊" : "Em đã gửi đủ ảnh cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi, đừng có mà đòi hỏi! 😒"),
+                    displayReply: (character === 'zoe' || character === 'kai') 
+                        ? "I've sent enough photos already. Chat with me more if you want to see more! 😊"
+                        : (character === 'thang') 
+                            ? "Anh đã gửi đủ ảnh cho em rồi mà. Muốn xem thêm thì trò chuyện với anh nhiều hơn đi nhé…"
+                            : "Em đã gửi đủ ảnh cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi, đừng có mà đòi hỏi! 😒",
                     historyReply: `Từ chối - đã gửi đủ ${maxStrangerImages} ảnh`,
                     audio: null,
                     mediaUrl: null,
@@ -2738,9 +2745,13 @@ app.post('/chat', async (req, res) => {
                             rawReply = rawReply.replace(mediaRegex, '').trim();
                             // Chỉ thay thế nếu hoàn toàn trống
                             if (!rawReply || rawReply.trim().length < 5) {
-                                rawReply = (character === 'thang' || character === 'kai') ? 
-                                    ((character === 'zoe' || character === 'kai') ? "I've sent enough photos today, maybe another day! 😊" : "Anh gửi đủ ảnh rồi, để hôm khác nhé.") : 
-                                    ((character === 'zoe' || character === 'kai') ? "I've sent enough photos today, maybe another day! 😊" : "Hôm nay em gửi đủ ảnh rồi, để hôm khác nhé.");
+                                if (character === 'zoe' || character === 'kai') {
+                                    rawReply = "I've sent enough photos today, maybe another day! 😊";
+                                } else if (character === 'thang') {
+                                    rawReply = "Anh gửi đủ ảnh rồi, để hôm khác nhé.";
+                                } else {
+                                    rawReply = "Hôm nay em gửi đủ ảnh rồi, để hôm khác nhé.";
+                                }
                             }
                         } else if (type === 'image' && topic === 'sensitive' && subject === 'body' && friendBodyImagesSent >= maxFriendBodyImages) {
                             console.log(`🚫 Vượt quota ảnh body friend (${maxFriendBodyImages}), không gửi.`);
@@ -2764,9 +2775,13 @@ app.post('/chat', async (req, res) => {
                             rawReply = rawReply.replace(mediaRegex, '').trim();
                             // Chỉ thay thế nếu hoàn toàn trống
                             if (!rawReply || rawReply.trim().length < 5) {
-                                rawReply = (character === 'thang' || character === 'kai') ? 
-                                    ((character === 'zoe' || character === 'kai') ? "I've sent enough videos, maybe later! 😊" : "Video đủ rồi, để anh gửi sau nhé.") : 
-                                    ((character === 'zoe' || character === 'kai') ? "I've sent enough videos, maybe later! 😊" : "Video đủ rồi, để em gửi sau nhé.");
+                                if (character === 'zoe' || character === 'kai') {
+                                    rawReply = "I've sent enough videos, maybe later! 😊";
+                                } else if (character === 'thang') {
+                                    rawReply = "Video đủ rồi, để anh gửi sau nhé.";
+                                } else {
+                                    rawReply = "Video đủ rồi, để em gửi sau nhé.";
+                                }
                             }
                         }
                     }
