@@ -2302,13 +2302,14 @@ app.post('/chat', async (req, res) => {
     }
     
     // Helper: Check lần đầu từ chối
+    // Lưu ý: Counter đã được tăng TRƯỚC khi gọi hàm này, nên lần đầu = 1
     function shouldRefuseFirstRequest(type) {
         if (relationshipStage !== 'stranger') return false;
         if (!MEDIA_QUOTA_CONFIG.stranger.firstRefusal) return false;
         
         const requestField = type === 'image' ? 'stranger_image_requests' : 'stranger_video_requests';
         const requestCount = userProfile[requestField] || 0;
-        return requestCount === 0; // Lần đầu = 0
+        return requestCount === 1; // Lần đầu = 1 (vì đã tăng counter trước đó)
     }
     
     // Helper: Phát hiện chủ đề buồn (AI tự phát hiện qua nội dung)
@@ -3547,27 +3548,26 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 
 **QUAN TRỌNG:** Trong giai đoạn "Người Lạ", bạn PHẢI tỏ ra KHÓ KHĂN, có giá trị, KHÔNG dễ dãi khi người dùng đòi xem ảnh!
 
-**QUY TẮC GỬI ẢNH:**
-- **ĐÃ XÓA:** Quy tắc "lần đầu từ chối" và quota - sẽ thiết lập lại sau
-- Khi người dùng yêu cầu xem ảnh, bạn có thể gửi [SEND_MEDIA: image, normal, selfie] vào cuối câu
+**QUY TẮC GỬI ẢNH/VIDEO:**
+- **Lần đầu yêu cầu:** BẮT BUỘC phải từ chối khéo léo, KHÔNG gửi [SEND_MEDIA] tag. Hãy suy nghĩ và đưa ra lời từ chối khéo léo, gọn gàng, uyển chuyển.
+- **Từ lần 2 trở đi:** Khi người dùng yêu cầu xem ảnh/video, bạn PHẢI gửi [SEND_MEDIA: image, normal, selfie] hoặc [SEND_MEDIA: video, normal, moment] vào cuối câu
+- **QUOTA:** 6 ảnh normal, 3 video normal (hệ thống sẽ tự kiểm tra, bạn chỉ cần gửi khi đồng ý)
 - **QUAN TRỌNG:** Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng (tối đa 50-80 ký tự)
-- Lời thoại phải PHÙ HỢP với việc gửi ảnh - không cần giải thích dài dòng, chỉ cần nói ngắn gọn là đang gửi
-- **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh vì bạn không biết chính xác ảnh đó có nội dung gì!
+- Lời thoại phải PHÙ HỢP với việc gửi ảnh/video - không cần giải thích dài dòng, chỉ cần nói ngắn gọn là đang gửi
+- **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh/video vì bạn không biết chính xác ảnh/video đó có nội dung gì!
 
 **GIỚI HẠN NGHIÊM NGẶT:**
-- **CHỈ được gửi ẢNH BÌNH THƯỜNG (normal)**, KHÔNG được gửi sensitive ở giai đoạn này
-- **KHÔNG ĐƯỢC GỬI VIDEO** trong giai đoạn "Người Lạ" - từ chối khéo léo nếu người dùng yêu cầu
+- **CHỈ được gửi ẢNH/VIDEO BÌNH THƯỜNG (normal)**, KHÔNG được gửi sensitive ở giai đoạn này
 - **KHÔNG ĐƯỢC GỬI ẢNH/VIDEO RIÊNG TƯ (sensitive)** - từ chối khéo léo, thông minh
-- Mỗi lần chỉ gửi 1 tấm ảnh
-- **ĐÃ XÓA:** Quy tắc quota cũ - sẽ thiết lập lại sau
+- Mỗi lần chỉ gửi 1 tấm ảnh hoặc 1 video
+- **QUOTA:** 6 ảnh normal, 3 video normal (hệ thống sẽ tự kiểm tra, bạn chỉ cần gửi khi đồng ý)
 
-**KHI NGƯỜI DÙNG YÊU CẦU VIDEO HOẶC ẢNH/VIDEO RIÊNG TƯ:**
+**KHI NGƯỜI DÙNG YÊU CẦU ẢNH/VIDEO RIÊNG TƯ (sensitive):**
 - PHẢI từ chối một cách KHÉO LÉO, THÔNG MINH, không quá cứng nhắc
 - **QUAN TRỌNG:** Các ví dụ dưới đây CHỈ LÀ THAM KHẢO về phong cách, KHÔNG được copy y nguyên! Hãy SÁNG TẠO cách từ chối phù hợp với tính cách!
-- Ví dụ THAM KHẢO từ chối video: "Hmm... video thì em chưa muốn chia sẻ đâu. Em chỉ chia sẻ video với người thân thiết thôi. Trò chuyện với em nhiều hơn đi nhé! 😊"
 - Ví dụ THAM KHẢO từ chối sensitive: "Em chỉ chia sẻ những thứ đó với người thân thiết thôi. Chúng ta mới quen nhau, em chưa muốn chia sẻ như vậy đâu. Trò chuyện với em nhiều hơn đi nhé! 😊"
-- **Hãy SÁNG TẠO:** Biến tấu khác đi, ví dụ: "Áaa em ngại quá đi~ 🙈 Em chưa muốn chia sẻ video đâu nhaaa", "Hihi em còn ngại lắm áaa~ Trò chuyện với em nhiều hơn đi nhaaa~ 😊", "Em chưa sẵn sàng cho những thứ đó đâu áaa~ 🥺"
-- KHÔNG được gửi [SEND_MEDIA] cho video hoặc sensitive media trong giai đoạn này!
+- **Hãy SÁNG TẠO:** Biến tấu khác đi, ví dụ: "Áaa em ngại quá đi~ 🙈 Em chưa muốn chia sẻ những thứ đó đâu nhaaa", "Hihi em còn ngại lắm áaa~ Trò chuyện với em nhiều hơn đi nhaaa~ 😊", "Em chưa sẵn sàng cho những thứ đó đâu áaa~ 🥺"
+- KHÔNG được gửi [SEND_MEDIA] cho sensitive media trong giai đoạn này!
 
 **LƯU Ý:** **ĐÃ XÓA:** Quy tắc "lần đầu từ chối" - sẽ thiết lập lại sau` : `⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!`}
 
@@ -4249,15 +4249,8 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
         else if (character === 'zoe') charName = 'Zoe';
         else if (character === 'kai') charName = 'Kai';
         
-        // Escape special characters trong userMessage để tránh lỗi JSON parsing
-        const escapedUserMessage = userMessage
-            .replace(/\\/g, '\\\\')  // Escape backslash
-            .replace(/"/g, '\\"')    // Escape double quotes
-            .replace(/\n/g, '\\n')    // Escape newlines
-            .replace(/\r/g, '\\r')   // Escape carriage returns
-            .replace(/\t/g, '\\t');  // Escape tabs
-        
         // Lấy nội dung cuộc trò chuyện gần nhất để tạo context
+        // Không escape ở đây vì chỉ dùng để hiển thị trong prompt
         const recentContext = conversationHistory.slice(-5).map(msg => {
             if (msg.role === 'user') {
                 return `User: ${msg.content}`;
@@ -4267,11 +4260,13 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
         }).join('\n');
         
         // Tạo prompt đặc biệt cho follow-up message
+        // Sử dụng placeholder và thay thế sau để tránh lỗi escape
+        const userMessagePlaceholder = '{{USER_MESSAGE}}';
         const followUpPrompt = isEnglish ? 
             `You are ${charName}, a friendly AI companion.
 
 **CONTEXT:**
-- User just said: "${escapedUserMessage}"
+- User just said: "${userMessagePlaceholder}"
 - Some time has passed since that message (20 minutes or 1 hour)
 - Relationship stage: ${relationshipContext} (${relationshipStage})
 - Tone: ${toneGuide}
@@ -4281,7 +4276,7 @@ ${recentContext || 'No history yet'}
 
 **TASK:**
 Create a SHORT message (15-25 words) to follow up based on:
-1. The user's previous message: "${escapedUserMessage}"
+1. The user's previous message: "${userMessagePlaceholder}"
 2. Recent conversation context
 3. Current relationship stage (${relationshipStage})
 
@@ -4315,7 +4310,7 @@ Create a SHORT, NATURAL follow-up message that fits the relationship stage and c
             `Bạn là ${charName}, một người bạn AI thân thiện.
 
 **NGỮ CẢNH:**
-- Người dùng vừa nói: "${escapedUserMessage}"
+- Người dùng vừa nói: "${userMessagePlaceholder}"
 - Đã qua một khoảng thời gian kể từ tin nhắn đó (20 phút hoặc 1 giờ)
 - Giai đoạn quan hệ: ${relationshipContext} (${relationshipStage})
 - Tone: ${toneGuide}
@@ -4325,7 +4320,7 @@ ${recentContext || 'Chưa có lịch sử'}
 
 **NHIỆM VỤ:**
 Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up dựa trên:
-1. Nội dung tin nhắn trước đó của người dùng: "${escapedUserMessage}"
+1. Nội dung tin nhắn trước đó của người dùng: "${userMessagePlaceholder}"
 2. Ngữ cảnh cuộc trò chuyện gần đây
 3. Giai đoạn quan hệ hiện tại (${relationshipStage})
 
@@ -4345,22 +4340,25 @@ Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up
 
 Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai đoạn quan hệ và nội dung cuộc trò chuyện:`;
 
-        // Tạo messages array - đảm bảo tất cả content đều được escape đúng cách
-        const systemMessage = { role: 'system', content: followUpPrompt };
+        // Thay thế placeholder bằng userMessage (đã được escape an toàn bằng JSON.stringify)
+        // Sử dụng JSON.stringify để escape đúng cách, sau đó bỏ dấu ngoặc kép
+        const safeUserMessage = JSON.stringify(userMessage).slice(1, -1);
+        const finalPrompt = followUpPrompt.replace(new RegExp(userMessagePlaceholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), safeUserMessage);
         
-        // Escape tất cả messages trong conversationHistory
+        // Tạo messages array - OpenAI SDK sẽ tự xử lý JSON serialization
+        const systemMessage = { role: 'system', content: finalPrompt };
+        
+        // Không cần escape vì OpenAI SDK sẽ tự xử lý JSON serialization
         const escapedHistory = conversationHistory.slice(-10).map(msg => ({
             role: msg.role,
-            content: typeof msg.content === 'string' 
-                ? msg.content.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-                : String(msg.content || '')
+            content: typeof msg.content === 'string' ? msg.content : String(msg.content || '')
         }));
         
         const userContextMessage = {
             role: 'user',
             content: isEnglish ? 
-                `[CONTEXT: User just said: "${escapedUserMessage}". Create a follow-up message based on this and conversation history.]` :
-                `[CONTEXT: Người dùng vừa nói: "${escapedUserMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]`
+                `[CONTEXT: User just said: "${safeUserMessage}". Create a follow-up message based on this and conversation history.]` :
+                `[CONTEXT: Người dùng vừa nói: "${safeUserMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]`
         };
         
         const messages = [systemMessage, ...escapedHistory, userContextMessage];
