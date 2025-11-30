@@ -2215,74 +2215,85 @@ app.post('/chat', async (req, res) => {
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     console.log(`📝 AI reply (raw): ${rawReply.substring(0, 500)}...`);
     
-    // Detect user sadness - lưu trạng thái để gửi video funny sau khi trò chuyện một hồi
-    // ÁP DỤNG CHO TẤT CẢ NHÂN VẬT VÀ TẤT CẢ GIAI ĐOẠN
-    const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met','sad','depressed','unhappy','upset','fired','lost job','worried','anxious','stressed','tired','exhausted','want.*happy','make.*happy','cheer.*up','feel.*better'];
-    const userIsSad = sadKeywords.some(k => message.toLowerCase().includes(k));
+    // ============================================
+    // LOGIC GỬI VIDEO FUNNY KHI NGƯỜI DÙNG BUỒN
+    // Viết lại từ đầu - đơn giản và rõ ràng
+    // ============================================
     
-    // Nếu phát hiện người dùng buồn → lưu thời điểm và reset counter (ÁP DỤNG CHO TẤT CẢ STAGES)
+    // 1. Phát hiện người dùng buồn
+    const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met','sad','depressed','unhappy','upset','fired','lost job','worried','anxious','stressed','tired','exhausted','want.*happy','make.*happy','cheer.*up','feel.*better','relax','watch.*something','something.*relax'];
+    const userIsSad = sadKeywords.some(k => {
+        const regex = new RegExp(k, 'i');
+        return regex.test(message);
+    });
+    
+    // 2. Xử lý trạng thái buồn
     if (userIsSad) {
+        // Nếu chưa có flag buồn → set flag và reset counter
         if (!userProfile.sad_detected_at) {
-            // Lần đầu phát hiện buồn → lưu thời điểm
             userProfile.sad_detected_at = new Date();
             userProfile.messages_since_sad = 0;
             userProfile.funny_video_sent_for_sad = false;
-            console.log(`😢 Phát hiện người dùng buồn (stage: ${relationshipStage}), lưu trạng thái để gửi video funny sau khi trò chuyện một hồi`);
+            console.log(`😢 [FUNNY VIDEO] Phát hiện người dùng buồn - stage: ${relationshipStage}, character: ${character}`);
         }
-    } else if (!userIsSad && userProfile.sad_detected_at) {
-        // Người dùng không còn buồn → reset trạng thái
-        userProfile.sad_detected_at = null;
-        userProfile.messages_since_sad = 0;
-        userProfile.funny_video_sent_for_sad = false;
+    } else {
+        // Nếu người dùng không còn buồn → reset (nhưng chỉ reset sau 5 tin nhắn không buồn)
+        if (userProfile.sad_detected_at && userProfile.messages_since_sad > 5) {
+            userProfile.sad_detected_at = null;
+            userProfile.messages_since_sad = 0;
+            userProfile.funny_video_sent_for_sad = false;
+        }
     }
     
-    // Nếu đã phát hiện buồn trước đó → tăng counter và kiểm tra xem có nên gửi video không
-    // ÁP DỤNG CHO TẤT CẢ STAGES VÀ TẤT CẢ NHÂN VẬT
+    // 3. Kiểm tra và gửi video funny
     if (userProfile.sad_detected_at && !userProfile.funny_video_sent_for_sad) {
+        // Tăng counter sau mỗi tin nhắn
         userProfile.messages_since_sad = (userProfile.messages_since_sad || 0) + 1;
         const messagesSinceSad = userProfile.messages_since_sad;
         
-        // Sau khi trò chuyện 2-3 tin nhắn → chủ động gửi video funny
-        // Tính quota video phù hợp cho từng stage
-        let maxVideosForSad = 0;
+        // Tính quota video theo stage và character
+        let canSendVideo = false;
+        let maxVideos = 0;
         let videosSent = 0;
         
         if (relationshipStage === 'stranger') {
-            // Stranger: Zoe/Kai có 3 video normal, Mera/Thắng không có video
+            // Stranger: Chỉ Zoe/Kai có video
             if (character === 'zoe' || character === 'kai') {
-                maxVideosForSad = 3;
+                maxVideos = 3;
                 videosSent = userProfile.stranger_videos_sent || 0;
-            } else {
-                // Mera/Thắng không có video ở stranger stage → không gửi
-                maxVideosForSad = 0;
+                canSendVideo = videosSent < maxVideos;
             }
         } else if (relationshipStage === 'friend') {
-            // Friend: Zoe/Kai: 4 video, Thắng: 6 video, Mera: 2 video
-            maxVideosForSad = (character === 'zoe' || character === 'kai') ? 4 : ((character === 'thang') ? 6 : 2);
+            // Friend: Tất cả nhân vật đều có video
+            if (character === 'zoe' || character === 'kai') {
+                maxVideos = 4;
+            } else if (character === 'thang') {
+                maxVideos = 6;
+            } else {
+                maxVideos = 2; // Mera
+            }
             videosSent = userProfile.friend_videos_sent || 0;
+            canSendVideo = videosSent < maxVideos;
         } else if (relationshipStage === 'lover') {
-            // Lover: Không giới hạn (set số lớn để luôn cho phép)
-            maxVideosForSad = 999;
-            videosSent = 0; // Không cần check quota ở lover stage
+            // Lover: Không giới hạn
+            canSendVideo = true;
         }
         
-        // Chủ động gửi video funny sau 2-4 tin nhắn trò chuyện
-        // Điều kiện: messagesSinceSad >= 2 (sau khi trò chuyện ít nhất 2 tin nhắn)
-        if (messagesSinceSad >= 2 && videosSent < maxVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
-            // Chủ động gửi video funny để làm người dùng vui hơn
-            console.log(`😊 Người dùng đã buồn (stage: ${relationshipStage}), sau ${messagesSinceSad} tin nhắn → chủ động gửi video funny để làm vui (quota: ${videosSent}/${maxVideosForSad})`);
+        // Gửi video sau 2 tin nhắn trò chuyện (tin nhắn thứ 2 = messagesSinceSad = 2)
+        if (messagesSinceSad >= 2 && canSendVideo && !/\[SEND_MEDIA:/i.test(rawReply)) {
+            console.log(`😊 [FUNNY VIDEO] GỬI VIDEO FUNNY - stage: ${relationshipStage}, character: ${character}, messagesSinceSad: ${messagesSinceSad}, quota: ${videosSent}/${maxVideos || 'unlimited'}`);
+            
             const funnyVideoMessage = (character === 'zoe' || character === 'kai') 
                 ? "Here's something to cheer you up! [SEND_MEDIA: video, normal, funny]"
                 : (character === 'thang')
                     ? "Gửi em đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]"
                     : "Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]";
+            
             rawReply = `${rawReply} <NEXT_MESSAGE> ${funnyVideoMessage}`;
-            userProfile.funny_video_sent_for_sad = true; // Đánh dấu đã gửi để không spam
+            userProfile.funny_video_sent_for_sad = true;
         } else {
-            // Debug log để kiểm tra tại sao không gửi
-            if (userProfile.sad_detected_at && !userProfile.funny_video_sent_for_sad) {
-                console.log(`⚠️ Chưa gửi video funny: messagesSinceSad=${messagesSinceSad}, videosSent=${videosSent}, maxVideosForSad=${maxVideosForSad}, hasMediaTag=${/\[SEND_MEDIA:/i.test(rawReply)}`);
-            }
+            // Debug log
+            console.log(`⚠️ [FUNNY VIDEO] Chưa gửi - messagesSinceSad: ${messagesSinceSad}, canSendVideo: ${canSendVideo}, hasMediaTag: ${/\[SEND_MEDIA:/i.test(rawReply)}, stage: ${relationshipStage}, character: ${character}`);
         }
     }
     
@@ -4735,7 +4746,7 @@ ${recentContext || 'No history yet'}
 
 **TASK:**
 Create a SHORT message (15-25 words) to follow up based on:
-1. The user's previous message: "${userMessage}"
+1. The user's previous message: "${escapedUserMessage}"
 2. Recent conversation context
 3. Current relationship stage (${relationshipStage})
 
@@ -4769,7 +4780,7 @@ Create a SHORT, NATURAL follow-up message that fits the relationship stage and c
             `Bạn là ${charName}, một người bạn AI thân thiện.
 
 **NGỮ CẢNH:**
-- Người dùng vừa nói: "${userMessage}"
+- Người dùng vừa nói: "${escapedUserMessage}"
 - Đã qua một khoảng thời gian kể từ tin nhắn đó (20 phút hoặc 1 giờ)
 - Giai đoạn quan hệ: ${relationshipContext} (${relationshipStage})
 - Tone: ${toneGuide}
@@ -4779,7 +4790,7 @@ ${recentContext || 'Chưa có lịch sử'}
 
 **NHIỆM VỤ:**
 Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up dựa trên:
-1. Nội dung tin nhắn trước đó của người dùng: "${userMessage}"
+1. Nội dung tin nhắn trước đó của người dùng: "${escapedUserMessage}"
 2. Ngữ cảnh cuộc trò chuyện gần đây
 3. Giai đoạn quan hệ hiện tại (${relationshipStage})
 
@@ -4799,12 +4810,20 @@ Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up
 
 Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai đoạn quan hệ và nội dung cuộc trò chuyện:`;
 
+        // Escape special characters trong userMessage để tránh lỗi JSON parsing
+        const escapedUserMessage = userMessage
+            .replace(/\\/g, '\\\\')  // Escape backslash
+            .replace(/"/g, '\\"')    // Escape double quotes
+            .replace(/\n/g, '\\n')    // Escape newlines
+            .replace(/\r/g, '\\r')   // Escape carriage returns
+            .replace(/\t/g, '\\t');  // Escape tabs
+        
         const messages = [
             { role: 'system', content: followUpPrompt },
             ...conversationHistory.slice(-10), // Lấy 10 tin nhắn gần nhất để có context đầy đủ
             { role: 'user', content: isEnglish ? 
-                `[CONTEXT: User just said: "${userMessage}". Create a follow-up message based on this and conversation history.]` :
-                `[CONTEXT: Người dùng vừa nói: "${userMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]` }
+                `[CONTEXT: User just said: "${escapedUserMessage}". Create a follow-up message based on this and conversation history.]` :
+                `[CONTEXT: Người dùng vừa nói: "${escapedUserMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]` }
         ];
 
         const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4-fast';
