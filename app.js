@@ -2245,43 +2245,30 @@ app.post('/chat', async (req, res) => {
         }
     }
     
-    // 3. Kiểm tra và gửi video funny
+    // 3. Kiểm tra và gửi video funny - LOGIC ĐƠN GIẢN
     if (userProfile.sad_detected_at && !userProfile.funny_video_sent_for_sad) {
         // Tăng counter sau mỗi tin nhắn
         userProfile.messages_since_sad = (userProfile.messages_since_sad || 0) + 1;
         const messagesSinceSad = userProfile.messages_since_sad;
         
-        // Tính quota video theo stage và character
-        let canSendVideo = false;
-        let maxVideos = 0;
-        let videosSent = 0;
+        // VIDEO FUNNY CÓ QUOTA RIÊNG - KHÔNG BỊ GIỚI HẠN BỞI QUOTA VIDEO THÔNG THƯỜNG
+        // Kiểm tra xem nhân vật có thể gửi video ở stage này không
+        let canSendFunnyVideo = false;
         
         if (relationshipStage === 'stranger') {
-            // Stranger: Chỉ Zoe/Kai có video
-            if (character === 'zoe' || character === 'kai') {
-                maxVideos = 3;
-                videosSent = userProfile.stranger_videos_sent || 0;
-                canSendVideo = videosSent < maxVideos;
-            }
+            // Stranger: Chỉ Zoe/Kai có thể gửi video
+            canSendFunnyVideo = (character === 'zoe' || character === 'kai');
         } else if (relationshipStage === 'friend') {
-            // Friend: Tất cả nhân vật đều có video
-            if (character === 'zoe' || character === 'kai') {
-                maxVideos = 4;
-            } else if (character === 'thang') {
-                maxVideos = 6;
-            } else {
-                maxVideos = 2; // Mera
-            }
-            videosSent = userProfile.friend_videos_sent || 0;
-            canSendVideo = videosSent < maxVideos;
+            // Friend: TẤT CẢ nhân vật đều có thể gửi video funny
+            canSendFunnyVideo = true;
         } else if (relationshipStage === 'lover') {
-            // Lover: Không giới hạn
-            canSendVideo = true;
+            // Lover: Tất cả nhân vật đều có thể gửi
+            canSendFunnyVideo = true;
         }
         
-        // Gửi video sau 2 tin nhắn trò chuyện (tin nhắn thứ 2 = messagesSinceSad = 2)
-        if (messagesSinceSad >= 2 && canSendVideo && !/\[SEND_MEDIA:/i.test(rawReply)) {
-            console.log(`😊 [FUNNY VIDEO] GỬI VIDEO FUNNY - stage: ${relationshipStage}, character: ${character}, messagesSinceSad: ${messagesSinceSad}, quota: ${videosSent}/${maxVideos || 'unlimited'}`);
+        // Gửi video sau 2 tin nhắn trò chuyện
+        if (messagesSinceSad >= 2 && canSendFunnyVideo && !/\[SEND_MEDIA:/i.test(rawReply)) {
+            console.log(`😊 [FUNNY VIDEO] ✅ GỬI VIDEO FUNNY - stage: ${relationshipStage}, character: ${character}, messagesSinceSad: ${messagesSinceSad}`);
             
             const funnyVideoMessage = (character === 'zoe' || character === 'kai') 
                 ? "Here's something to cheer you up! [SEND_MEDIA: video, normal, funny]"
@@ -2292,8 +2279,8 @@ app.post('/chat', async (req, res) => {
             rawReply = `${rawReply} <NEXT_MESSAGE> ${funnyVideoMessage}`;
             userProfile.funny_video_sent_for_sad = true;
         } else {
-            // Debug log
-            console.log(`⚠️ [FUNNY VIDEO] Chưa gửi - messagesSinceSad: ${messagesSinceSad}, canSendVideo: ${canSendVideo}, hasMediaTag: ${/\[SEND_MEDIA:/i.test(rawReply)}, stage: ${relationshipStage}, character: ${character}`);
+            // Debug log chi tiết
+            console.log(`⚠️ [FUNNY VIDEO] ❌ Chưa gửi - messagesSinceSad: ${messagesSinceSad}, canSendFunnyVideo: ${canSendFunnyVideo}, hasMediaTag: ${/\[SEND_MEDIA:/i.test(rawReply)}, stage: ${relationshipStage}, character: ${character}, sad_detected: ${!!userProfile.sad_detected_at}`);
         }
     }
     
@@ -4818,13 +4805,25 @@ Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up
 
 Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai đoạn quan hệ và nội dung cuộc trò chuyện:`;
 
-        const messages = [
-            { role: 'system', content: followUpPrompt },
-            ...conversationHistory.slice(-10), // Lấy 10 tin nhắn gần nhất để có context đầy đủ
-            { role: 'user', content: isEnglish ? 
+        // Tạo messages array - đảm bảo tất cả content đều được escape đúng cách
+        const systemMessage = { role: 'system', content: followUpPrompt };
+        
+        // Escape tất cả messages trong conversationHistory
+        const escapedHistory = conversationHistory.slice(-10).map(msg => ({
+            role: msg.role,
+            content: typeof msg.content === 'string' 
+                ? msg.content.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
+                : String(msg.content || '')
+        }));
+        
+        const userContextMessage = {
+            role: 'user',
+            content: isEnglish ? 
                 `[CONTEXT: User just said: "${escapedUserMessage}". Create a follow-up message based on this and conversation history.]` :
-                `[CONTEXT: Người dùng vừa nói: "${escapedUserMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]` }
-        ];
+                `[CONTEXT: Người dùng vừa nói: "${escapedUserMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]`
+        };
+        
+        const messages = [systemMessage, ...escapedHistory, userContextMessage];
 
         const modelName = process.env.XAI_MODEL_DEFAULT || 'grok-4-fast';
         const response = await Promise.race([
