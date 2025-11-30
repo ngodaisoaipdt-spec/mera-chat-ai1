@@ -2256,16 +2256,18 @@ app.post('/chat', async (req, res) => {
         const canSendFunnyVideo = true; // TẤT CẢ nhân vật ở TẤT CẢ giai đoạn đều có thể gửi
         
         // Gửi video sau 2 tin nhắn trò chuyện
+        // QUAN TRỌNG: Gửi video ngay trong response này, không dùng <NEXT_MESSAGE>
         if (messagesSinceSad >= 2 && canSendFunnyVideo && !/\[SEND_MEDIA:/i.test(rawReply)) {
             console.log(`😊 [FUNNY VIDEO] ✅ GỬI VIDEO FUNNY - stage: ${relationshipStage}, character: ${character}, messagesSinceSad: ${messagesSinceSad}`);
             
-            const funnyVideoMessage = (character === 'zoe' || character === 'kai') 
-                ? "Here's something to cheer you up! [SEND_MEDIA: video, normal, funny]"
+            // Thêm [SEND_MEDIA] tag vào rawReply để logic phía dưới xử lý
+            const funnyVideoText = (character === 'zoe' || character === 'kai') 
+                ? "Here's something to cheer you up!"
                 : (character === 'thang')
-                    ? "Gửi em đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]"
-                    : "Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]";
+                    ? "Gửi em đoạn này cho vui nhé."
+                    : "Gửi anh đoạn này cho vui nhé.";
             
-            rawReply = `${rawReply} <NEXT_MESSAGE> ${funnyVideoMessage}`;
+            rawReply = `${rawReply} ${funnyVideoText} [SEND_MEDIA: video, normal, funny]`;
             userProfile.funny_video_sent_for_sad = true;
         } else {
             // Debug log chi tiết
@@ -2693,9 +2695,30 @@ app.post('/chat', async (req, res) => {
                                 rawReply = rawReply.replace(mediaRegex, '').trim();
                             }
                         } else {
-                            // Mera/Thắng: Chặn video hoàn toàn
-                            console.log(`🚫 AI muốn gửi video trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
+                            // Mera/Thắng: Chặn video thông thường, NHƯNG cho phép video funny (để động viên khi buồn)
+                            if (subject === 'funny') {
+                                // Video funny được phép cho tất cả nhân vật ở tất cả stages
+                                console.log(`✅ Cho phép gửi video funny cho ${character} ở stranger stage (để động viên khi buồn)`);
+                                const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
+                                if (mediaResult && mediaResult.success) {
+                                    mediaUrl = mediaResult.mediaUrl;
+                                    mediaType = mediaResult.mediaType;
+                                    mediaTopic = topic;
+                                    mediaSubject = subject;
+                                    memory.user_profile = mediaResult.updatedMemory.user_profile;
+                                    rawReply = rawReply.replace(mediaRegex, '').trim();
+                                    if (!rawReply || rawReply.trim().length < 5) {
+                                        rawReply = (character === 'thang') ? "Gửi em đoạn này cho vui nhé. 😊" : "Gửi anh đoạn này cho vui nhé. 😊";
+                                    }
+                                } else {
+                                    console.warn(`⚠️ Không thể gửi video funny:`, mediaResult?.message || 'Unknown error');
+                                    rawReply = rawReply.replace(mediaRegex, '').trim();
+                                }
+                            } else {
+                                // Video thông thường: Chặn
+                                console.log(`🚫 AI muốn gửi video trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
+                                rawReply = rawReply.replace(mediaRegex, '').trim();
+                            }
                         }
                         }
                     // Chặn sensitive media (ảnh/video riêng tư) - chỉ xóa [SEND_MEDIA], để AI tự xử lý câu trả lời
