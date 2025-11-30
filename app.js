@@ -4744,7 +4744,7 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
             `You are ${charName}, a friendly AI companion.
 
 **CONTEXT:**
-- User just said: "${userMessage}"
+- User just said: "${escapedUserMessage}"
 - Some time has passed since that message (20 minutes or 1 hour)
 - Relationship stage: ${relationshipContext} (${relationshipStage})
 - Tone: ${toneGuide}
