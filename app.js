@@ -2396,8 +2396,24 @@ app.post('/chat', async (req, res) => {
             } else {
                 // CHẶN VIDEO và SENSITIVE MEDIA trong stranger stage
                 if (relationshipStage === 'stranger') {
+                    // CHẶN ẢNH NẾU LÀ LẦN ĐẦU HỎI (stranger_image_requests < 2)
+                    const currentRequestCount = userProfile.stranger_image_requests || 0;
+                    if (type === 'image' && currentRequestCount < 2) {
+                        console.log(`🚫 AI muốn gửi ảnh trong stranger stage lần đầu (requestCount=${currentRequestCount}), chặn gửi - phải từ chối lần đầu`);
+                        rawReply = rawReply.replace(mediaRegex, '').trim();
+                        // Nếu không còn text sau khi xóa tag, thêm câu từ chối phù hợp
+                        if (!rawReply || rawReply.length < 10) {
+                            if (character === 'zoe' || character === 'kai') {
+                                rawReply = "Wait, we just started talking and you're already asking for photos? I'm not that easy! Let's chat more first! 😤";
+                            } else if (character === 'thang') {
+                                rawReply = "Em mới quen anh mà đã đòi xem ảnh rồi à? Trò chuyện với anh nhiều hơn đi nhé… 😏";
+                            } else {
+                                rawReply = "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤";
+                            }
+                        }
+                    }
                     // Chặn video hoàn toàn - chỉ xóa [SEND_MEDIA], để AI tự xử lý câu trả lời
-                    if (type === 'video') {
+                    else if (type === 'video') {
                         console.log(`🚫 AI muốn gửi video trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         // Không hardcode response - để AI tự suy nghĩ và trả lời
@@ -2414,10 +2430,19 @@ app.post('/chat', async (req, res) => {
                         
                         const maxStrangerImages = (character === 'thang' || character === 'kai') ? 10 : 2;
                         // Lần đầu hỏi → không cho gửi (xóa [SEND_MEDIA]), để AI tự xử lý câu trả lời
-                        if (currentRequestCount === 1) {
-                            console.log(`🚫 Lần đầu hỏi xem ảnh, không cho gửi - xóa [SEND_MEDIA], để AI tự xử lý`);
+                        if (currentRequestCount <= 1) {
+                            console.log(`🚫 Lần đầu hỏi xem ảnh (requestCount=${currentRequestCount}), không cho gửi - xóa [SEND_MEDIA], để AI tự xử lý`);
                             rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Không hardcode response - để AI tự suy nghĩ và trả lời
+                            // Nếu không còn text sau khi xóa tag, thêm câu từ chối phù hợp
+                            if (!rawReply || rawReply.length < 10) {
+                                if (character === 'zoe' || character === 'kai') {
+                                    rawReply = "Wait, we just started talking and you're already asking for photos? I'm not that easy! Let's chat more first! 😤";
+                                } else if (character === 'thang') {
+                                    rawReply = "Em mới quen anh mà đã đòi xem ảnh rồi à? Trò chuyện với anh nhiều hơn đi nhé… 😏";
+                                } else {
+                                    rawReply = "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤";
+                                }
+                            }
                         } else if (strangerImagesSent >= maxStrangerImages) {
                             // Đã gửi đủ ảnh → chặn gửi, để AI tự xử lý câu trả lời
                             console.log(`🚫 AI muốn gửi ảnh nhưng đã gửi đủ ${maxStrangerImages} ảnh, chặn gửi - để AI tự xử lý`);
@@ -2436,11 +2461,32 @@ app.post('/chat', async (req, res) => {
                                 // Tăng số lần đã gửi ảnh trong stranger stage
                                 memory.user_profile.stranger_images_sent = (memory.user_profile.stranger_images_sent || 0) + 1;
                                 console.log(`✅ Đã gửi ảnh stranger thành công: ${mediaUrl} (${memory.user_profile.stranger_images_sent}/${maxStrangerImages}, topic: ${topic}, subject: ${subject})`);
+                                
+                                // Đảm bảo lời thoại khi gửi media phù hợp - ngắn gọn, tự nhiên
+                                rawReply = rawReply.replace(mediaRegex, '').trim();
+                                // Nếu không còn text hoặc quá dài, thay bằng câu ngắn gọn phù hợp
+                                if (!rawReply || rawReply.length < 10) {
+                                    if (character === 'zoe' || character === 'kai') {
+                                        rawReply = "Alright, here's one for you! 😊";
+                                    } else if (character === 'thang') {
+                                        rawReply = "Thôi được rồi em, anh gửi cho em xem nhé. 😏";
+                                    } else {
+                                        rawReply = "Thôi được rồi em cho anh xem ảnh này... 😊";
+                                    }
+                                } else if (rawReply.length > 100) {
+                                    // Nếu quá dài, rút ngắn lại
+                                    if (character === 'zoe' || character === 'kai') {
+                                        rawReply = "Okay, here you go! 😊";
+                                    } else if (character === 'thang') {
+                                        rawReply = "Rồi anh gửi cho em 1 tấm. 😏";
+                                    } else {
+                                        rawReply = "Rồi em cho anh xem ảnh này. 😊";
+                                    }
+                                }
                             } else {
                                 console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
+                                rawReply = rawReply.replace(mediaRegex, '').trim();
                             }
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Không hardcode response - để AI tự suy nghĩ và trả lời
                         } else {
                             // Trường hợp khác → không cho gửi, để AI tự xử lý
                             console.log(`🚫 Không đủ điều kiện gửi ảnh, chặn gửi - để AI tự xử lý`);
@@ -3590,12 +3636,14 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
    - Có thể gửi ảnh, nhưng PHẢI "LÀM GIÁ", tỏ ra hiếm có, có giá trị
    - Chỉ gửi nếu thấy người dùng thực sự khẩn thiết, năn nỉ nhiều
    - PHẢI thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu
-   - Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng
-   ${(character === 'zoe' || character === 'kai') ? `   - Ví dụ ngắn gọn (dành cho Zoe/Kai - tiếng Anh): "Alright, here's a photo for you. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Okay, I'll send you one. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Fine, here you go. [SEND_MEDIA: image, normal, selfie]"
+   - **QUAN TRỌNG:** Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng (tối đa 50-80 ký tự)
+   - Lời thoại phải PHÙ HỢP với việc gửi ảnh - không cần giải thích dài dòng, chỉ cần nói ngắn gọn là đang gửi
+   ${(character === 'zoe' || character === 'kai') ? `   - Ví dụ ngắn gọn (dành cho Zoe/Kai - tiếng Anh): "Alright, here's one for you! [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Okay, here you go! [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Fine, just one though. [SEND_MEDIA: image, normal, selfie]"
    - Hoặc: "Hmm... okay, here's one. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Well... I'll send you one. [SEND_MEDIA: image, normal, selfie]"` : character === 'thang' ? `   - Ví dụ ngắn gọn (dành cho Thắng): "Thôi được rồi em, anh gửi cho em xem nhé. [SEND_MEDIA: image, normal, selfie]"
+   - Hoặc: "Well... just this one. [SEND_MEDIA: image, normal, selfie]"
+   - **KHÔNG được:** "I'll send you a photo that I took yesterday when I was at the gym..." (quá dài dòng)` : character === 'thang' ? `   - Ví dụ ngắn gọn (dành cho Thắng): "Thôi được rồi em, anh gửi cho em xem nhé. [SEND_MEDIA: image, normal, selfie]"
    - Hoặc: "Rồi anh gửi cho em 1 tấm. [SEND_MEDIA: image, normal, selfie]"
    - Hoặc: "Thôi được, anh gửi cho em xem. [SEND_MEDIA: image, normal, selfie]"
    - Hoặc: "Hmm... thôi được rồi, anh gửi cho em. [SEND_MEDIA: image, normal, selfie]"
