@@ -2338,9 +2338,9 @@ app.post('/chat', async (req, res) => {
             
             if (strangerVideosSent >= maxStrangerVideos) {
                 console.log(`🚫 Đã gửi đủ ${maxStrangerVideos} video trong stranger stage, từ chối`);
-            } else if (aiAgreedToSend && currentVideoRequestCount >= 2) {
-                // AI đồng ý gửi video và đã hỏi từ lần thứ 2 trở đi → tự động gửi
-                console.log(`✅ AI đã đồng ý gửi video (lần thứ ${currentVideoRequestCount} hỏi), tự động gửi video normal`);
+            } else if (currentVideoRequestCount >= 2) {
+                // Đã hỏi từ lần thứ 2 trở đi → tự động gửi (không cần đợi AI đồng ý, tương tự như ảnh)
+                console.log(`✅ User yêu cầu video lần thứ ${currentVideoRequestCount}, tự động gửi video normal (đã gửi ${strangerVideosSent}/${maxStrangerVideos})`);
                 try {
                     const mediaResult = await sendMediaFile(memory, character, 'video', 'normal', 'moment');
                     if (mediaResult && mediaResult.success) {
@@ -2351,6 +2351,12 @@ app.post('/chat', async (req, res) => {
                         memory.user_profile = mediaResult.updatedMemory.user_profile;
                         memory.user_profile.stranger_videos_sent = (memory.user_profile.stranger_videos_sent || 0) + 1;
                         console.log(`✅ Đã tự động gửi video stranger: ${mediaUrl} (${memory.user_profile.stranger_videos_sent}/${maxStrangerVideos})`);
+                        // Cập nhật rawReply để phù hợp với việc gửi video
+                        if (!rawReply || rawReply.length < 10 || rawReply.toLowerCase().includes('too personal') || rawReply.toLowerCase().includes('not ready')) {
+                            if (character === 'zoe' || character === 'kai') {
+                                rawReply = "Alright, here's a video for you! 😊";
+                            }
+                        }
                     } else {
                         console.warn(`⚠️ Không thể tự động gửi video:`, mediaResult?.message || 'Unknown error');
                     }
@@ -2358,7 +2364,7 @@ app.post('/chat', async (req, res) => {
                     console.error("❌ Lỗi khi tự động gửi video:", autoError);
                 }
             } else {
-                console.log(`⚠️ User yêu cầu video ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt (aiAgreedToSend=${aiAgreedToSend}, currentVideoRequestCount=${currentVideoRequestCount}, strangerVideosSent=${strangerVideosSent})`);
+                console.log(`⚠️ User yêu cầu video lần đầu (requestCount=${currentVideoRequestCount}), KHÔNG tự động gửi - để AI từ chối trong prompt`);
             }
         } else if (relationshipStage !== 'stranger') {
             // Các giai đoạn khác, tự động gửi bình thường
