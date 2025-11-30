@@ -2377,15 +2377,55 @@ app.post('/chat', async (req, res) => {
                         memory.user_profile = mediaResult.updatedMemory.user_profile;
                         memory.user_profile.stranger_videos_sent = (memory.user_profile.stranger_videos_sent || 0) + 1;
                         console.log(`✅ Đã tự động gửi video stranger: ${mediaUrl} (${memory.user_profile.stranger_videos_sent}/${maxStrangerVideos})`);
-                        // KHÔNG thay thế rawReply - giữ nguyên nội dung AI đã tạo để AI biết context
-                        // Chỉ thay thế nếu rawReply hoàn toàn trống hoặc quá ngắn
+                        // Kiểm tra xem rawReply có đang nói về video không
+                        // Nếu rawReply đang từ chối video hoặc nói về ảnh → cập nhật để phù hợp với việc đã gửi video
+                        const isRefusingVideo = /(too personal|not ready|chat more|keep chatting|videos are|video.*personal)/i.test(rawReply);
+                        const isTalkingAboutPhoto = /(photo|picture|pic|selfie|image)/i.test(rawReply) && !/(video|vid)/i.test(rawReply);
+                        
                         if (!rawReply || rawReply.trim().length < 5) {
+                            // Hoàn toàn trống → thêm câu phù hợp
                             if (character === 'zoe' || character === 'kai') {
                                 rawReply = "Here's a video for you! 😊";
                             } else {
                                 rawReply = "Đây là video cho bạn! 😊";
                             }
+                        } else if (isRefusingVideo || isTalkingAboutPhoto) {
+                            // Đang từ chối video hoặc nói về ảnh → cập nhật để phù hợp với việc đã gửi video
+                            // Giữ phần đầu của câu, nhưng thay đổi phần từ chối thành đồng ý gửi video
+                            if (character === 'zoe' || character === 'kai') {
+                                // Nếu đang từ chối, thay bằng câu đồng ý gửi video
+                                if (isRefusingVideo) {
+                                    rawReply = rawReply.replace(/(too personal|not ready|chat more|keep chatting|videos are|video.*personal).*/i, '').trim();
+                                    if (!rawReply || rawReply.length < 10) {
+                                        rawReply = "Alright, here's a video for you! 😊";
+                                    } else {
+                                        rawReply = rawReply + " Here's a video for you! 😊";
+                                    }
+                                } else if (isTalkingAboutPhoto) {
+                                    // Đang nói về ảnh nhưng gửi video → thay đổi
+                                    rawReply = rawReply.replace(/(photo|picture|pic|selfie|image)/gi, 'video');
+                                    if (!rawReply || rawReply.length < 10) {
+                                        rawReply = "Here's a video for you! 😊";
+                                    }
+                                }
+                            } else {
+                                // Tiếng Việt
+                                if (isRefusingVideo) {
+                                    rawReply = rawReply.replace(/(quá riêng tư|chưa sẵn sàng|trò chuyện thêm|video.*riêng tư).*/i, '').trim();
+                                    if (!rawReply || rawReply.length < 10) {
+                                        rawReply = "Thôi được, đây là video cho bạn! 😊";
+                                    } else {
+                                        rawReply = rawReply + " Đây là video cho bạn! 😊";
+                                    }
+                                } else if (isTalkingAboutPhoto) {
+                                    rawReply = rawReply.replace(/(ảnh|hình|selfie|image)/gi, 'video');
+                                    if (!rawReply || rawReply.length < 10) {
+                                        rawReply = "Đây là video cho bạn! 😊";
+                                    }
+                                }
+                            }
                         }
+                        // Nếu rawReply không có vấn đề → giữ nguyên
                     } else {
                         console.warn(`⚠️ Không thể tự động gửi video:`, mediaResult?.message || 'Unknown error');
                     }
@@ -2539,15 +2579,51 @@ app.post('/chat', async (req, res) => {
                                         memory.user_profile.stranger_videos_sent = (memory.user_profile.stranger_videos_sent || 0) + 1;
                                         console.log(`✅ Đã gửi video stranger thành công: ${mediaUrl} (${memory.user_profile.stranger_videos_sent}/${maxStrangerVideos})`);
                                         rawReply = rawReply.replace(mediaRegex, '').trim();
-                                        // KHÔNG thay thế rawReply - giữ nguyên nội dung AI đã tạo
-                                        // Chỉ thay thế nếu hoàn toàn trống
+                                        
+                                        // Kiểm tra xem rawReply có đang nói về video không
+                                        const isRefusingVideo = /(too personal|not ready|chat more|keep chatting|videos are|video.*personal)/i.test(rawReply);
+                                        const isTalkingAboutPhoto = /(photo|picture|pic|selfie|image)/i.test(rawReply) && !/(video|vid)/i.test(rawReply);
+                                        
                                         if (!rawReply || rawReply.trim().length < 5) {
+                                            // Hoàn toàn trống → thêm câu phù hợp
                                             if (character === 'zoe' || character === 'kai') {
                                                 rawReply = "Here's a video for you! 😊";
                                             } else {
                                                 rawReply = "Đây là video cho bạn! 😊";
                                             }
+                                        } else if (isRefusingVideo || isTalkingAboutPhoto) {
+                                            // Đang từ chối video hoặc nói về ảnh → cập nhật để phù hợp
+                                            if (character === 'zoe' || character === 'kai') {
+                                                if (isRefusingVideo) {
+                                                    rawReply = rawReply.replace(/(too personal|not ready|chat more|keep chatting|videos are|video.*personal).*/i, '').trim();
+                                                    if (!rawReply || rawReply.length < 10) {
+                                                        rawReply = "Alright, here's a video for you! 😊";
+                                                    } else {
+                                                        rawReply = rawReply + " Here's a video for you! 😊";
+                                                    }
+                                                } else if (isTalkingAboutPhoto) {
+                                                    rawReply = rawReply.replace(/(photo|picture|pic|selfie|image)/gi, 'video');
+                                                    if (!rawReply || rawReply.length < 10) {
+                                                        rawReply = "Here's a video for you! 😊";
+                                                    }
+                                                }
+                                            } else {
+                                                if (isRefusingVideo) {
+                                                    rawReply = rawReply.replace(/(quá riêng tư|chưa sẵn sàng|trò chuyện thêm|video.*riêng tư).*/i, '').trim();
+                                                    if (!rawReply || rawReply.length < 10) {
+                                                        rawReply = "Thôi được, đây là video cho bạn! 😊";
+                                                    } else {
+                                                        rawReply = rawReply + " Đây là video cho bạn! 😊";
+                                                    }
+                                                } else if (isTalkingAboutPhoto) {
+                                                    rawReply = rawReply.replace(/(ảnh|hình|selfie|image)/gi, 'video');
+                                                    if (!rawReply || rawReply.length < 10) {
+                                                        rawReply = "Đây là video cho bạn! 😊";
+                                                    }
+                                                }
+                                            }
                                         }
+                                        // Nếu rawReply không có vấn đề → giữ nguyên
                                     } else {
                                         console.warn(`⚠️ Không thể gửi video:`, mediaResult?.message || 'Unknown error');
                                         rawReply = rawReply.replace(mediaRegex, '').trim();
