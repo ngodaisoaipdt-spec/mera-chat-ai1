@@ -4722,6 +4722,14 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
         else if (character === 'zoe') charName = 'Zoe';
         else if (character === 'kai') charName = 'Kai';
         
+        // Escape special characters trong userMessage để tránh lỗi JSON parsing
+        const escapedUserMessage = userMessage
+            .replace(/\\/g, '\\\\')  // Escape backslash
+            .replace(/"/g, '\\"')    // Escape double quotes
+            .replace(/\n/g, '\\n')    // Escape newlines
+            .replace(/\r/g, '\\r')   // Escape carriage returns
+            .replace(/\t/g, '\\t');  // Escape tabs
+        
         // Lấy nội dung cuộc trò chuyện gần nhất để tạo context
         const recentContext = conversationHistory.slice(-5).map(msg => {
             if (msg.role === 'user') {
@@ -4810,14 +4818,6 @@ Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up
 
 Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai đoạn quan hệ và nội dung cuộc trò chuyện:`;
 
-        // Escape special characters trong userMessage để tránh lỗi JSON parsing
-        const escapedUserMessage = userMessage
-            .replace(/\\/g, '\\\\')  // Escape backslash
-            .replace(/"/g, '\\"')    // Escape double quotes
-            .replace(/\n/g, '\\n')    // Escape newlines
-            .replace(/\r/g, '\\r')   // Escape carriage returns
-            .replace(/\t/g, '\\t');  // Escape tabs
-        
         const messages = [
             { role: 'system', content: followUpPrompt },
             ...conversationHistory.slice(-10), // Lấy 10 tin nhắn gần nhất để có context đầy đủ
