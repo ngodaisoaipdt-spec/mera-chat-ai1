@@ -51,7 +51,7 @@ webpush.setVapidDetails(
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now }, pushSubscription: { type: Object, default: null } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_videos_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, friend_body_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' }, last_followup_time: { type: Date, default: null } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_videos_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, stranger_video_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, friend_body_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' }, last_followup_time: { type: Date, default: null } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -2222,11 +2222,35 @@ app.post('/chat', async (req, res) => {
     const strangerMessageCount = userProfile.message_count || 0;
     const strangerImagesSent = userProfile.stranger_images_sent || 0;
     const strangerImageRequests = userProfile.stranger_image_requests || 0;
+    const strangerVideoRequests = userProfile.stranger_video_requests || 0;
     
     // Kiểm tra quy tắc cho giai đoạn "Người Lạ" khi yêu cầu media
     if (relationshipStage === 'stranger') {
         // Lưu ý: Không hardcode response ở đây - để AI tự xử lý câu trả lời
         // Chỉ chặn gửi media sensitive ở code level (xem phần sau)
+        
+        // Xử lý yêu cầu video (Zoe/Kai)
+        if (userRequestedVideo && (character === 'zoe' || character === 'kai')) {
+            // Tăng số lần người dùng hỏi xem video
+            userProfile.stranger_video_requests = strangerVideoRequests + 1;
+            const newVideoRequestCount = userProfile.stranger_video_requests;
+            const strangerVideosSent = userProfile.stranger_videos_sent || 0;
+            const maxStrangerVideos = 3;
+            console.log(`🎥 User yêu cầu xem video lần thứ ${newVideoRequestCount} (đã gửi ${strangerVideosSent}/${maxStrangerVideos} video)`);
+            
+            // Nếu đã gửi đủ video trong giai đoạn này → từ chối
+            if (strangerVideosSent >= maxStrangerVideos) {
+                console.log(`🚫 Đã gửi đủ ${maxStrangerVideos} video trong stranger stage, từ chối`);
+                return res.json({
+                    displayReply: (character === 'zoe' || character === 'kai') ? "I've sent enough videos already. Chat with me more if you want to see more! 😊" : "Em đã gửi đủ video cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi, đừng có mà đòi hỏi! 😒",
+                    historyReply: `Từ chối - đã gửi đủ ${maxStrangerVideos} video`,
+                    audio: null,
+                    mediaUrl: null,
+                    mediaType: null,
+                    updatedMemory: memory
+                });
+            }
+        }
         
         // Xử lý yêu cầu ảnh bình thường
         if (userRequestedImage) {
@@ -2308,14 +2332,15 @@ app.post('/chat', async (req, res) => {
             }
         } else if (relationshipStage === 'stranger' && userRequestedVideo && (character === 'zoe' || character === 'kai')) {
             // Zoe/Kai: Cho phép video normal ở stranger stage (tối đa 3 video)
+            const currentVideoRequestCount = userProfile.stranger_video_requests || 0;
             const strangerVideosSent = userProfile.stranger_videos_sent || 0;
             const maxStrangerVideos = 3;
             
             if (strangerVideosSent >= maxStrangerVideos) {
                 console.log(`🚫 Đã gửi đủ ${maxStrangerVideos} video trong stranger stage, từ chối`);
-            } else if (aiAgreedToSend) {
-                // AI đồng ý gửi video → tự động gửi
-                console.log(`✅ AI đã đồng ý gửi video, tự động gửi video normal`);
+            } else if (aiAgreedToSend && currentVideoRequestCount >= 2) {
+                // AI đồng ý gửi video và đã hỏi từ lần thứ 2 trở đi → tự động gửi
+                console.log(`✅ AI đã đồng ý gửi video (lần thứ ${currentVideoRequestCount} hỏi), tự động gửi video normal`);
                 try {
                     const mediaResult = await sendMediaFile(memory, character, 'video', 'normal', 'moment');
                     if (mediaResult && mediaResult.success) {
@@ -2332,6 +2357,8 @@ app.post('/chat', async (req, res) => {
                 } catch (autoError) {
                     console.error("❌ Lỗi khi tự động gửi video:", autoError);
                 }
+            } else {
+                console.log(`⚠️ User yêu cầu video ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt (aiAgreedToSend=${aiAgreedToSend}, currentVideoRequestCount=${currentVideoRequestCount}, strangerVideosSent=${strangerVideosSent})`);
             }
         } else if (relationshipStage !== 'stranger') {
             // Các giai đoạn khác, tự động gửi bình thường
@@ -2693,6 +2720,7 @@ app.post('/chat', async (req, res) => {
             userProfile.stranger_images_sent = 0;
             userProfile.stranger_videos_sent = 0;
             userProfile.stranger_image_requests = 0;
+            userProfile.stranger_video_requests = 0;
             console.log(`✅ Chuyển từ Người Lạ sang Bạn Thân! Reset stranger counters.`);
         }
         // Reset counter khi rời friend
