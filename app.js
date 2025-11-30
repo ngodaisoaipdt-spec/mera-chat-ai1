@@ -2351,10 +2351,16 @@ app.post('/chat', async (req, res) => {
     
     // Kiểm tra xem AI có đồng ý gửi ảnh không (có từ khóa đồng ý trong response)
     // Hỗ trợ cả tiếng Việt và tiếng Anh cho Zoe/Kai
-    const aiAgreedToSend = (character === 'zoe' || character === 'kai') 
+    // QUAN TRỌNG: Loại trừ các câu từ chối (not sending, won't send, can't send, etc.)
+    const isRefusing = (character === 'zoe' || character === 'kai')
+        ? /(not|won't|can't|cannot|don't|didn't|wouldn't|shouldn't|refuse|refusing|no way|too early|too soon|just met|chat more|chat first|earn it).*(send|sending|give|giving|show|showing|photo|picture|pic|image)/i.test(rawReply) ||
+          /(send|sending|give|giving|show|showing|photo|picture|pic|image).*(not|won't|can't|cannot|don't|didn't|wouldn't|shouldn't|refuse|refusing|no way|too early|too soon|just met|chat more|chat first|earn it)/i.test(rawReply)
+        : /(không|chưa|đừng|thôi|chưa muốn|chưa sẵn sàng).*(gửi|cho|gửi cho|gửi ảnh|gửi hình|cho xem|cho anh|cho em)/i.test(rawReply);
+    
+    const aiAgreedToSend = !isRefusing && ((character === 'zoe' || character === 'kai') 
         ? /(alright|fine|ok|okay|sure|yeah|yes|here|here's|here is|sent|send|sending|sends|give|gives|giving|quick|one more|another).*(photo|picture|pic|image|selfie|one|it|for you|to you)/i.test(rawReply) ||
           /(photo|picture|pic|image|selfie).*(here|here's|here is|sent|send|sending|sends|give|gives|giving|for you|to you)/i.test(rawReply)
-        : /(được rồi|thôi được|rồi|ừm|hmm|ok|okay|gửi|cho.*xem|cho.*anh|cho.*em).*(ảnh|hình|image|tấm|tấm ảnh)/i.test(rawReply);
+        : /(được rồi|thôi được|rồi|ừm|hmm|ok|okay|gửi|cho.*xem|cho.*anh|cho.*em).*(ảnh|hình|image|tấm|tấm ảnh)/i.test(rawReply));
     
     // Nếu user yêu cầu media nhưng AI không gửi [SEND_MEDIA] → tự động gửi (nhưng có điều kiện)
     if (userRequestedMedia && !mediaMatch) {
@@ -2686,10 +2692,15 @@ app.post('/chat', async (req, res) => {
                         
                         // Zoe/Kai: 5 ảnh, Mera/Thắng: giữ nguyên (2/10)
             const maxStrangerImages = (character === 'zoe' || character === 'kai') ? 5 : ((character === 'thang') ? 10 : 2);
-                        // Lần đầu hỏi → không cho gửi (xóa [SEND_MEDIA]), để AI tự xử lý câu trả lời
+                        // Lần đầu hỏi → KHÔNG cho gửi (xóa [SEND_MEDIA]), để AI tự xử lý câu trả lời
                         if (currentRequestCount <= 1) {
-                            console.log(`🚫 Lần đầu hỏi xem ảnh (requestCount=${currentRequestCount}), không cho gửi - xóa [SEND_MEDIA], để AI tự xử lý`);
+                            console.log(`🚫 Lần đầu hỏi xem ảnh (requestCount=${currentRequestCount}), KHÔNG cho gửi - xóa [SEND_MEDIA], để AI tự xử lý`);
                             rawReply = rawReply.replace(mediaRegex, '').trim();
+                            // Đảm bảo không có media được gửi
+                            mediaUrl = null;
+                            mediaType = null;
+                            mediaTopic = null;
+                            mediaSubject = null;
                             // Nếu không còn text sau khi xóa tag, thêm câu từ chối phù hợp
                             if (!rawReply || rawReply.length < 10) {
                                 if (character === 'zoe' || character === 'kai') {
@@ -2700,6 +2711,8 @@ app.post('/chat', async (req, res) => {
                                     rawReply = "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤";
                                 }
                             }
+                            // QUAN TRỌNG: Skip phần logic gửi ảnh phía dưới
+                            // Không gửi ảnh trong trường hợp này
                         } else if (strangerImagesSent >= maxStrangerImages) {
                             // Đã gửi đủ ảnh → chặn gửi, để AI tự xử lý câu trả lời
                             console.log(`🚫 AI muốn gửi ảnh nhưng đã gửi đủ ${maxStrangerImages} ảnh, chặn gửi - để AI tự xử lý`);
