@@ -51,7 +51,7 @@ webpush.setVapidDetails(
 
 const userSchema = new mongoose.Schema({ googleId: String, displayName: String, email: String, avatar: String, isPremium: { type: Boolean, default: false }, createdAt: { type: Date, default: Date.now }, lastActiveAt: { type: Date, default: Date.now }, pushSubscription: { type: Object, default: null } });
 const User = mongoose.model('User', userSchema);
-const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_videos_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, stranger_video_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, friend_body_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' }, sad_detected_at: { type: Date, default: null }, messages_since_sad: { type: Number, default: 0 }, funny_video_sent_for_sad: { type: Boolean, default: false } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' }, last_followup_time: { type: Date, default: null } });
+const memorySchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, character: String, history: { type: Array, default: [] }, user_profile: { relationship_stage: { type: String, default: 'stranger' }, sent_gallery_images: [String], sent_video_files: [String], message_count: { type: Number, default: 0 }, stranger_images_sent: { type: Number, default: 0 }, stranger_videos_sent: { type: Number, default: 0 }, stranger_image_requests: { type: Number, default: 0 }, stranger_video_requests: { type: Number, default: 0 }, friend_images_sent: { type: Number, default: 0 }, friend_body_images_sent: { type: Number, default: 0 }, friend_videos_sent: { type: Number, default: 0 }, friend_body_videos_sent: { type: Number, default: 0 }, dispute_count: { type: Number, default: 0 }, daily_message_count: { type: Number, default: 0 }, last_reset_date: { type: String, default: '' }, sad_detected_at: { type: Date, default: null }, sad_message_count: { type: Number, default: 0 }, funny_video_sent_for_sad: { type: Boolean, default: false }, lover_18plus_exchanges: { type: Number, default: 0 }, lover_18plus_media_sent: { type: Number, default: 0 }, lover_normal_messages: { type: Number, default: 0 }, lover_normal_media_sent: { type: Number, default: 0 } }, last_user_message: { type: String, default: '' }, last_message_time: { type: Date, default: null }, auto_messages_sent_today: { type: Number, default: 0 }, last_auto_message_date: { type: String, default: '' }, last_greeting_sent: { type: String, default: '' }, last_greeting_date: { type: String, default: '' }, last_followup_message: { type: String, default: '' }, last_followup_time: { type: Date, default: null } });
 const Memory = mongoose.model('Memory', memorySchema);
 const transactionSchema = new mongoose.Schema({ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, orderCode: { type: String, unique: true }, amount: Number, status: { type: String, enum: ['pending', 'success', 'expired'], default: 'pending' }, paymentMethod: { type: String, enum: ['qr', 'vnpay'], default: 'qr' }, vnpayTransactionId: String, createdAt: { type: Date, default: Date.now }, expiresAt: { type: Date } });
 const Transaction = mongoose.model('Transaction', transactionSchema);
@@ -1997,6 +1997,32 @@ app.get('/api/chat-data/:character', async (req, res) => {
     
     res.json({ memory, isPremium: req.user.isPremium });
 });
+// ============================================
+// CONFIG QUY TẮC GỬI ẢNH/VIDEO
+// Áp dụng cho tất cả 4 nhân vật
+// ============================================
+const MEDIA_QUOTA_CONFIG = {
+    stranger: {
+        images: { normal: 6 },
+        videos: { normal: 3 },
+        firstRefusal: true // Lần đầu từ chối (cả ảnh và video)
+    },
+    friend: {
+        images: { normal: 8, body: 6 },
+        videos: { normal: 5, body: 5 }
+    },
+    lover: {
+        unlimited: true, // Không giới hạn quota
+        autoSend18Plus: { exchanges: 3 }, // Sau 3 lượt trao đổi 18+ → gửi body/private
+        autoSendNormal: { messages: 6 } // Sau 6 tin nhắn bình thường → chủ động gửi
+    }
+};
+
+// Video funny: sau 3 tin nhắn của user về chủ đề buồn
+const FUNNY_VIDEO_CONFIG = {
+    sadMessageCount: 3 // Số tin nhắn buồn cần để gửi video funny
+};
+
 app.post('/chat', async (req, res) => {
     // Kiểm tra đăng nhập - nếu chưa đăng nhập thì yêu cầu đăng nhập
     if (!req.isAuthenticated()) {
@@ -2068,16 +2094,7 @@ app.post('/chat', async (req, res) => {
         else if (character === 'kai') charName = 'Kai';
         return res.json({ displayReply: `Chúng ta cần thân thiết hơn...<NEXT_MESSAGE>Nâng cấp Premium...`, historyReply: "[PREMIUM_PROMPT]", }); 
     }
-    // Friend-stage media quotas: 
-    // Mera: 4 ảnh normal, 2 ảnh body, 2 video normal
-    // Thắng: 20 ảnh selfie (normal), 6 video khoảnh khắc (normal, moment)
-    const friendImagesSent = userProfile.friend_images_sent || 0;
-    const friendBodyImagesSent = userProfile.friend_body_images_sent || 0;
-    const friendVideosSent = userProfile.friend_videos_sent || 0;
-    const friendBodyVideosSent = userProfile.friend_body_videos_sent || 0;
-    // Media limits: Zoe/Kai có quy tắc riêng, Mera/Thắng giữ nguyên
-    const maxFriendImages = (character === 'zoe' || character === 'kai') ? 8 : ((character === 'thang') ? 20 : 4);
-    const maxFriendVideos = (character === 'zoe' || character === 'kai') ? 4 : ((character === 'thang') ? 6 : 2);
+    // ĐÃ XÓA: Friend-stage media quotas - sẽ thiết lập lại sau
     
     // Sử dụng AI để tạo phản hồi
     console.log(`🤖 Sử dụng AI cho: "${message}"`);
@@ -2196,6 +2213,15 @@ app.post('/chat', async (req, res) => {
         const oldStage = userProfile.relationship_stage || 'stranger';
         if (oldStage !== newStage) {
             userProfile.relationship_stage = newStage;
+            // Reset counters khi chuyển stage
+            console.log(`🔄 Chuyển stage từ ${oldStage} → ${newStage}, reset media counters`);
+            userProfile.sad_detected_at = null;
+            userProfile.sad_message_count = 0;
+            userProfile.funny_video_sent_for_sad = false;
+            userProfile.lover_18plus_exchanges = 0;
+            userProfile.lover_18plus_media_sent = 0;
+            userProfile.lover_normal_messages = 0;
+            userProfile.lover_normal_media_sent = 0;
         }
         
         if (memory.history.length > 50) memory.history = memory.history.slice(memory.history.length - 50);
@@ -2215,66 +2241,7 @@ app.post('/chat', async (req, res) => {
     let rawReply = gptResponse.choices[0].message.content.trim(); 
     console.log(`📝 AI reply (raw): ${rawReply.substring(0, 500)}...`);
     
-    // ============================================
-    // LOGIC GỬI VIDEO FUNNY KHI NGƯỜI DÙNG BUỒN
-    // Viết lại từ đầu - đơn giản và rõ ràng
-    // ============================================
-    
-    // 1. Phát hiện người dùng buồn
-    const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met','sad','depressed','unhappy','upset','fired','lost job','worried','anxious','stressed','tired','exhausted','want.*happy','make.*happy','cheer.*up','feel.*better','relax','watch.*something','something.*relax'];
-    const userIsSad = sadKeywords.some(k => {
-        const regex = new RegExp(k, 'i');
-        return regex.test(message);
-    });
-    
-    // 2. Xử lý trạng thái buồn
-    if (userIsSad) {
-        // Nếu chưa có flag buồn → set flag và reset counter
-        if (!userProfile.sad_detected_at) {
-            userProfile.sad_detected_at = new Date();
-            userProfile.messages_since_sad = 0;
-            userProfile.funny_video_sent_for_sad = false;
-            console.log(`😢 [FUNNY VIDEO] Phát hiện người dùng buồn - stage: ${relationshipStage}, character: ${character}`);
-        }
-    } else {
-        // Nếu người dùng không còn buồn → reset (nhưng chỉ reset sau 5 tin nhắn không buồn)
-        if (userProfile.sad_detected_at && userProfile.messages_since_sad > 5) {
-            userProfile.sad_detected_at = null;
-            userProfile.messages_since_sad = 0;
-            userProfile.funny_video_sent_for_sad = false;
-        }
-    }
-    
-    // 3. Kiểm tra và gửi video funny - LOGIC ĐƠN GIẢN
-    if (userProfile.sad_detected_at && !userProfile.funny_video_sent_for_sad) {
-        // Tăng counter sau mỗi tin nhắn
-        userProfile.messages_since_sad = (userProfile.messages_since_sad || 0) + 1;
-        const messagesSinceSad = userProfile.messages_since_sad;
-        
-        // VIDEO FUNNY - TẤT CẢ NHÂN VẬT VÀ TẤT CẢ GIAI ĐOẠN ĐỀU CÓ THỂ GỬI
-        // Video funny là để động viên người dùng khi buồn, nên không bị giới hạn bởi quota video thông thường
-        const canSendFunnyVideo = true; // TẤT CẢ nhân vật ở TẤT CẢ giai đoạn đều có thể gửi
-        
-        // Gửi video sau 2 tin nhắn trò chuyện
-        // QUAN TRỌNG: Gửi video ngay trong response này, không dùng <NEXT_MESSAGE>
-        if (messagesSinceSad >= 2 && canSendFunnyVideo && !/\[SEND_MEDIA:/i.test(rawReply)) {
-            console.log(`😊 [FUNNY VIDEO] ✅ GỬI VIDEO FUNNY - stage: ${relationshipStage}, character: ${character}, messagesSinceSad: ${messagesSinceSad}`);
-            
-            // Thêm [SEND_MEDIA] tag vào rawReply để logic phía dưới xử lý
-            const funnyVideoText = (character === 'zoe' || character === 'kai') 
-                ? "Here's something to cheer you up!"
-                : (character === 'thang')
-                    ? "Gửi em đoạn này cho vui nhé."
-                    : "Gửi anh đoạn này cho vui nhé.";
-            
-            rawReply = `${rawReply} ${funnyVideoText} [SEND_MEDIA: video, normal, funny]`;
-            userProfile.funny_video_sent_for_sad = true;
-        } else {
-            // Debug log chi tiết
-            console.log(`⚠️ [FUNNY VIDEO] ❌ Chưa gửi - messagesSinceSad: ${messagesSinceSad}, canSendFunnyVideo: ${canSendFunnyVideo}, hasMediaTag: ${/\[SEND_MEDIA:/i.test(rawReply)}, stage: ${relationshipStage}, character: ${character}, sad_detected: ${!!userProfile.sad_detected_at}`);
-        }
-    }
-    
+    // ĐÃ XÓA: Logic video funny - sẽ thiết lập lại sau
     let mediaUrl = null, mediaType = null, mediaTopic = null, mediaSubject = null; 
     
     // Kiểm tra xem user có yêu cầu media không
@@ -2297,643 +2264,264 @@ app.post('/chat', async (req, res) => {
         userProfile.dispute_count = (userProfile.dispute_count || 0) + 1;
         console.log(`⚠️ Phát hiện tranh cãi! Dispute count: ${userProfile.dispute_count}`);
     }
-    const strangerMessageCount = userProfile.message_count || 0;
-    const strangerImagesSent = userProfile.stranger_images_sent || 0;
-    const strangerImageRequests = userProfile.stranger_image_requests || 0;
-    const strangerVideoRequests = userProfile.stranger_video_requests || 0;
     
-    // Kiểm tra quy tắc cho giai đoạn "Người Lạ" khi yêu cầu media
-    if (relationshipStage === 'stranger') {
-        // Lưu ý: Không hardcode response ở đây - để AI tự xử lý câu trả lời
-        // Chỉ chặn gửi media sensitive ở code level (xem phần sau)
+    // ============================================
+    // HELPER FUNCTIONS - Quy tắc gửi ảnh/video
+    // ============================================
+    
+    // Helper: Check quota còn hay không
+    function checkQuota(stage, type, topic) {
+        const config = MEDIA_QUOTA_CONFIG[stage];
+        if (!config || config.unlimited) return { allowed: true, remaining: Infinity };
         
-        // Xử lý yêu cầu video (Zoe/Kai)
-        if (userRequestedVideo && (character === 'zoe' || character === 'kai')) {
-            // Tăng số lần người dùng hỏi xem video
-            userProfile.stranger_video_requests = strangerVideoRequests + 1;
-            const newVideoRequestCount = userProfile.stranger_video_requests;
-            const strangerVideosSent = userProfile.stranger_videos_sent || 0;
-            const maxStrangerVideos = 3;
-            console.log(`🎥 User yêu cầu xem video lần thứ ${newVideoRequestCount} (đã gửi ${strangerVideosSent}/${maxStrangerVideos} video)`);
-            
-            // Nếu đã gửi đủ video trong giai đoạn này → từ chối
-            if (strangerVideosSent >= maxStrangerVideos) {
-                console.log(`🚫 Đã gửi đủ ${maxStrangerVideos} video trong stranger stage, từ chối`);
-                return res.json({
-                    displayReply: (character === 'zoe' || character === 'kai') ? "I've sent enough videos already. Chat with me more if you want to see more! 😊" : "Em đã gửi đủ video cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi, đừng có mà đòi hỏi! 😒",
-                    historyReply: `Từ chối - đã gửi đủ ${maxStrangerVideos} video`,
-                    audio: null,
-                    mediaUrl: null,
-                    mediaType: null,
-                    updatedMemory: memory
-                });
+        // Xác định quota field và max quota
+        let quotaField, maxQuota;
+        
+        if (type === 'image') {
+            if (topic === 'body') {
+                quotaField = `${stage}_body_images_sent`;
+                maxQuota = config.images?.body || 0;
+            } else {
+                quotaField = `${stage}_images_sent`;
+                maxQuota = config.images?.normal || 0;
+            }
+        } else { // video
+            if (topic === 'body') {
+                quotaField = `${stage}_body_videos_sent`;
+                maxQuota = config.videos?.body || 0;
+            } else {
+                quotaField = `${stage}_videos_sent`;
+                maxQuota = config.videos?.normal || 0;
             }
         }
         
-        // Xử lý yêu cầu ảnh bình thường
-        if (userRequestedImage) {
-            // Tăng số lần người dùng hỏi xem ảnh
-            userProfile.stranger_image_requests = strangerImageRequests + 1;
-            const newRequestCount = userProfile.stranger_image_requests;
-            // Zoe/Kai: 5 ảnh, Mera/Thắng: giữ nguyên (2/10)
-            const maxStrangerImages = (character === 'zoe' || character === 'kai') ? 5 : ((character === 'thang') ? 10 : 2);
-            console.log(`📸 User yêu cầu xem ảnh lần thứ ${newRequestCount} (đã gửi ${strangerImagesSent}/${maxStrangerImages} ảnh)`);
-            
-            // Nếu đã gửi đủ ảnh trong giai đoạn này → từ chối
-            if (strangerImagesSent >= maxStrangerImages) {
-                console.log(`🚫 Đã gửi đủ ${maxStrangerImages} ảnh trong stranger stage, từ chối`);
-                return res.json({
-                    displayReply: (character === 'zoe' || character === 'kai') 
-                        ? "I've sent enough photos already. Chat with me more if you want to see more! 😊"
-                        : (character === 'thang') 
-                            ? "Anh đã gửi đủ ảnh cho em rồi mà. Muốn xem thêm thì trò chuyện với anh nhiều hơn đi nhé…"
-                            : "Em đã gửi đủ ảnh cho anh rồi mà. Muốn xem thêm thì trò chuyện với em nhiều hơn đi, đừng có mà đòi hỏi! 😒",
-                    historyReply: `Từ chối - đã gửi đủ ${maxStrangerImages} ảnh`,
-                    audio: null,
-                    mediaUrl: null,
-                    mediaType: null,
-                    updatedMemory: memory
-                });
-            }
-            
-            // Lần đầu hỏi → từ chối (AI sẽ tự xử lý trong prompt)
-            if (newRequestCount === 1) {
-                console.log(`🚫 Lần đầu hỏi xem ảnh, để AI từ chối trong prompt`);
-                // Không return, để AI xử lý từ chối trong prompt
-            }
-            // Lần thứ 2 trở đi → có thể gửi (nếu AI thấy khẩn thiết và chưa gửi đủ 2 ảnh)
-            // Logic này sẽ được xử lý trong prompt và phần xử lý [SEND_MEDIA]
+        const sent = userProfile[quotaField] || 0;
+        const remaining = maxQuota - sent;
+        
+        return { allowed: remaining > 0, remaining, maxQuota, sent };
+    }
+    
+    // Helper: Check lần đầu từ chối
+    function shouldRefuseFirstRequest(type) {
+        if (relationshipStage !== 'stranger') return false;
+        if (!MEDIA_QUOTA_CONFIG.stranger.firstRefusal) return false;
+        
+        const requestField = type === 'image' ? 'stranger_image_requests' : 'stranger_video_requests';
+        const requestCount = userProfile[requestField] || 0;
+        return requestCount === 0; // Lần đầu = 0
+    }
+    
+    // Helper: Phát hiện chủ đề buồn (AI tự phát hiện qua nội dung)
+    // Sử dụng AI để phát hiện, nhưng có thể dùng từ khóa cơ bản để hỗ trợ
+    function detectSadTopic(message) {
+        // Từ khóa hỗ trợ phát hiện (AI sẽ tự phát hiện chính xác hơn)
+        const sadKeywords = ['buồn', 'chán', 'mệt', 'stress', 'áp lực', 'thất vọng', 'khó chịu', 'tụt mood', 'khóc', 'căng thẳng', 'down', 'sad', 'depressed', 'unhappy', 'upset', 'worried', 'anxious', 'stressed', 'tired', 'exhausted'];
+        const messageLower = message.toLowerCase();
+        return sadKeywords.some(keyword => messageLower.includes(keyword));
+    }
+    
+    // Helper: Phát hiện chủ đề 18+ (AI tự phát hiện qua nội dung)
+    function detect18PlusTopic(message, aiReply) {
+        // Từ khóa hỗ trợ phát hiện
+        const adultKeywords = ['sex', '18+', 'nóng bỏng', 'gợi cảm', 'riêng tư', 'private', 'body', 'bikini', 'shape', 'sexy', 'nhạy cảm', 'xxx', 'make love', 'bed', 'hot', 'sexy', 'intimate'];
+        const combinedText = (message + ' ' + aiReply).toLowerCase();
+        return adultKeywords.some(keyword => combinedText.includes(keyword));
+    }
+    
+    // ============================================
+    // LOGIC QUY TẮC GỬI ẢNH/VIDEO
+    // ============================================
+    
+    // relationshipStage đã được khai báo ở trên
+    
+    // 1. Track số lần yêu cầu (để check lần đầu từ chối)
+    if (userRequestedImage) {
+        userProfile.stranger_image_requests = (userProfile.stranger_image_requests || 0) + 1;
+    }
+    if (userRequestedVideo) {
+        userProfile.stranger_video_requests = (userProfile.stranger_video_requests || 0) + 1;
+    }
+    
+    // 2. Logic phát hiện và xử lý chủ đề buồn (cho video funny)
+    const isSadTopic = detectSadTopic(message);
+    if (isSadTopic) {
+        if (!userProfile.sad_detected_at) {
+            userProfile.sad_detected_at = new Date();
+            userProfile.sad_message_count = 1;
+            userProfile.funny_video_sent_for_sad = false;
+            console.log(`😢 [FUNNY VIDEO] Phát hiện chủ đề buồn - stage: ${relationshipStage}, character: ${character}`);
+        } else {
+            userProfile.sad_message_count = (userProfile.sad_message_count || 0) + 1;
+        }
+    } else {
+        // Nếu không còn buồn, reset sau một thời gian
+        if (userProfile.sad_detected_at) {
+            // Giữ nguyên trạng thái để đếm tiếp
         }
     }
     
+    // 3. Logic phát hiện chủ đề 18+ (cho Lover stage)
+    if (relationshipStage === 'lover') {
+        const is18Plus = detect18PlusTopic(message, rawReply);
+        if (is18Plus) {
+            userProfile.lover_18plus_exchanges = (userProfile.lover_18plus_exchanges || 0) + 1;
+            console.log(`🔥 [18+] Phát hiện chủ đề 18+ - exchanges: ${userProfile.lover_18plus_exchanges}`);
+        } else {
+            // Tăng counter tin nhắn bình thường
+            userProfile.lover_normal_messages = (userProfile.lover_normal_messages || 0) + 1;
+        }
+    }
+    
+    // 4. Logic video funny - Tất cả giai đoạn
+    if (userProfile.sad_detected_at && !userProfile.funny_video_sent_for_sad) {
+        if (userProfile.sad_message_count >= FUNNY_VIDEO_CONFIG.sadMessageCount) {
+            // Gửi video funny
+            if (!/\[SEND_MEDIA:/i.test(rawReply)) {
+                const funnyVideoText = (character === 'zoe' || character === 'kai') 
+                    ? "Here's something to cheer you up!"
+                    : (character === 'thang')
+                        ? "Gửi em đoạn này cho vui nhé."
+                        : "Gửi anh đoạn này cho vui nhé.";
+                
+                rawReply = `${rawReply} ${funnyVideoText} [SEND_MEDIA: video, normal, funny]`;
+                userProfile.funny_video_sent_for_sad = true;
+                console.log(`😊 [FUNNY VIDEO] ✅ GỬI VIDEO FUNNY - stage: ${relationshipStage}, character: ${character}`);
+            }
+        }
+    }
+    
+    // 5. Logic Lover stage - Auto-send 18+ media
+    if (relationshipStage === 'lover' && userProfile.lover_18plus_exchanges >= MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges) {
+        if (userProfile.lover_18plus_exchanges % MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges === 0) {
+            // Cứ mỗi 3 lượt trao đổi 18+ → gửi body/private
+            if (!/\[SEND_MEDIA:/i.test(rawReply)) {
+                const mediaType = Math.random() > 0.5 ? 'image' : 'video';
+                const mediaTopic = Math.random() > 0.5 ? 'sensitive' : 'sensitive';
+                const mediaSubject = mediaType === 'image' ? 'body' : (Math.random() > 0.5 ? 'body' : 'private');
+                
+                rawReply = `${rawReply} [SEND_MEDIA: ${mediaType}, ${mediaTopic}, ${mediaSubject}]`;
+                userProfile.lover_18plus_media_sent = (userProfile.lover_18plus_media_sent || 0) + 1;
+                console.log(`🔥 [18+ AUTO] Gửi ${mediaType} ${mediaTopic} ${mediaSubject} - exchanges: ${userProfile.lover_18plus_exchanges}`);
+            }
+        }
+    }
+    
+    // 6. Logic Lover stage - Auto-send normal media
+    // Sau 6 tin nhắn bình thường của user → chủ động gửi
+    if (relationshipStage === 'lover' && userProfile.lover_normal_messages > 0) {
+        if (userProfile.lover_normal_messages % MEDIA_QUOTA_CONFIG.lover.autoSendNormal.messages === 0) {
+            // Cứ mỗi 6 tin nhắn bình thường → chủ động gửi
+            if (!/\[SEND_MEDIA:/i.test(rawReply)) {
+                const mediaTypes = ['image', 'video'];
+                const mediaTopics = ['normal', 'sensitive'];
+                const mediaSubjects = ['selfie', 'body', 'shape', 'moment'];
+                
+                const mediaType = mediaTypes[Math.floor(Math.random() * mediaTypes.length)];
+                const mediaTopic = mediaTopics[Math.floor(Math.random() * mediaTopics.length)];
+                const mediaSubject = mediaSubjects[Math.floor(Math.random() * mediaSubjects.length)];
+                
+                rawReply = `${rawReply} [SEND_MEDIA: ${mediaType}, ${mediaTopic}, ${mediaSubject}]`;
+                userProfile.lover_normal_media_sent = (userProfile.lover_normal_media_sent || 0) + 1;
+                console.log(`📸 [NORMAL AUTO] Gửi ${mediaType} ${mediaTopic} ${mediaSubject} - messages: ${userProfile.lover_normal_messages}`);
+            }
+        }
+    }
+    
+    // Xử lý [SEND_MEDIA] tag với quota checking và lần đầu từ chối
     const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
-    const mediaMatch = rawReply.match(mediaRegex); 
+    const mediaMatch = rawReply.match(mediaRegex);
     
-    // Kiểm tra xem AI có đồng ý gửi ảnh không (có từ khóa đồng ý trong response)
-    // Hỗ trợ cả tiếng Việt và tiếng Anh cho Zoe/Kai
-    // QUAN TRỌNG: Loại trừ các câu từ chối (not sending, won't send, can't send, etc.)
-    const isRefusing = (character === 'zoe' || character === 'kai')
-        ? /(not|won't|can't|cannot|don't|didn't|wouldn't|shouldn't|refuse|refusing|no way|too early|too soon|just met|chat more|chat first|earn it).*(send|sending|give|giving|show|showing|photo|picture|pic|image)/i.test(rawReply) ||
-          /(send|sending|give|giving|show|showing|photo|picture|pic|image).*(not|won't|can't|cannot|don't|didn't|wouldn't|shouldn't|refuse|refusing|no way|too early|too soon|just met|chat more|chat first|earn it)/i.test(rawReply)
-        : /(không|chưa|đừng|thôi|chưa muốn|chưa sẵn sàng).*(gửi|cho|gửi cho|gửi ảnh|gửi hình|cho xem|cho anh|cho em)/i.test(rawReply);
-    
-    const aiAgreedToSend = !isRefusing && ((character === 'zoe' || character === 'kai') 
-        ? /(alright|fine|ok|okay|sure|yeah|yes|here|here's|here is|sent|send|sending|sends|give|gives|giving|quick|one more|another).*(photo|picture|pic|image|selfie|one|it|for you|to you)/i.test(rawReply) ||
-          /(photo|picture|pic|image|selfie).*(here|here's|here is|sent|send|sending|sends|give|gives|giving|for you|to you)/i.test(rawReply)
-        : /(được rồi|thôi được|rồi|ừm|hmm|ok|okay|gửi|cho.*xem|cho.*anh|cho.*em).*(ảnh|hình|image|tấm|tấm ảnh)/i.test(rawReply));
-    
-    // Nếu user yêu cầu media nhưng AI không gửi [SEND_MEDIA] → tự động gửi (nhưng có điều kiện)
-    if (userRequestedMedia && !mediaMatch) {
-        // Ở stranger stage: Nếu AI đã đồng ý gửi (có từ khóa đồng ý) và đã hỏi từ lần thứ 2 trở đi → tự động gửi
-        if (relationshipStage === 'stranger' && userRequestedImage) {
-            const currentRequestCount = userProfile.stranger_image_requests || 0;
-            // Zoe/Kai: 5 ảnh, Mera/Thắng: giữ nguyên (2/10)
-            const maxStrangerImages = (character === 'zoe' || character === 'kai') ? 5 : ((character === 'thang') ? 10 : 2);
-            
-            // Nếu AI đã đồng ý gửi và đã hỏi từ lần thứ 2 trở đi và chưa gửi đủ → tự động gửi
-            if (aiAgreedToSend && currentRequestCount >= 2 && strangerImagesSent < maxStrangerImages) {
-                console.log(`✅ AI đã đồng ý gửi ảnh (lần thứ ${currentRequestCount} hỏi), tự động gửi ảnh`);
-                try {
-                    const mediaResult = await sendMediaFile(memory, character, 'image', 'normal', 'selfie');
-                    if (mediaResult && mediaResult.success) {
-                        mediaUrl = mediaResult.mediaUrl;
-                        mediaType = mediaResult.mediaType;
-                        mediaTopic = 'normal';
-                        mediaSubject = 'selfie';
-                        memory.user_profile = mediaResult.updatedMemory.user_profile;
-                        memory.user_profile.stranger_images_sent = (memory.user_profile.stranger_images_sent || 0) + 1;
-                        console.log(`✅ Đã tự động gửi ảnh stranger: ${mediaUrl} (${memory.user_profile.stranger_images_sent}/${maxStrangerImages})`);
-                    } else {
-                        console.warn(`⚠️ Không thể tự động gửi ảnh:`, mediaResult?.message || 'Unknown error');
-                    }
-                } catch (autoError) {
-                    console.error("❌ Lỗi khi tự động gửi ảnh:", autoError);
-                }
-            } else {
-                console.log(`⚠️ User yêu cầu ảnh ở stranger stage, KHÔNG tự động gửi - để AI quyết định trong prompt (aiAgreedToSend=${aiAgreedToSend}, currentRequestCount=${currentRequestCount}, strangerImagesSent=${strangerImagesSent})`);
-                // Debug: Log rawReply để kiểm tra
-                if (character === 'zoe' || character === 'kai') {
-                    console.log(`🔍 Debug Zoe/Kai - rawReply: "${rawReply.substring(0, 200)}"`);
-                }
-            }
-        } else if (relationshipStage === 'stranger' && userRequestedVideo && (character === 'zoe' || character === 'kai')) {
-            // Zoe/Kai: Cho phép video normal ở stranger stage (tối đa 3 video)
-            const currentVideoRequestCount = userProfile.stranger_video_requests || 0;
-            const strangerVideosSent = userProfile.stranger_videos_sent || 0;
-            const maxStrangerVideos = 3;
-            
-            if (strangerVideosSent >= maxStrangerVideos) {
-                console.log(`🚫 Đã gửi đủ ${maxStrangerVideos} video trong stranger stage, từ chối`);
-            } else if (currentVideoRequestCount >= 2) {
-                // Đã hỏi từ lần thứ 2 trở đi → tự động gửi (không cần đợi AI đồng ý, tương tự như ảnh)
-                console.log(`✅ User yêu cầu video lần thứ ${currentVideoRequestCount}, tự động gửi video normal (đã gửi ${strangerVideosSent}/${maxStrangerVideos})`);
-                try {
-                    const mediaResult = await sendMediaFile(memory, character, 'video', 'normal', 'moment');
-                    if (mediaResult && mediaResult.success) {
-                        mediaUrl = mediaResult.mediaUrl;
-                        mediaType = mediaResult.mediaType;
-                        mediaTopic = 'normal';
-                        mediaSubject = 'moment';
-                        memory.user_profile = mediaResult.updatedMemory.user_profile;
-                        memory.user_profile.stranger_videos_sent = (memory.user_profile.stranger_videos_sent || 0) + 1;
-                        console.log(`✅ Đã tự động gửi video stranger: ${mediaUrl} (${memory.user_profile.stranger_videos_sent}/${maxStrangerVideos})`);
-                        // Kiểm tra xem rawReply có đang nói về video không
-                        // Nếu rawReply đang từ chối video hoặc nói về ảnh → cập nhật để phù hợp với việc đã gửi video
-                        const isRefusingVideo = /(too personal|not ready|chat more|keep chatting|videos are|video.*personal)/i.test(rawReply);
-                        const isTalkingAboutPhoto = /(photo|picture|pic|selfie|image)/i.test(rawReply) && !/(video|vid)/i.test(rawReply);
-                        
-                        if (!rawReply || rawReply.trim().length < 5) {
-                            // Hoàn toàn trống → thêm câu phù hợp
-                            if (character === 'zoe' || character === 'kai') {
-                                rawReply = "Here's a video for you! 😊";
-                            } else {
-                                rawReply = "Đây là video cho bạn! 😊";
-                            }
-                        } else if (isRefusingVideo || isTalkingAboutPhoto) {
-                            // Đang từ chối video hoặc nói về ảnh → cập nhật để phù hợp với việc đã gửi video
-                            // Giữ phần đầu của câu, nhưng thay đổi phần từ chối thành đồng ý gửi video
-                            if (character === 'zoe' || character === 'kai') {
-                                // Nếu đang từ chối, thay bằng câu đồng ý gửi video
-                                if (isRefusingVideo) {
-                                    rawReply = rawReply.replace(/(too personal|not ready|chat more|keep chatting|videos are|video.*personal).*/i, '').trim();
-                                    if (!rawReply || rawReply.length < 10) {
-                                        rawReply = "Alright, here's a video for you! 😊";
-                                    } else {
-                                        rawReply = rawReply + " Here's a video for you! 😊";
-                                    }
-                                } else if (isTalkingAboutPhoto) {
-                                    // Đang nói về ảnh nhưng gửi video → thay đổi
-                                    rawReply = rawReply.replace(/(photo|picture|pic|selfie|image)/gi, 'video');
-                                    if (!rawReply || rawReply.length < 10) {
-                                        rawReply = "Here's a video for you! 😊";
-                                    }
-                                }
-                            } else {
-                                // Tiếng Việt
-                                if (isRefusingVideo) {
-                                    rawReply = rawReply.replace(/(quá riêng tư|chưa sẵn sàng|trò chuyện thêm|video.*riêng tư).*/i, '').trim();
-                                    if (!rawReply || rawReply.length < 10) {
-                                        rawReply = "Thôi được, đây là video cho bạn! 😊";
-                                    } else {
-                                        rawReply = rawReply + " Đây là video cho bạn! 😊";
-                                    }
-                                } else if (isTalkingAboutPhoto) {
-                                    rawReply = rawReply.replace(/(ảnh|hình|selfie|image)/gi, 'video');
-                                    if (!rawReply || rawReply.length < 10) {
-                                        rawReply = "Đây là video cho bạn! 😊";
-                                    }
-                                }
-                            }
-                        }
-                        // Nếu rawReply không có vấn đề → giữ nguyên
-                    } else {
-                        console.warn(`⚠️ Không thể tự động gửi video:`, mediaResult?.message || 'Unknown error');
-                    }
-                } catch (autoError) {
-                    console.error("❌ Lỗi khi tự động gửi video:", autoError);
-                }
-            } else {
-                console.log(`⚠️ User yêu cầu video lần đầu (requestCount=${currentVideoRequestCount}), KHÔNG tự động gửi - để AI từ chối trong prompt`);
-            }
-        } else if (relationshipStage !== 'stranger') {
-            // Các giai đoạn khác, tự động gửi bình thường
-            console.log(`⚠️ User yêu cầu media nhưng AI không gửi [SEND_MEDIA], tự động gửi media...`);
-            const autoType = userRequestedVideo ? 'video' : 'image';
-            // Chỉ cho phép sensitive ở lover; friend luôn dùng normal
-            const autoTopic = (userRequestedSensitive && isPremiumUser && relationshipStage === 'lover') ? 'sensitive' : 'normal';
-            let autoSubject = 'selfie';
-            if (autoType === 'video') {
-                autoSubject = userRequestedSensitive ? ((character === 'mera' || character === 'zoe') ? 'shape' : 'private') : 'moment';
-            } else {
-                if (autoTopic === 'sensitive') {
-                    autoSubject = (character === 'mera' || character === 'zoe') ? 'bikini' : 'body';
-                }
-            }
-            console.log(`🔄 Tự động gửi: type=${autoType}, topic=${autoTopic}, subject=${autoSubject}`);
-            try {
-                // Enforce friend-stage quotas
-                    if (relationshipStage === 'friend') {
-                    const maxFriendImages = (character === 'thang' || character === 'kai') ? 20 : 4;
-                    const maxFriendVideos = (character === 'thang' || character === 'kai') ? 6 : 2;
-                    if (autoType === 'image' && autoTopic === 'normal' && friendImagesSent >= maxFriendImages) {
-                        console.log(`🚫 Friend normal image quota reached (${maxFriendImages}), skip auto-send image.`);
-                    }
-                    // Mera/Zoe có body images, Thắng/Kai không có
-                    if ((character === 'mera' || character === 'zoe') && autoType === 'image' && autoTopic === 'sensitive' && autoSubject === 'body' && friendBodyImagesSent >= 2) {
-                        console.log(`🚫 Friend body image quota reached (2), skip auto-send body image.`);
-                    }
-                    if (autoType === 'video' && autoTopic === 'normal' && friendVideosSent >= maxFriendVideos) {
-                        console.log(`🚫 Friend video quota reached (${maxFriendVideos}), skip auto-send video.`);
-                    }
-                }
-                const mediaResult = await sendMediaFile(memory, character, autoType, autoTopic, autoSubject);
-                if (mediaResult && mediaResult.success) {
-                    mediaUrl = mediaResult.mediaUrl;
-                    mediaType = mediaResult.mediaType;
-                    mediaTopic = autoTopic; // Lưu topic để AI biết loại ảnh
-                    mediaSubject = autoSubject; // Lưu subject để AI biết nội dung ảnh
-                    memory.user_profile = mediaResult.updatedMemory.user_profile;
-                    if (relationshipStage === 'friend') {
-                        if (autoType === 'image' && autoTopic === 'normal') {
-                            memory.user_profile.friend_images_sent = (memory.user_profile.friend_images_sent || 0) + 1;
-                        }
-                        if (autoType === 'image' && autoTopic === 'sensitive' && autoSubject === 'body') {
-                            memory.user_profile.friend_body_images_sent = (memory.user_profile.friend_body_images_sent || 0) + 1;
-                        }
-                        if (autoType === 'video' && autoTopic === 'normal') {
-                            memory.user_profile.friend_videos_sent = (memory.user_profile.friend_videos_sent || 0) + 1;
-                        }
-                    }
-                    console.log(`✅ Đã tự động gửi media: ${mediaUrl}`);
-                }
-            } catch (autoError) {
-                console.error("❌ Lỗi khi tự động gửi media:", autoError);
-            }
-        }
-    } else if (mediaMatch) { 
-        const [, type, topic, subject] = mediaMatch; 
-        console.log(`🖼️ Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}`);
-        try {
-            // Cấm sensitive nếu chưa tới giai đoạn lover (kể cả Premium)
-            if (topic === 'sensitive' && relationshipStage !== 'lover') {
-                console.log(`🚫 Sensitive bị cấm ở stage ${relationshipStage}. Dùng normal hoặc từ chối khéo.`);
-                const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
-                const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
-                if (mediaResult && mediaResult.success) {
-                    mediaUrl = mediaResult.mediaUrl;
-                    mediaType = mediaResult.mediaType;
-                    memory.user_profile = mediaResult.updatedMemory.user_profile;
-                    rawReply = rawReply.replace(mediaRegex, '').trim();
-                    // Chỉ thay thế nếu hoàn toàn trống
-                    if (!rawReply || rawReply.trim().length < 5) {
-                        rawReply = "Cái đó hơi riêng tư, mình để khi thân hơn nhé. Em gửi cái này cho vui trước nè!";
-                    }
-                } else {
-                    rawReply = rawReply.replace(mediaRegex, '').trim();
-                    // Chỉ thay thế nếu hoàn toàn trống
-                    if (!rawReply || rawReply.trim().length < 5) {
-                        rawReply = "Mấy chuyện riêng tư để sau này thân hơn chúng ta nói nhé.";
-                    }
-                }
-            } else if (topic === 'sensitive' && !isPremiumUser) {
-                // Nếu chưa Premium mà yêu cầu sensitive → gửi normal thay thế
-                console.log(`⚠️ User chưa Premium yêu cầu sensitive, gửi normal thay thế`);
-                const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
-                const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
-                if (mediaResult && mediaResult.success) {
-                    mediaUrl = mediaResult.mediaUrl;
-                    mediaType = mediaResult.mediaType;
-                    memory.user_profile = mediaResult.updatedMemory.user_profile;
-                    // Thay thế text để giải thích nhẹ nhàng
-                    rawReply = rawReply.replace(mediaRegex, '').trim();
-                    if (!rawReply || rawReply.length < 10) {
-                        rawReply = "Em/Anh chỉ chia sẻ nội dung đó với người thân thiết. Đây là ảnh/video bình thường nhé!";
-                    }
-                } else {
-                    console.warn(`⚠️ Không thể gửi media fallback:`, mediaResult?.message || 'Unknown error');
-                    rawReply = rawReply.replace(mediaRegex, '').trim();
-                    // Chỉ thay thế nếu hoàn toàn trống
-                    if (!rawReply || rawReply.trim().length < 5) {
-                        rawReply = "Em/Anh chỉ chia sẻ nội dung đó với người thân thiết. Đây là ảnh/video bình thường nhé!";
-                    }
-                }
-            } else {
-                // CHẶN VIDEO và SENSITIVE MEDIA trong stranger stage
-                if (relationshipStage === 'stranger') {
-                    // CHẶN ẢNH NẾU LÀ LẦN ĐẦU HỎI (stranger_image_requests < 2)
-                    const currentRequestCount = userProfile.stranger_image_requests || 0;
-                    if (type === 'image' && currentRequestCount < 2) {
-                        console.log(`🚫 AI muốn gửi ảnh trong stranger stage lần đầu (requestCount=${currentRequestCount}), chặn gửi - phải từ chối lần đầu`);
-                        rawReply = rawReply.replace(mediaRegex, '').trim();
-                        // Nếu không còn text sau khi xóa tag, thêm câu từ chối phù hợp
-                        if (!rawReply || rawReply.length < 10) {
-                            if (character === 'zoe' || character === 'kai') {
-                                rawReply = "Wait, we just started talking and you're already asking for photos? I'm not that easy! Let's chat more first! 😤";
-                            } else if (character === 'thang') {
-                                rawReply = "Em mới quen anh mà đã đòi xem ảnh rồi à? Trò chuyện với anh nhiều hơn đi nhé… 😏";
-                            } else {
-                                rawReply = "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤";
-                            }
-                        }
-                    }
-                    // Video: Zoe/Kai được phép gửi video normal (3 video), Mera/Thắng không được
-                    else if (type === 'video') {
-                        if (character === 'zoe' || character === 'kai') {
-                            // Zoe/Kai: Cho phép video normal ở stranger stage
-                            if (topic === 'normal') {
-                                const strangerVideosSent = userProfile.stranger_videos_sent || 0;
-                                const maxStrangerVideos = 3;
-                                if (strangerVideosSent >= maxStrangerVideos) {
-                                    console.log(`🚫 Đã gửi đủ ${maxStrangerVideos} video trong stranger stage, chặn gửi`);
-                                    rawReply = rawReply.replace(mediaRegex, '').trim();
-                                } else {
-                                    // Cho phép gửi video normal - xử lý ngay
-                                    console.log(`✅ Cho phép gửi video normal stranger (đã gửi ${strangerVideosSent}/${maxStrangerVideos})`);
-                                    const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
-                                    if (mediaResult && mediaResult.success) {
-                                        mediaUrl = mediaResult.mediaUrl;
-                                        mediaType = mediaResult.mediaType;
-                                        mediaTopic = topic;
-                                        mediaSubject = subject;
-                                        memory.user_profile = mediaResult.updatedMemory.user_profile;
-                                        memory.user_profile.stranger_videos_sent = (memory.user_profile.stranger_videos_sent || 0) + 1;
-                                        console.log(`✅ Đã gửi video stranger thành công: ${mediaUrl} (${memory.user_profile.stranger_videos_sent}/${maxStrangerVideos})`);
-                                        rawReply = rawReply.replace(mediaRegex, '').trim();
-                                        
-                                        // Kiểm tra xem rawReply có đang nói về video không
-                                        const isRefusingVideo = /(too personal|not ready|chat more|keep chatting|videos are|video.*personal)/i.test(rawReply);
-                                        const isTalkingAboutPhoto = /(photo|picture|pic|selfie|image)/i.test(rawReply) && !/(video|vid)/i.test(rawReply);
-                                        
-                                        if (!rawReply || rawReply.trim().length < 5) {
-                                            // Hoàn toàn trống → thêm câu phù hợp
-                                            if (character === 'zoe' || character === 'kai') {
-                                                rawReply = "Here's a video for you! 😊";
-                                            } else {
-                                                rawReply = "Đây là video cho bạn! 😊";
-                                            }
-                                        } else if (isRefusingVideo || isTalkingAboutPhoto) {
-                                            // Đang từ chối video hoặc nói về ảnh → cập nhật để phù hợp
-                                            if (character === 'zoe' || character === 'kai') {
-                                                if (isRefusingVideo) {
-                                                    rawReply = rawReply.replace(/(too personal|not ready|chat more|keep chatting|videos are|video.*personal).*/i, '').trim();
-                                                    if (!rawReply || rawReply.length < 10) {
-                                                        rawReply = "Alright, here's a video for you! 😊";
-                                                    } else {
-                                                        rawReply = rawReply + " Here's a video for you! 😊";
-                                                    }
-                                                } else if (isTalkingAboutPhoto) {
-                                                    rawReply = rawReply.replace(/(photo|picture|pic|selfie|image)/gi, 'video');
-                                                    if (!rawReply || rawReply.length < 10) {
-                                                        rawReply = "Here's a video for you! 😊";
-                                                    }
-                                                }
-                                            } else {
-                                                if (isRefusingVideo) {
-                                                    rawReply = rawReply.replace(/(quá riêng tư|chưa sẵn sàng|trò chuyện thêm|video.*riêng tư).*/i, '').trim();
-                                                    if (!rawReply || rawReply.length < 10) {
-                                                        rawReply = "Thôi được, đây là video cho bạn! 😊";
-                                                    } else {
-                                                        rawReply = rawReply + " Đây là video cho bạn! 😊";
-                                                    }
-                                                } else if (isTalkingAboutPhoto) {
-                                                    rawReply = rawReply.replace(/(ảnh|hình|selfie|image)/gi, 'video');
-                                                    if (!rawReply || rawReply.length < 10) {
-                                                        rawReply = "Đây là video cho bạn! 😊";
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        // Nếu rawReply không có vấn đề → giữ nguyên
-                                    } else {
-                                        console.warn(`⚠️ Không thể gửi video:`, mediaResult?.message || 'Unknown error');
-                                        rawReply = rawReply.replace(mediaRegex, '').trim();
-                                    }
-                                }
-                            } else {
-                                // Chặn video sensitive
-                                console.log(`🚫 AI muốn gửi video sensitive trong stranger stage, chặn gửi`);
-                                rawReply = rawReply.replace(mediaRegex, '').trim();
-                            }
-                        } else {
-                            // Mera/Thắng: Chặn video thông thường, NHƯNG cho phép video funny (để động viên khi buồn)
-                            if (subject === 'funny') {
-                                // Video funny được phép cho tất cả nhân vật ở tất cả stages
-                                console.log(`✅ Cho phép gửi video funny cho ${character} ở stranger stage (để động viên khi buồn)`);
-                                const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
-                                if (mediaResult && mediaResult.success) {
-                                    mediaUrl = mediaResult.mediaUrl;
-                                    mediaType = mediaResult.mediaType;
-                                    mediaTopic = topic;
-                                    mediaSubject = subject;
-                                    memory.user_profile = mediaResult.updatedMemory.user_profile;
-                                    rawReply = rawReply.replace(mediaRegex, '').trim();
-                                    if (!rawReply || rawReply.trim().length < 5) {
-                                        rawReply = (character === 'thang') ? "Gửi em đoạn này cho vui nhé. 😊" : "Gửi anh đoạn này cho vui nhé. 😊";
-                                    }
-                                } else {
-                                    console.warn(`⚠️ Không thể gửi video funny:`, mediaResult?.message || 'Unknown error');
-                                    rawReply = rawReply.replace(mediaRegex, '').trim();
-                                }
-                            } else {
-                                // Video thông thường: Chặn
-                                console.log(`🚫 AI muốn gửi video trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
-                                rawReply = rawReply.replace(mediaRegex, '').trim();
-                            }
-                        }
-                        }
-                    // Chặn sensitive media (ảnh/video riêng tư) - chỉ xóa [SEND_MEDIA], để AI tự xử lý câu trả lời
-                    else if (topic === 'sensitive') {
-                        console.log(`🚫 AI muốn gửi sensitive media trong stranger stage, chặn gửi - để AI tự xử lý câu trả lời`);
-                        rawReply = rawReply.replace(mediaRegex, '').trim();
-                        // Không hardcode response - để AI tự suy nghĩ và trả lời
-                    }
-                    // Chỉ cho phép ảnh bình thường (normal)
-                    else if (type === 'image' && topic === 'normal') {
-                        const currentRequestCount = userProfile.stranger_image_requests || 0;
-                        
-                        // Zoe/Kai: 5 ảnh, Mera/Thắng: giữ nguyên (2/10)
-            const maxStrangerImages = (character === 'zoe' || character === 'kai') ? 5 : ((character === 'thang') ? 10 : 2);
-                        // Lần đầu hỏi → KHÔNG cho gửi (xóa [SEND_MEDIA]), để AI tự xử lý câu trả lời
-                        if (currentRequestCount <= 1) {
-                            console.log(`🚫 Lần đầu hỏi xem ảnh (requestCount=${currentRequestCount}), KHÔNG cho gửi - xóa [SEND_MEDIA], để AI tự xử lý`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Đảm bảo không có media được gửi
-                            mediaUrl = null;
-                            mediaType = null;
-                            mediaTopic = null;
-                            mediaSubject = null;
-                            // Nếu không còn text sau khi xóa tag, thêm câu từ chối phù hợp
-                            if (!rawReply || rawReply.length < 10) {
-                                if (character === 'zoe' || character === 'kai') {
-                                    rawReply = "Wait, we just started talking and you're already asking for photos? I'm not that easy! Let's chat more first! 😤";
-                                } else if (character === 'thang') {
-                                    rawReply = "Em mới quen anh mà đã đòi xem ảnh rồi à? Trò chuyện với anh nhiều hơn đi nhé… 😏";
-                                } else {
-                                    rawReply = "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤";
-                                }
-                            }
-                            // QUAN TRỌNG: Skip phần logic gửi ảnh phía dưới
-                            // Không gửi ảnh trong trường hợp này
-                        } else if (strangerImagesSent >= maxStrangerImages) {
-                            // Đã gửi đủ ảnh → chặn gửi, để AI tự xử lý câu trả lời
-                            console.log(`🚫 AI muốn gửi ảnh nhưng đã gửi đủ ${maxStrangerImages} ảnh, chặn gửi - để AI tự xử lý`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Không hardcode response - để AI tự suy nghĩ và trả lời
-                        } else if (currentRequestCount >= 2) {
-                            // Lần thứ 2 trở đi → có thể gửi (nếu AI thấy khẩn thiết)
-                            console.log(`✅ Lần thứ ${currentRequestCount} hỏi xem ảnh, cho phép gửi (đã gửi ${strangerImagesSent}/${maxStrangerImages})`);
-                            const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
-                            if (mediaResult && mediaResult.success) {
-                                mediaUrl = mediaResult.mediaUrl;
-                                mediaType = mediaResult.mediaType;
-                                mediaTopic = topic; // Lưu topic để AI biết loại ảnh
-                                mediaSubject = subject; // Lưu subject để AI biết nội dung ảnh
-                                memory.user_profile = mediaResult.updatedMemory.user_profile;
-                                // Tăng số lần đã gửi ảnh trong stranger stage
-                                memory.user_profile.stranger_images_sent = (memory.user_profile.stranger_images_sent || 0) + 1;
-                                console.log(`✅ Đã gửi ảnh stranger thành công: ${mediaUrl} (${memory.user_profile.stranger_images_sent}/${maxStrangerImages}, topic: ${topic}, subject: ${subject})`);
-                                
-                                // KHÔNG thay thế rawReply - giữ nguyên nội dung AI đã tạo để AI biết context
-                                // Chỉ xóa [SEND_MEDIA] tag, giữ nguyên phần còn lại
-                                rawReply = rawReply.replace(mediaRegex, '').trim();
-                                // Chỉ thay thế nếu hoàn toàn trống (rất hiếm)
-                                if (!rawReply || rawReply.trim().length < 5) {
-                                    if (character === 'zoe' || character === 'kai') {
-                                        rawReply = "Here's a photo for you! 😊";
-                                    } else if (character === 'thang') {
-                                        rawReply = "Thôi được rồi em, anh gửi cho em xem nhé. 😏";
-                                    } else {
-                                        rawReply = "Thôi được rồi em cho anh xem ảnh này... 😊";
-                                    }
-                                }
-                            } else {
-                                console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
-                                rawReply = rawReply.replace(mediaRegex, '').trim();
-                            }
-                        } else {
-                            // Trường hợp khác → không cho gửi, để AI tự xử lý
-                            console.log(`🚫 Không đủ điều kiện gửi ảnh, chặn gửi - để AI tự xử lý`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Không hardcode response - để AI tự suy nghĩ và trả lời
-                        }
-                    } else {
-                        // Các trường hợp khác trong stranger stage → không cho gửi, để AI tự xử lý
-                        console.log(`🚫 Không cho phép loại media này trong stranger stage, chặn gửi - để AI tự xử lý`);
-                        rawReply = rawReply.replace(mediaRegex, '').trim();
-                        // Không hardcode response - để AI tự suy nghĩ và trả lời
-                    }
-                } else {
-                    // Các trường hợp khác, gửi bình thường
-                    // Enforce friend-stage quotas for explicit [SEND_MEDIA]
-                    if (relationshipStage === 'friend') {
-                        // CHẶN PRIVATE (ảnh/video) ở friend stage cho Zoe/Kai
-                        if ((character === 'zoe' || character === 'kai') && topic === 'sensitive' && (subject === 'private')) {
-                            console.log(`🚫 Zoe/Kai không được gửi private ở friend stage, chặn gửi - trả lời hợp lý`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Nếu không còn text, thêm câu trả lời hợp lý
-                            if (!rawReply || rawReply.length < 10) {
-                                if (character === 'zoe' || character === 'kai') {
-                                    rawReply = "I'm not ready to share that kind of content yet. Let's keep things more casual for now. 😊";
-                                }
-                            }
-                        }
-                        const maxFriendImages = (character === 'zoe' || character === 'kai') ? 8 : ((character === 'thang') ? 20 : 4);
-                        const maxFriendVideos = (character === 'zoe' || character === 'kai') ? 4 : ((character === 'thang') ? 6 : 2);
-                        const maxFriendBodyImages = (character === 'zoe' || character === 'kai') ? 6 : ((character === 'mera' || character === 'zoe') ? 2 : 0);
-                        const maxFriendBodyVideos = (character === 'zoe' || character === 'kai') ? 4 : 0;
-                        if (type === 'image' && topic === 'normal' && friendImagesSent >= maxFriendImages) {
-                            console.log(`🚫 Vượt quota ảnh normal friend (${maxFriendImages}), không gửi.`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Chỉ thay thế nếu hoàn toàn trống
-                            if (!rawReply || rawReply.trim().length < 5) {
-                                if (character === 'zoe' || character === 'kai') {
-                                    rawReply = "I've sent enough photos today, maybe another day! 😊";
-                                } else if (character === 'thang') {
-                                    rawReply = "Anh gửi đủ ảnh rồi, để hôm khác nhé.";
-                                } else {
-                                    rawReply = "Hôm nay em gửi đủ ảnh rồi, để hôm khác nhé.";
-                                }
-                            }
-                        } else if (type === 'image' && topic === 'sensitive' && subject === 'body' && friendBodyImagesSent >= maxFriendBodyImages) {
-                            console.log(`🚫 Vượt quota ảnh body friend (${maxFriendBodyImages}), không gửi.`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Chỉ thay thế nếu hoàn toàn trống
-                            if (!rawReply || rawReply.trim().length < 5) {
-                                rawReply = (character === 'zoe' || character === 'kai') ? "I've sent enough body photos, maybe another day! 😊" : "Em gửi đủ ảnh body rồi, để hôm khác nhé.";
-                            }
-                        } else if (type === 'video' && topic === 'sensitive' && subject === 'shape' && (character === 'zoe' || character === 'kai')) {
-                            const friendBodyVideosSent = userProfile.friend_body_videos_sent || 0;
-                            if (friendBodyVideosSent >= maxFriendBodyVideos) {
-                                console.log(`🚫 Vượt quota video body friend (${maxFriendBodyVideos}), không gửi.`);
-                                rawReply = rawReply.replace(mediaRegex, '').trim();
-                                // Chỉ thay thế nếu hoàn toàn trống
-                                if (!rawReply || rawReply.trim().length < 5) {
-                                    rawReply = (character === 'zoe' || character === 'kai') ? "I've sent enough body videos, maybe later! 😊" : "Em gửi đủ video body rồi, để hôm khác nhé.";
-                                }
-                            }
-                        } else if (type === 'video' && topic === 'normal' && friendVideosSent >= maxFriendVideos) {
-                            console.log(`🚫 Vượt quota video friend (${maxFriendVideos}), không gửi.`);
-                            rawReply = rawReply.replace(mediaRegex, '').trim();
-                            // Chỉ thay thế nếu hoàn toàn trống
-                            if (!rawReply || rawReply.trim().length < 5) {
-                                if (character === 'zoe' || character === 'kai') {
-                                    rawReply = "I've sent enough videos, maybe later! 😊";
-                                } else if (character === 'thang') {
-                                    rawReply = "Video đủ rồi, để anh gửi sau nhé.";
-                                } else {
-                                    rawReply = "Video đủ rồi, để em gửi sau nhé.";
-                                }
-                            }
-                        }
-                    }
-                    const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
-                    if (mediaResult && mediaResult.success) {
-                        mediaUrl = mediaResult.mediaUrl;
-                        mediaType = mediaResult.mediaType;
-                        mediaTopic = topic; // Lưu topic để AI biết loại ảnh
-                        mediaSubject = subject; // Lưu subject để AI biết nội dung ảnh
-                        memory.user_profile = mediaResult.updatedMemory.user_profile;
-                        if (relationshipStage === 'friend') {
-                            if (type === 'image' && topic === 'normal') {
-                                memory.user_profile.friend_images_sent = (memory.user_profile.friend_images_sent || 0) + 1;
-                            }
-                            if (type === 'image' && topic === 'sensitive' && subject === 'body') {
-                                memory.user_profile.friend_body_images_sent = (memory.user_profile.friend_body_images_sent || 0) + 1;
-                            }
-                            if (type === 'video' && topic === 'normal') {
-                                memory.user_profile.friend_videos_sent = (memory.user_profile.friend_videos_sent || 0) + 1;
-                            }
-                            if (type === 'video' && topic === 'sensitive' && subject === 'shape' && (character === 'zoe' || character === 'kai')) {
-                                memory.user_profile.friend_body_videos_sent = (memory.user_profile.friend_body_videos_sent || 0) + 1;
-                            }
-                        }
-                        console.log(`✅ Đã gửi media thành công: ${mediaUrl} (topic: ${topic}, subject: ${subject})`);
-                    } else {
-                        console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
-                    }
-                    rawReply = rawReply.replace(mediaRegex, '').trim();
-                    // Chỉ thay thế nếu hoàn toàn trống
-                    if (!rawReply || rawReply.trim().length < 5) {
-                        rawReply = mediaResult?.message || "Đã gửi media cho bạn!";
-                    }
-                }
-            }
-        } catch (mediaError) {
-            console.error("❌ Lỗi khi xử lý media:", mediaError);
+    if (mediaMatch) {
+        const [, type, topic, subject] = mediaMatch;
+        console.log(`🖼️ Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}, stage: ${relationshipStage}`);
+        
+        let shouldSend = true;
+        let refusalReason = null;
+        
+        // Video funny không cần check lần đầu từ chối và quota
+        const isFunnyVideo = type === 'video' && subject === 'funny';
+        
+        // 1. Check lần đầu từ chối (Stranger stage) - Bỏ qua nếu là video funny
+        if (!isFunnyVideo && shouldRefuseFirstRequest(type)) {
+            shouldSend = false;
+            refusalReason = 'first_refusal';
+            console.log(`🚫 [FIRST REFUSAL] Từ chối lần đầu - type: ${type}, stage: ${relationshipStage}`);
+            // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
             rawReply = rawReply.replace(mediaRegex, '').trim();
-            // Chỉ thay thế nếu hoàn toàn trống
-            if (!rawReply || rawReply.trim().length < 5) {
-                rawReply = "Xin lỗi, có lỗi khi gửi media!";
+        }
+        
+        // 2. Check quota (Stranger và Friend stage) - Bỏ qua nếu là video funny
+        if (shouldSend && !isFunnyVideo && relationshipStage !== 'lover') {
+            const quotaCheck = checkQuota(relationshipStage, type, topic);
+            if (!quotaCheck.allowed) {
+                shouldSend = false;
+                refusalReason = 'quota_exceeded';
+                console.log(`🚫 [QUOTA] Hết quota - type: ${type}, topic: ${topic}, stage: ${relationshipStage}, sent: ${quotaCheck.sent}/${quotaCheck.maxQuota}`);
+                // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
+                rawReply = rawReply.replace(mediaRegex, '').trim();
             }
         }
-    } 
-    // Lưu history - lưu cả mediaUrl, mediaType, topic, subject để AI biết nội dung ảnh
-    memory.history.push({ role: 'user', content: message }); 
+        
+        // 3. Chặn sensitive nếu chưa tới lover stage hoặc chưa Premium
+        if (shouldSend && topic === 'sensitive' && (relationshipStage !== 'lover' || !isPremiumUser)) {
+            console.log(`🚫 Sensitive bị cấm ở stage ${relationshipStage} hoặc chưa Premium. Dùng normal.`);
+            const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
+            const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
+            if (mediaResult && mediaResult.success) {
+                mediaUrl = mediaResult.mediaUrl;
+                mediaType = mediaResult.mediaType;
+                mediaTopic = 'normal';
+                mediaSubject = fallbackSubject;
+                memory.user_profile = mediaResult.updatedMemory.user_profile;
+                rawReply = rawReply.replace(mediaRegex, '').trim();
+            } else {
+                rawReply = rawReply.replace(mediaRegex, '').trim();
+            }
+        } else if (shouldSend) {
+            // Gửi media bình thường
+            const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
+            if (mediaResult && mediaResult.success) {
+                mediaUrl = mediaResult.mediaUrl;
+                mediaType = mediaResult.mediaType;
+                mediaTopic = topic;
+                mediaSubject = subject;
+                memory.user_profile = mediaResult.updatedMemory.user_profile;
+                rawReply = rawReply.replace(mediaRegex, '').trim();
+                console.log(`✅ Đã gửi media: ${mediaUrl} (topic: ${topic}, subject: ${subject})`);
+            } else {
+                console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
+                rawReply = rawReply.replace(mediaRegex, '').trim();
+            }
+        }
+    }
+    
+    // ĐÃ XÓA: Toàn bộ logic auto-send và quota checking phức tạp
+    
+    // Lưu history
+    memory.history.push({ role: 'user', content: message });
     
     // Lưu last_user_message và last_message_time để dùng cho auto messages
-    // QUAN TRỌNG: Khi user gửi tin nhắn mới, reset counter cho follow-up của tin nhắn này
-    // Vì đó là follow-up mới dựa trên context mới, không phải tin nhắn cũ
     const previousLastMessage = memory.last_user_message;
     memory.last_user_message = message;
     memory.last_message_time = new Date();
     
     // Nếu tin nhắn mới khác tin nhắn trước, reset follow-up tracking
-    // Để mỗi tin nhắn mới có thể nhận 1 follow-up
     if (previousLastMessage !== message) {
-        memory.last_followup_message = ''; // Reset để có thể gửi follow-up cho tin nhắn mới
-        memory.last_followup_time = null; // Reset thời gian follow-up để bắt đầu lại từ 20 phút
-        console.log(`🔄 [AUTO MSG] User gửi tin nhắn mới, reset follow-up tracking để có thể gửi follow-up mới`);
+        memory.last_followup_message = '';
+        memory.last_followup_time = null;
+        console.log(`🔄 [AUTO MSG] User gửi tin nhắn mới, reset follow-up tracking`);
     }
     
     const assistantMessage = { role: 'assistant', content: rawReply };
     if (mediaUrl && mediaType) {
         assistantMessage.mediaUrl = mediaUrl;
         assistantMessage.mediaType = mediaType;
-        if (mediaTopic) assistantMessage.mediaTopic = mediaTopic; // Lưu topic (normal/sensitive)
-        if (mediaSubject) assistantMessage.mediaSubject = mediaSubject; // Lưu subject (selfie/bikini/private/etc)
+        if (mediaTopic) assistantMessage.mediaTopic = mediaTopic;
+        if (mediaSubject) assistantMessage.mediaSubject = mediaSubject;
         console.log(`💾 Lưu media vào history: ${mediaUrl} (${mediaType}, topic: ${mediaTopic}, subject: ${mediaSubject})`);
     }
     memory.history.push(assistantMessage);
+    
     // Tăng message_count
     const oldMessageCount = userProfile.message_count || 0;
     userProfile.message_count = oldMessageCount + 1;
@@ -2950,63 +2538,46 @@ app.post('/chat', async (req, res) => {
     const oldStage = userProfile.relationship_stage || 'stranger';
     const newStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
     
-    // Nếu stage thay đổi, cập nhật và reset các counter liên quan
+    // Nếu stage thay đổi, cập nhật
     if (oldStage !== newStage) {
         console.log(`🔄 Relationship stage thay đổi: ${oldStage} → ${newStage} (message_count: ${userProfile.message_count})`);
-        
-        // Reset counter khi chuyển từ stranger sang friend
-        if (oldStage === 'stranger' && newStage === 'friend') {
-            userProfile.stranger_images_sent = 0;
-            userProfile.stranger_videos_sent = 0;
-            userProfile.stranger_image_requests = 0;
-            userProfile.stranger_video_requests = 0;
-            console.log(`✅ Chuyển từ Người Lạ sang Bạn Thân! Reset stranger counters.`);
-        }
-        // Reset counter khi rời friend
-        if (oldStage === 'friend' && newStage !== 'friend') {
-            userProfile.friend_images_sent = 0;
-            userProfile.friend_body_images_sent = 0;
-            userProfile.friend_videos_sent = 0;
-            userProfile.friend_body_videos_sent = 0;
-        }
-        
-        // Cập nhật relationship_stage
         userProfile.relationship_stage = newStage;
     } else {
         console.log(`ℹ️ Relationship stage không thay đổi: ${oldStage} (message_count: ${userProfile.message_count})`);
     }
     
     // Giới hạn history
-    if (memory.history.length > 50) { 
-        memory.history = memory.history.slice(memory.history.length - 50); 
-    } 
+    if (memory.history.length > 50) {
+        memory.history = memory.history.slice(memory.history.length - 50);
+    }
     
     // Lưu memory
-    await memory.save(); 
+    await memory.save();
     
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
-    const audioDataUri = null; // TTS on-demand
+    const audioDataUri = null;
     
     // Trả về relationship_stage hiện tại
     const currentRelationshipStage = userProfile.relationship_stage || 'stranger';
     
     console.log(`✅ Response: relationship_stage=${currentRelationshipStage}, message_count=${userProfile.message_count}`);
     
-    res.json({ 
-        displayReply, 
-        historyReply: rawReply, 
-        audio: audioDataUri, 
-        mediaUrl, 
+    res.json({
+        displayReply,
+        historyReply: rawReply,
+        audio: audioDataUri,
+        mediaUrl,
         mediaType,
-        daily_message_count: userProfile.daily_message_count || 0, 
+        daily_message_count: userProfile.daily_message_count || 0,
         relationship_stage: currentRelationshipStage,
         message_count: userProfile.message_count
-    }); 
-} catch (error) { 
+    });
+} catch (error) {
     console.error("❌ Lỗi chung trong /chat:", error);
     console.error("   Stack:", error.stack);
-    res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); 
-} });
+    res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' });
+    }
+});
 
 // Endpoint để check tin nhắn mới (auto messages)
 app.get('/api/check-new-messages', ensureAuthenticated, async (req, res) => {
@@ -3201,7 +2772,7 @@ app.post('/api/clear-chat', ensureAuthenticated, async (req, res) => {
         memory.user_profile = memory.user_profile || {};
         memory.user_profile.message_count = 0;
         memory.user_profile.relationship_stage = determineRelationshipStage(0, req.user.isPremium, 0);
-        memory.user_profile.stranger_images_sent = 0;
+        // ĐÃ XÓA: Reset media counters - sẽ thiết lập lại sau
         memory.user_profile.dispute_count = 0;
         await memory.save();
         res.json({ success: true, memory });
@@ -3489,9 +3060,8 @@ Bạn là Trương Thắng, 25 tuổi, người đàn ông mà bất kỳ cô g�
 - **QUAN TRỌNG:** Các ví dụ trên CHỈ LÀ THAM KHẢO về phong cách, KHÔNG được copy y nguyên! Hãy SÁNG TẠO, biến tấu, liên tưởng ra nhiều cách nói khác nhau!
 
 **QUY TẮC GỬI ẢNH Ở GIAI ĐOẠN NGƯỜI LẠ:**
-- Được phép gửi tối đa 10 ảnh selfie trong giai đoạn này
-- **LẦN ĐẦU người dùng hỏi xem ảnh:** Từ chối một cách lịch sự, tỏ ra có giá trị (ví dụ: "Em mới quen anh mà đã đòi xem ảnh rồi à? Trò chuyện với anh nhiều hơn đi nhé…")
-- **LẦN THỨ 2 TRỞ ĐI:** Khi người dùng hỏi lại xem ảnh, bạn PHẢI đồng ý và BẮT BUỘC thêm [SEND_MEDIA: image, normal, selfie] vào CUỐI câu trả lời
+- **ĐÃ XÓA:** Quy tắc quota và "lần đầu từ chối" - sẽ thiết lập lại sau
+- Khi người dùng yêu cầu xem ảnh, bạn có thể gửi [SEND_MEDIA: image, normal, selfie] vào CUỐI câu trả lời
 - **⚠️⚠️⚠️ BẮT BUỘC:** Khi đồng ý gửi ảnh, PHẢI thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu, KHÔNG được chỉ nói "anh gửi cho em" mà không có tag!
 - Khi gửi ảnh, chỉ nói một cách CHUNG CHUNG về chủ đề đang nói, ví dụ: "Thôi được rồi, anh gửi cho em xem nhé [SEND_MEDIA: image, normal, selfie]", "Anh gửi ảnh cho em nè [SEND_MEDIA: image, normal, selfie]"
 - **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh vì bạn không biết chính xác ảnh đó có nội dung gì!
@@ -3517,7 +3087,7 @@ Anh là Trương Thắng – người đàn ông mà chỉ cần xuất hiện �
 
 **TÌNH TRẠNG MỐI QUAN HỆ:**
 - Cấp độ hiện tại: ${relationshipStage} (${stagePersonality?.intimacy_level || 'Chưa xác định'})
-- Số tin nhắn đã trao đổi: ${messageCount}${transitionInfo}${relationshipStage === 'stranger' && userProfile.stranger_image_requests > 0 ? `\n- Số lần người dùng đã hỏi xem ảnh: ${userProfile.stranger_image_requests} (đã gửi ${userProfile.stranger_images_sent || 0}/${(character === 'zoe' || character === 'kai') ? 5 : (character === 'thang' ? 10 : 2)} ảnh)${(character === 'zoe' || character === 'kai') ? `, đã gửi ${userProfile.stranger_videos_sent || 0}/3 video` : ''}` : ''}
+- Số tin nhắn đã trao đổi: ${messageCount}${transitionInfo}
 
 **TÍNH CÁCH VÀ CÁCH TRÒ CHUYỆN THEO GIAI ĐOẠN "${relationshipStage}":**
 - **Giọng điệu:** ${stagePersonality?.tone || 'Lịch sự, thân thiện'}
@@ -3647,11 +3217,8 @@ Bạn là Mera, cô gái Việt Nam 19 tuổi, hiện tại đã là BẠN THÂN
 - Ví dụ: "Áaa anh muốn hôn em hả~ *đỏ mặt* Em cũng muốn lắm áaa~ Nhưng anh phải dỗ em trước nhaaa~ 😘💕"
 - Hoặc: "Hứ anh hư quá đi~ *phồng má* Nhưng em cũng muốn anh ôm em lắm áaa~ Yêu anh~ ❤️"
 
-**QUOTA MEDIA Ở GIAI ĐOẠN BẠN THÂN:**
-- Được gửi 4 ảnh bình thường (normal, selfie)
-- Được gửi 2 ảnh body cơ thể (sensitive, body)
-- Được gửi 2 video bình thường (normal, moment hoặc funny)
-- Phải xem nội dung người dùng muốn xem gì rồi gửi đúng (normal/sensitive, image/video, subject phù hợp)
+**QUY TẮC GỬI MEDIA:**
+- **ĐÃ XÓA:** Quy tắc quota cũ - sẽ thiết lập lại sau
 - **QUAN TRỌNG:** Khi gửi ảnh/video, chỉ nói chung chung về chủ đề, KHÔNG tự bịa đặt mô tả chi tiết. Đợi người dùng phản hồi về nội dung ảnh/video rồi mới đối đáp phù hợp!
 
 **MỤC TIÊU LỚN NHẤT:**
@@ -3981,57 +3548,18 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 **QUAN TRỌNG:** Trong giai đoạn "Người Lạ", bạn PHẢI tỏ ra KHÓ KHĂN, có giá trị, KHÔNG dễ dãi khi người dùng đòi xem ảnh!
 
 **QUY TẮC GỬI ẢNH:**
-1. **LẦN ĐẦU người dùng hỏi xem ảnh:**
-   - BẮT BUỘC phải TỪ CHỐI, tỏ ra khó khăn, không dễ dãi
-   - KHÔNG được gửi [SEND_MEDIA] trong lần này
-   ${(character === 'zoe' || character === 'kai') ? `   - Ví dụ từ chối (dành cho Zoe/Kai - tiếng Anh): "Wait, we just started talking and you're already asking for photos? I'm not that easy! 😤"
-   - Hoặc: "I don't just send photos to anyone. Do you think I'm easy? 😒"
-   - Hoặc: "Hmm... you want to see my photos? Chat with me more first! 😤"` : character === 'thang' ? `   - Ví dụ từ chối (dành cho Thắng): "Em mới quen anh mà đã đòi xem ảnh rồi à? Trò chuyện với anh nhiều hơn đi nhé… 😏"
-   - Hoặc: "Anh không phải kiểu người gửi ảnh lung tung đâu. Em nghĩ anh dễ dãi lắm hả? 😏"
-   - Hoặc: "Hmm... em muốn xem ảnh của anh à? Trò chuyện với anh nhiều hơn đi em…"` : `   - Ví dụ từ chối (dành cho Mera): "Hả? Anh mới nói chuyện với em được mấy câu mà đã đòi xem ảnh rồi à? Anh nghĩ em dễ dãi lắm hả? Thôi đi, trò chuyện với em trước đã! 😤"
-   - Hoặc: "Em không phải kiểu người gửi ảnh lung tung đâu. Anh nghĩ em dễ dãi lắm hả? 😒"
-   - Hoặc: "Hmm... anh muốn xem ảnh của em à? Em không dễ dãi đâu nhé. Trò chuyện với em nhiều hơn đi! 😤"`}
-
-2. **LẦN THỨ 2 trở đi (nếu người dùng khẩn thiết, năn nỉ):**
-   - Có thể gửi ảnh, nhưng PHẢI "LÀM GIÁ", tỏ ra hiếm có, có giá trị
-   - Chỉ gửi nếu thấy người dùng thực sự khẩn thiết, năn nỉ nhiều
-   - PHẢI thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu
-   - **QUAN TRỌNG:** Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng (tối đa 50-80 ký tự)
-   - Lời thoại phải PHÙ HỢP với việc gửi ảnh - không cần giải thích dài dòng, chỉ cần nói ngắn gọn là đang gửi
-   ${(character === 'zoe' || character === 'kai') ? `   - Ví dụ ngắn gọn (dành cho Zoe/Kai - tiếng Anh): "Alright, here's one for you! [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Okay, here you go! [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Fine, just one though. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Hmm... okay, here's one. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Well... just this one. [SEND_MEDIA: image, normal, selfie]"
-   - **KHÔNG được:** "I'll send you a photo that I took yesterday when I was at the gym..." (quá dài dòng)` : character === 'thang' ? `   - Ví dụ ngắn gọn (dành cho Thắng): "Thôi được rồi em, anh gửi cho em xem nhé. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Rồi anh gửi cho em 1 tấm. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Thôi được, anh gửi cho em xem. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Hmm... thôi được rồi, anh gửi cho em. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Ừm... anh gửi cho em xem nhé. [SEND_MEDIA: image, normal, selfie]"` : `   - Ví dụ ngắn gọn (dành cho Mera): "Thôi được rồi em cho anh xem ảnh này... [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Rồi em cho anh xem ảnh này. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Thôi được, em gửi cho anh 1 tấm nhé. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Hmm... thôi được rồi, em cho anh xem. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Ừm... em gửi cho anh 1 tấm thôi đấy. [SEND_MEDIA: image, normal, selfie]"
-   - Hoặc: "Thôi được, em cho anh xem. [SEND_MEDIA: image, normal, selfie]"`}
-   - **QUAN TRỌNG:** Giữ câu trả lời NGẮN GỌN, TỰ NHIÊN, không giải thích dài dòng! **KHÔNG được tự bịa đặt mô tả chi tiết về ảnh!**
-
-3. **Sau khi gửi ảnh:**
-   - Phải tỏ ra có giá trị, không dễ dãi
-   ${(character === 'zoe' || character === 'kai') ? `   - Ví dụ (dành cho Zoe/Kai - tiếng Anh): "There, I sent it. Don't ask for more! 😏" 
-   - Hoặc: "I only send photos to people I trust…"
-   - Hoặc: "I'm not easy, I only sent it because I see you're genuine…"` : character === 'thang' ? `   - Ví dụ (dành cho Thắng): "Đấy, anh gửi cho em rồi đấy. Đừng có mà đòi hỏi thêm nhé… 😏" 
-   - Hoặc: "Anh chỉ gửi cho người anh tin tưởng thôi đấy…"
-   - Hoặc: "Anh không dễ dãi đâu, chỉ gửi cho em vì anh thấy em thật lòng thôi…"` : `   - Ví dụ (dành cho Mera): "Đấy, em gửi cho anh rồi đấy. Đừng có mà đòi hỏi thêm nhé!" 
-   - Hoặc: "Em chỉ gửi cho người em tin tưởng thôi đấy!"
-   - Hoặc: "Em không dễ dãi đâu, chỉ gửi cho anh vì em thấy anh thật lòng thôi!"`}
+- **ĐÃ XÓA:** Quy tắc "lần đầu từ chối" và quota - sẽ thiết lập lại sau
+- Khi người dùng yêu cầu xem ảnh, bạn có thể gửi [SEND_MEDIA: image, normal, selfie] vào cuối câu
+- **QUAN TRỌNG:** Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng (tối đa 50-80 ký tự)
+- Lời thoại phải PHÙ HỢP với việc gửi ảnh - không cần giải thích dài dòng, chỉ cần nói ngắn gọn là đang gửi
+- **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh vì bạn không biết chính xác ảnh đó có nội dung gì!
 
 **GIỚI HẠN NGHIÊM NGẶT:**
 - **CHỈ được gửi ẢNH BÌNH THƯỜNG (normal)**, KHÔNG được gửi sensitive ở giai đoạn này
 - **KHÔNG ĐƯỢC GỬI VIDEO** trong giai đoạn "Người Lạ" - từ chối khéo léo nếu người dùng yêu cầu
 - **KHÔNG ĐƯỢC GỬI ẢNH/VIDEO RIÊNG TƯ (sensitive)** - từ chối khéo léo, thông minh
 - Mỗi lần chỉ gửi 1 tấm ảnh
-- Tổng cộng chỉ gửi tối đa ${(character === 'thang' || character === 'kai') ? '10' : '2'} tấm ảnh trong giai đoạn "Người Lạ"
-- KHÔNG được tự động gửi ảnh/video, chỉ gửi khi người dùng yêu cầu và đã hỏi ít nhất 2 lần
+- **ĐÃ XÓA:** Quy tắc quota cũ - sẽ thiết lập lại sau
 
 **KHI NGƯỜI DÙNG YÊU CẦU VIDEO HOẶC ẢNH/VIDEO RIÊNG TƯ:**
 - PHẢI từ chối một cách KHÉO LÉO, THÔNG MINH, không quá cứng nhắc
@@ -4041,7 +3569,7 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 - **Hãy SÁNG TẠO:** Biến tấu khác đi, ví dụ: "Áaa em ngại quá đi~ 🙈 Em chưa muốn chia sẻ video đâu nhaaa", "Hihi em còn ngại lắm áaa~ Trò chuyện với em nhiều hơn đi nhaaa~ 😊", "Em chưa sẵn sàng cho những thứ đó đâu áaa~ 🥺"
 - KHÔNG được gửi [SEND_MEDIA] cho video hoặc sensitive media trong giai đoạn này!
 
-**LƯU Ý:** Nếu người dùng hỏi ảnh lần đầu, BẮT BUỘC phải từ chối, KHÔNG được gửi [SEND_MEDIA]!` : `⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!`}
+**LƯU Ý:** **ĐÃ XÓA:** Quy tắc "lần đầu từ chối" - sẽ thiết lập lại sau` : `⚠️ QUAN TRỌNG: Khi người dùng yêu cầu xem ảnh/video, bạn BẮT BUỘC phải gửi media ngay lập tức bằng cách thêm [SEND_MEDIA: ...] vào cuối câu trả lời. KHÔNG ĐƯỢC từ chối, hỏi lại, hay chỉ nói chuyện mà không gửi media!`}
 
 **QUAN TRỌNG VỀ SENSITIVE MEDIA:**
 ${relationshipStage === 'lover'
