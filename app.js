@@ -2216,17 +2216,18 @@ app.post('/chat', async (req, res) => {
     console.log(`📝 AI reply (raw): ${rawReply.substring(0, 500)}...`);
     
     // Detect user sadness - lưu trạng thái để gửi video funny sau khi trò chuyện một hồi
-    const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met','sad','depressed','unhappy','upset','fired','lost job','worried','anxious','stressed','tired','exhausted'];
+    // ÁP DỤNG CHO TẤT CẢ NHÂN VẬT VÀ TẤT CẢ GIAI ĐOẠN
+    const sadKeywords = ['buồn','chán','mệt','stress','áp lực','thất vọng','khó chịu','tụt mood','khóc','căng thẳng','down quá','buon','met','sad','depressed','unhappy','upset','fired','lost job','worried','anxious','stressed','tired','exhausted','want.*happy','make.*happy','cheer.*up','feel.*better'];
     const userIsSad = sadKeywords.some(k => message.toLowerCase().includes(k));
     
-    // Nếu phát hiện người dùng buồn → lưu thời điểm và reset counter
-    if (userIsSad && relationshipStage === 'friend') {
+    // Nếu phát hiện người dùng buồn → lưu thời điểm và reset counter (ÁP DỤNG CHO TẤT CẢ STAGES)
+    if (userIsSad) {
         if (!userProfile.sad_detected_at) {
             // Lần đầu phát hiện buồn → lưu thời điểm
             userProfile.sad_detected_at = new Date();
             userProfile.messages_since_sad = 0;
             userProfile.funny_video_sent_for_sad = false;
-            console.log(`😢 Phát hiện người dùng buồn, lưu trạng thái để gửi video funny sau khi trò chuyện một hồi`);
+            console.log(`😢 Phát hiện người dùng buồn (stage: ${relationshipStage}), lưu trạng thái để gửi video funny sau khi trò chuyện một hồi`);
         }
     } else if (!userIsSad && userProfile.sad_detected_at) {
         // Người dùng không còn buồn → reset trạng thái
@@ -2236,20 +2237,44 @@ app.post('/chat', async (req, res) => {
     }
     
     // Nếu đã phát hiện buồn trước đó → tăng counter và kiểm tra xem có nên gửi video không
-    if (userProfile.sad_detected_at && relationshipStage === 'friend' && !userProfile.funny_video_sent_for_sad) {
+    // ÁP DỤNG CHO TẤT CẢ STAGES VÀ TẤT CẢ NHÂN VẬT
+    if (userProfile.sad_detected_at && !userProfile.funny_video_sent_for_sad) {
         userProfile.messages_since_sad = (userProfile.messages_since_sad || 0) + 1;
         const messagesSinceSad = userProfile.messages_since_sad;
         
         // Sau khi trò chuyện 2-3 tin nhắn → chủ động gửi video funny
-        // Zoe/Kai: 4 video, Thắng: 6 video, Mera: 2 video
-        const maxFriendVideosForSad = (character === 'zoe' || character === 'kai') ? 4 : ((character === 'thang') ? 6 : 2);
+        // Tính quota video phù hợp cho từng stage
+        let maxVideosForSad = 0;
+        let videosSent = 0;
         
-        if (messagesSinceSad >= 2 && messagesSinceSad <= 4 && (userProfile.friend_videos_sent || 0) < maxFriendVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
+        if (relationshipStage === 'stranger') {
+            // Stranger: Zoe/Kai có 3 video normal, Mera/Thắng không có video
+            if (character === 'zoe' || character === 'kai') {
+                maxVideosForSad = 3;
+                videosSent = userProfile.stranger_videos_sent || 0;
+            } else {
+                // Mera/Thắng không có video ở stranger stage → không gửi
+                maxVideosForSad = 0;
+            }
+        } else if (relationshipStage === 'friend') {
+            // Friend: Zoe/Kai: 4 video, Thắng: 6 video, Mera: 2 video
+            maxVideosForSad = (character === 'zoe' || character === 'kai') ? 4 : ((character === 'thang') ? 6 : 2);
+            videosSent = userProfile.friend_videos_sent || 0;
+        } else if (relationshipStage === 'lover') {
+            // Lover: Không giới hạn (set số lớn để luôn cho phép)
+            maxVideosForSad = 999;
+            videosSent = 0; // Không cần check quota ở lover stage
+        }
+        
+        // Chủ động gửi video funny sau 2-4 tin nhắn trò chuyện
+        if (messagesSinceSad >= 2 && messagesSinceSad <= 4 && videosSent < maxVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
             // Chủ động gửi video funny để làm người dùng vui hơn
-            console.log(`😊 Người dùng đã buồn, sau ${messagesSinceSad} tin nhắn → chủ động gửi video funny để làm vui`);
+            console.log(`😊 Người dùng đã buồn (stage: ${relationshipStage}), sau ${messagesSinceSad} tin nhắn → chủ động gửi video funny để làm vui`);
             const funnyVideoMessage = (character === 'zoe' || character === 'kai') 
                 ? "Here's something to cheer you up! [SEND_MEDIA: video, normal, funny]"
-                : "Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]";
+                : (character === 'thang')
+                    ? "Gửi em đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]"
+                    : "Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]";
             rawReply = `${rawReply} <NEXT_MESSAGE> ${funnyVideoMessage}`;
             userProfile.funny_video_sent_for_sad = true; // Đánh dấu đã gửi để không spam
         }
