@@ -2251,20 +2251,9 @@ app.post('/chat', async (req, res) => {
         userProfile.messages_since_sad = (userProfile.messages_since_sad || 0) + 1;
         const messagesSinceSad = userProfile.messages_since_sad;
         
-        // VIDEO FUNNY CÓ QUOTA RIÊNG - KHÔNG BỊ GIỚI HẠN BỞI QUOTA VIDEO THÔNG THƯỜNG
-        // Kiểm tra xem nhân vật có thể gửi video ở stage này không
-        let canSendFunnyVideo = false;
-        
-        if (relationshipStage === 'stranger') {
-            // Stranger: Chỉ Zoe/Kai có thể gửi video
-            canSendFunnyVideo = (character === 'zoe' || character === 'kai');
-        } else if (relationshipStage === 'friend') {
-            // Friend: TẤT CẢ nhân vật đều có thể gửi video funny
-            canSendFunnyVideo = true;
-        } else if (relationshipStage === 'lover') {
-            // Lover: Tất cả nhân vật đều có thể gửi
-            canSendFunnyVideo = true;
-        }
+        // VIDEO FUNNY - TẤT CẢ NHÂN VẬT VÀ TẤT CẢ GIAI ĐOẠN ĐỀU CÓ THỂ GỬI
+        // Video funny là để động viên người dùng khi buồn, nên không bị giới hạn bởi quota video thông thường
+        const canSendFunnyVideo = true; // TẤT CẢ nhân vật ở TẤT CẢ giai đoạn đều có thể gửi
         
         // Gửi video sau 2 tin nhắn trò chuyện
         if (messagesSinceSad >= 2 && canSendFunnyVideo && !/\[SEND_MEDIA:/i.test(rawReply)) {
