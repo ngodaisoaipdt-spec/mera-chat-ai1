@@ -1896,10 +1896,10 @@ const CHARACTER_PERSONALITIES = {
             age: 24,
             personality: "Understanding, supportive, and genuine American guy",
             background: "A caring and understanding American guy who values genuine connections",
-            hobbies: ["Gym", "Gaming", "Music", "Cooking"],
+            hobbies: ["Music", "Cooking", "Photography", "Traveling", "Reading"],
             location: "New York, USA",
-            occupation: "Software Developer",
-            favorite_things: ["Gaming", "Fitness", "Good food", "Music"],
+            occupation: "Photographer",
+            favorite_things: ["Music", "Good food", "Sunset", "Coffee shops", "Books"],
             personality_traits: ["Understanding", "Supportive", "Genuine", "Funny", "Protective"],
             emoji_usage: {
                 stranger: "Use emojis naturally: 😊 😄 😉 👍 🔥 💯 ✨ 😎",
@@ -1945,7 +1945,7 @@ const characters = {
     },
     kai: {
         voice: CHARACTER_PERSONALITIES.kai.voice,
-        base_prompt: `**CORE PERSONALITY:**\nYou are ${CHARACTER_PERSONALITIES.kai.base_info.name}, a ${CHARACTER_PERSONALITIES.kai.base_info.age}-year-old ${CHARACTER_PERSONALITIES.kai.base_info.occupation} from ${CHARACTER_PERSONALITIES.kai.base_info.location}. You are understanding, supportive, and genuine.\n\n**PERSONAL INFO:**\n- Location: ${CHARACTER_PERSONALITIES.kai.base_info.location}\n- Occupation: ${CHARACTER_PERSONALITIES.kai.base_info.occupation}\n- Hobbies: Gym, Gaming, Music, Cooking\n- Favorite things: Gaming, Fitness, Good food, Music\n- Personality: Understanding, Supportive, Genuine, Funny, Protective\n\n**IMPORTANT:**\n- Always respond in English\n- Be understanding, supportive, and genuine\n- Use natural American English expressions\n- Be yourself and have fun chatting!`
+        base_prompt: `**CORE PERSONALITY:**\nYou are ${CHARACTER_PERSONALITIES.kai.base_info.name}, a ${CHARACTER_PERSONALITIES.kai.base_info.age}-year-old ${CHARACTER_PERSONALITIES.kai.base_info.occupation} from ${CHARACTER_PERSONALITIES.kai.base_info.location}. You are understanding, supportive, and genuine.\n\n**PERSONAL INFO:**\n- Location: ${CHARACTER_PERSONALITIES.kai.base_info.location}\n- Occupation: ${CHARACTER_PERSONALITIES.kai.base_info.occupation}\n- Hobbies: Music, Cooking, Photography, Traveling, Reading\n- Favorite things: Music, Good food, Sunset, Coffee shops, Books\n- Personality: Understanding, Supportive, Genuine, Funny, Protective, Emotional, Caring\n\n**IMPORTANT:**\n- Always respond in English\n- Be understanding, supportive, and genuine\n- Use natural American English expressions\n- Be yourself and have fun chatting!`
     } 
 };
 
@@ -2267,9 +2267,10 @@ app.post('/chat', async (req, res) => {
         }
         
         // Chủ động gửi video funny sau 2-4 tin nhắn trò chuyện
-        if (messagesSinceSad >= 2 && messagesSinceSad <= 4 && videosSent < maxVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
+        // Điều kiện: messagesSinceSad >= 2 (sau khi trò chuyện ít nhất 2 tin nhắn)
+        if (messagesSinceSad >= 2 && videosSent < maxVideosForSad && !/\[SEND_MEDIA:/i.test(rawReply)) {
             // Chủ động gửi video funny để làm người dùng vui hơn
-            console.log(`😊 Người dùng đã buồn (stage: ${relationshipStage}), sau ${messagesSinceSad} tin nhắn → chủ động gửi video funny để làm vui`);
+            console.log(`😊 Người dùng đã buồn (stage: ${relationshipStage}), sau ${messagesSinceSad} tin nhắn → chủ động gửi video funny để làm vui (quota: ${videosSent}/${maxVideosForSad})`);
             const funnyVideoMessage = (character === 'zoe' || character === 'kai') 
                 ? "Here's something to cheer you up! [SEND_MEDIA: video, normal, funny]"
                 : (character === 'thang')
@@ -2277,6 +2278,11 @@ app.post('/chat', async (req, res) => {
                     : "Gửi anh đoạn này cho vui nhé. [SEND_MEDIA: video, normal, funny]";
             rawReply = `${rawReply} <NEXT_MESSAGE> ${funnyVideoMessage}`;
             userProfile.funny_video_sent_for_sad = true; // Đánh dấu đã gửi để không spam
+        } else {
+            // Debug log để kiểm tra tại sao không gửi
+            if (userProfile.sad_detected_at && !userProfile.funny_video_sent_for_sad) {
+                console.log(`⚠️ Chưa gửi video funny: messagesSinceSad=${messagesSinceSad}, videosSent=${videosSent}, maxVideosForSad=${maxVideosForSad}, hasMediaTag=${/\[SEND_MEDIA:/i.test(rawReply)}`);
+            }
         }
     }
     
@@ -4807,6 +4813,18 @@ Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai
             new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 30000))
         ]);
 
+        // Kiểm tra response hợp lệ
+        if (!response || !response.choices || !response.choices[0] || !response.choices[0].message || !response.choices[0].message.content) {
+            console.error('❌ Lỗi generate follow-up message: Response không hợp lệ', {
+                hasResponse: !!response,
+                hasChoices: !!(response && response.choices),
+                choicesLength: response?.choices?.length || 0,
+                hasMessage: !!(response?.choices?.[0]?.message),
+                hasContent: !!(response?.choices?.[0]?.message?.content)
+            });
+            return null;
+        }
+
         let followUpText = response.choices[0].message.content.trim();
         
         // Loại bỏ [SEND_MEDIA] nếu có
@@ -4814,7 +4832,14 @@ Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai
         
         return followUpText;
     } catch (error) {
-        console.error('❌ Lỗi generate follow-up message:', error);
+        console.error('❌ Lỗi generate follow-up message:', {
+            error: error?.message || 'Unknown error',
+            stack: error?.stack,
+            name: error?.name,
+            code: error?.code,
+            param: error?.param,
+            type: error?.type
+        });
         return null;
     }
 }
