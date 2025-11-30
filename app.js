@@ -2350,9 +2350,10 @@ app.post('/chat', async (req, res) => {
             userProfile.sad_detected_at = new Date();
             userProfile.sad_message_count = 1;
             userProfile.funny_video_sent_for_sad = false;
-            console.log(`😢 [FUNNY VIDEO] Phát hiện chủ đề buồn - stage: ${relationshipStage}, character: ${character}`);
+            console.log(`😢 [FUNNY VIDEO] Phát hiện chủ đề buồn - stage: ${relationshipStage}, character: ${character}, count: 1`);
         } else {
             userProfile.sad_message_count = (userProfile.sad_message_count || 0) + 1;
+            console.log(`😢 [FUNNY VIDEO] Tiếp tục chủ đề buồn - count: ${userProfile.sad_message_count}/${FUNNY_VIDEO_CONFIG.sadMessageCount}`);
         }
     } else {
         // Nếu không còn buồn, reset sau một thời gian
@@ -2375,7 +2376,10 @@ app.post('/chat', async (req, res) => {
     
     // 4. Logic video funny - Tất cả giai đoạn
     if (userProfile.sad_detected_at && !userProfile.funny_video_sent_for_sad) {
-        if (userProfile.sad_message_count >= FUNNY_VIDEO_CONFIG.sadMessageCount) {
+        const currentCount = userProfile.sad_message_count || 0;
+        console.log(`😊 [FUNNY VIDEO] Check: sad_detected_at=${!!userProfile.sad_detected_at}, count=${currentCount}/${FUNNY_VIDEO_CONFIG.sadMessageCount}, sent=${userProfile.funny_video_sent_for_sad}`);
+        
+        if (currentCount >= FUNNY_VIDEO_CONFIG.sadMessageCount) {
             // Gửi video funny
             if (!/\[SEND_MEDIA:/i.test(rawReply)) {
                 const funnyVideoText = (character === 'zoe' || character === 'kai') 
@@ -2386,7 +2390,9 @@ app.post('/chat', async (req, res) => {
                 
                 rawReply = `${rawReply} ${funnyVideoText} [SEND_MEDIA: video, normal, funny]`;
                 userProfile.funny_video_sent_for_sad = true;
-                console.log(`😊 [FUNNY VIDEO] ✅ GỬI VIDEO FUNNY - stage: ${relationshipStage}, character: ${character}`);
+                console.log(`😊 [FUNNY VIDEO] ✅ GỬI VIDEO FUNNY - stage: ${relationshipStage}, character: ${character}, count: ${currentCount}`);
+            } else {
+                console.log(`😊 [FUNNY VIDEO] ⚠️ Đã có [SEND_MEDIA] tag khác, bỏ qua video funny`);
             }
         }
     }
@@ -4250,12 +4256,15 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
         else if (character === 'kai') charName = 'Kai';
         
         // Lấy nội dung cuộc trò chuyện gần nhất để tạo context
-        // Không escape ở đây vì chỉ dùng để hiển thị trong prompt
+        // Làm sạch content để tránh ký tự đặc biệt gây lỗi JSON parsing
         const recentContext = conversationHistory.slice(-5).map(msg => {
+            const content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
+            // Loại bỏ các ký tự control và làm sạch
+            const cleanContent = content.replace(/[\x00-\x1F\x7F-\x9F]/g, '').substring(0, 100);
             if (msg.role === 'user') {
-                return `User: ${msg.content}`;
+                return `User: ${cleanContent}`;
             } else {
-                return `${charName}: ${msg.content.substring(0, 100)}`;
+                return `${charName}: ${cleanContent}`;
             }
         }).join('\n');
         
@@ -4340,15 +4349,16 @@ Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up
 
 Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai đoạn quan hệ và nội dung cuộc trò chuyện:`;
 
-        // Thay thế placeholder bằng userMessage (đã được escape an toàn bằng JSON.stringify)
-        // Sử dụng JSON.stringify để escape đúng cách, sau đó bỏ dấu ngoặc kép
-        const safeUserMessage = JSON.stringify(userMessage).slice(1, -1);
+        // Thay thế placeholder bằng userMessage - KHÔNG escape thủ công, để OpenAI SDK tự xử lý
+        // Chỉ đảm bảo userMessage là string hợp lệ
+        const safeUserMessage = typeof userMessage === 'string' ? userMessage : String(userMessage || '');
         const finalPrompt = followUpPrompt.replace(new RegExp(userMessagePlaceholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), safeUserMessage);
         
         // Tạo messages array - OpenAI SDK sẽ tự xử lý JSON serialization
+        // KHÔNG escape thủ công vì SDK sẽ tự làm điều này
         const systemMessage = { role: 'system', content: finalPrompt };
         
-        // Không cần escape vì OpenAI SDK sẽ tự xử lý JSON serialization
+        // Không escape - để OpenAI SDK tự xử lý
         const escapedHistory = conversationHistory.slice(-10).map(msg => ({
             role: msg.role,
             content: typeof msg.content === 'string' ? msg.content : String(msg.content || '')
