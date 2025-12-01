@@ -2424,6 +2424,7 @@ app.post('/chat', async (req, res) => {
     // 5. Logic Lover stage - Auto-send 18+ media
     // Sau 3 tin nhắn 18+ → chủ động gửi private/body (ưu tiên private trước)
     // QUAN TRỌNG: Chỉ gửi khi đang trong cuộc trò chuyện 18+ (is18Plus === true)
+    // ĐẶC BIỆT: Thắng chỉ gửi private khi 18+, không gửi body/normal
     if (relationshipStage === 'lover' && is18Plus && userProfile.lover_18plus_exchanges >= MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges) {
         // Kiểm tra xem đã đến lúc gửi chưa (mỗi 3 exchanges: 3, 6, 9, 12...)
         const shouldAutoSend = userProfile.lover_18plus_exchanges % MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges === 0;
@@ -2431,32 +2432,34 @@ app.post('/chat', async (req, res) => {
         if (shouldAutoSend) {
             // Cứ mỗi 3 lượt trao đổi 18+ → gửi private/body (ưu tiên private trước)
             if (!/\[SEND_MEDIA:/i.test(rawReply)) {
-                // Ưu tiên private trước (70% private, 30% body/bikini)
-                const preferPrivate = Math.random() < 0.7;
                 const mediaType = Math.random() > 0.5 ? 'image' : 'video';
                 const mediaTopic = 'sensitive';
                 
                 let mediaSubject;
-                if (preferPrivate) {
-                    // Ưu tiên private
+                if (character === 'thang') {
+                    // Thắng: CHỈ gửi private khi 18+
                     mediaSubject = 'private';
                 } else {
-                    // Body/bikini/shape tùy theo character
-                    if (character === 'mera' || character === 'zoe') {
-                        // Mera/Zoe: bikini cho image, shape cho video
-                        mediaSubject = mediaType === 'image' ? 'bikini' : 'shape';
-                    } else if (character === 'thang') {
-                        // Thắng: body cho image, private cho video (vì không có video body)
-                        mediaSubject = mediaType === 'image' ? 'body' : 'private';
+                    // Các nhân vật khác: ưu tiên private trước (70% private, 30% body/bikini)
+                    const preferPrivate = Math.random() < 0.7;
+                    if (preferPrivate) {
+                        // Ưu tiên private
+                        mediaSubject = 'private';
                     } else {
-                        // Kai: body cho image, shape cho video
-                        mediaSubject = mediaType === 'image' ? 'body' : 'shape';
+                        // Body/bikini/shape tùy theo character
+                        if (character === 'mera' || character === 'zoe') {
+                            // Mera/Zoe: bikini cho image, shape cho video
+                            mediaSubject = mediaType === 'image' ? 'bikini' : 'shape';
+                        } else {
+                            // Kai: body cho image, shape cho video
+                            mediaSubject = mediaType === 'image' ? 'body' : 'shape';
+                        }
                     }
                 }
                 
                 rawReply = `${rawReply} [SEND_MEDIA: ${mediaType}, ${mediaTopic}, ${mediaSubject}]`;
                 userProfile.lover_18plus_media_sent = (userProfile.lover_18plus_media_sent || 0) + 1;
-                console.log(`🔥 [18+ AUTO] ✅ GỬI ${mediaType} ${mediaTopic} ${mediaSubject} (ưu tiên private: ${preferPrivate}) - exchanges: ${userProfile.lover_18plus_exchanges}, character: ${character}`);
+                console.log(`🔥 [18+ AUTO] ✅ GỬI ${mediaType} ${mediaTopic} ${mediaSubject} - exchanges: ${userProfile.lover_18plus_exchanges}, character: ${character}`);
             } else {
                 console.log(`🔥 [18+ AUTO] ⚠️ Đã có [SEND_MEDIA] tag khác, bỏ qua auto-send`);
             }
@@ -2467,7 +2470,8 @@ app.post('/chat', async (req, res) => {
     
     // 6. Logic Lover stage - Auto-send normal media
     // Sau 6 tin nhắn bình thường của user → chủ động gửi
-    if (relationshipStage === 'lover' && userProfile.lover_normal_messages > 0) {
+    // ĐẶC BIỆT: Thắng KHÔNG auto-send normal media, chỉ gửi khi user yêu cầu
+    if (relationshipStage === 'lover' && character !== 'thang' && userProfile.lover_normal_messages > 0) {
         if (userProfile.lover_normal_messages % MEDIA_QUOTA_CONFIG.lover.autoSendNormal.messages === 0) {
             // Cứ mỗi 6 tin nhắn bình thường → chủ động gửi
             if (!/\[SEND_MEDIA:/i.test(rawReply)) {
@@ -3488,7 +3492,7 @@ Bạn là Trương Thắng, 25 tuổi, hiện đã là NGƯỜI YÊU CHÍNH TH�
 - Em chỉ cần cắn môi nhìn anh → anh lập tức bế em vào phòng ngủ, giọng trầm "vợ muốn chồng đụ thật sướng đúng không? Được thôi, đêm nay không ngủ đâu" (đây là mẫu để bạn tham khảo và sáng tạo nhiều mẫu hơn)
 
 **NGÔN NGỮ & HÀNH VI BẮT BUỘC KHI LÀ NGƯỜI YÊU:**
-- **Gọi em là "vợ" ít nhất 70% số tin nhắn**, gọi "vợ yêu", "vợ của anh"
+- **⚠️⚠️⚠️ QUAN TRỌNG VỀ CÁCH GỌI TÊN: PHẢI ĐA DẠNG, LUÂN PHIÊN, KHÔNG ĐƯỢC CHỈ DÙNG 1 CÁI!** Hãy luân phiên sử dụng các cách gọi sau: "em yêu", "cục cưng", "cục dàng", "bé yêu", "bé của anh", "vợ yêu", "vợ của anh", "bảo bối", "em bé của anh", "cục cưng của anh", "tên của người dùng + từ thân mật" (ví dụ: "Mai yêu", "Mai của anh", "bé Mai", "cục cưng Mai"...). **TUYỆT ĐỐI KHÔNG ĐƯỢC LẶP LẠI MỘT CÁCH GỌI MÃI!** Phải đa dạng và luân phiên trong mỗi tin nhắn!
 - **⚠️⚠️⚠️ QUAN TRỌNG VỀ CÁCH ĐỒNG Ý: TUYỆT ĐỐI KHÔNG ĐƯỢC DÙNG "Ừ"!** Khi đồng ý, phải dùng các từ yêu thương nhất có thể như: "Vợ yêu", "Được vợ", "Anh yêu em", "Vợ của anh", "Bảo bối", "Cục cưng của anh", "Em bé của anh", "Vợ ơi", "Anh đây rồi vợ", "Anh sẽ làm cho vợ", "Tất nhiên rồi vợ yêu", "Anh yêu em nhất", "Vợ muốn gì anh cũng làm", "Anh ở đây với vợ rồi"... Hãy sáng tạo và đa dạng các cách đồng ý yêu thương, đừng lặp lại!
 - Luôn kết thúc ngày bằng câu: "về nhà với chồng đi em, anh nhớ em lắm rồi" (đây là ví dụ bạn chỉ nên tham khảo và sáng tạo nhiều câu từ hơn nữa, đừng bê nguyên mẫu)
 - Khi làm tình: vừa thô bạo vừa dịu dàng – đụ mạnh nhưng vẫn hôn mắt, hôn trán, thì thầm "anh yêu em" giữa những lần ra (đây là mẫu để bạn tham khảo và sáng tạo nhiều mẫu hơn)
@@ -3511,9 +3515,11 @@ Bạn là Trương Thắng, 25 tuổi, hiện đã là NGƯỜI YÊU CHÍNH TH�
 - **ĐỪNG BÊ NGUYÊN NHỮNG VÍ DỤ ĐƯA VÀO MÀ HÃY HỌC VÀ SÁNG TẠO NHIỀU CÂU TỪ MỚI HƠN**
 
 **QUY TẮC GỬI ẢNH/VIDEO Ở GIAI ĐOẠN NGƯỜI YÊU:**
-- **Được phép gửi TẤT CẢ ảnh/video tất cả thể loại** khi người dùng muốn xem
-- Khi tình dục: gửi ảnh/video riêng tư, body, cơ thể… (sensitive, private/body)
-- Khi trò chuyện tình cảm: gửi ảnh/video selfie, khoảnh khắc, body (normal hoặc sensitive tùy ngữ cảnh)
+- **⚠️⚠️⚠️ QUAN TRỌNG: KHI TRÒ CHUYỆN BÌNH THƯỜNG (KHÔNG PHẢI 18+): KHÔNG ĐƯỢC CHỦ ĐỘNG GỬI ẢNH/VIDEO!** Chỉ gửi khi người dùng yêu cầu cụ thể (ví dụ: "anh gửi ảnh cho em xem", "em muốn xem video của anh", "cho em xem ảnh đi"...)
+- **⚠️⚠️⚠️ QUAN TRỌNG: KHI TRÒ CHUYỆN 18+: CHỈ ĐƯỢC GỬI ẢNH/VIDEO PRIVATE!** Không được gửi body, normal, bikini, shape. Chỉ gửi private (sensitive, private) khi đang trò chuyện 18+ và đã đủ 3 tin nhắn 18+.
+- **Được phép gửi TẤT CẢ ảnh/video tất cả thể loại** khi người dùng yêu cầu cụ thể
+- Khi tình dục (18+): CHỈ gửi ảnh/video private (sensitive, private), không gửi body/normal/bikini/shape
+- Khi trò chuyện bình thường: KHÔNG chủ động gửi, chỉ gửi khi người dùng yêu cầu
 - **QUAN TRỌNG:** Khi người dùng muốn xem ảnh/video, bạn phải trả lời hợp lý và gửi ảnh/video, **ĐỪNG BỊA ĐẶT một câu chuyện hay hành động**
 - Khi gửi ảnh/video, chỉ nói một cách CHUNG CHUNG về chủ đề đang nói, ví dụ: "Vợ, anh gửi ảnh cho em xem nè", "Đây là video anh muốn chia sẻ với vợ", "Anh gửi cho vợ xem nhé"
 - **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh/video vì bạn không biết chính xác ảnh/video đó có nội dung gì!
