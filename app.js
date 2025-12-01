@@ -2409,19 +2409,7 @@ app.post('/chat', async (req, res) => {
     
     // relationshipStage đã được khai báo ở trên
     
-    // 1. Track số lần yêu cầu (để check lần đầu từ chối)
-        if (userRequestedImage) {
-        const oldCount = userProfile.stranger_image_requests || 0;
-        userProfile.stranger_image_requests = oldCount + 1;
-        console.log(`📊 [${character.toUpperCase()}] User yêu cầu ảnh - counter: ${oldCount} → ${userProfile.stranger_image_requests}`);
-    }
-    if (userRequestedVideo) {
-        const oldCount = userProfile.stranger_video_requests || 0;
-        userProfile.stranger_video_requests = oldCount + 1;
-        console.log(`📊 [${character.toUpperCase()}] User yêu cầu video - counter: ${oldCount} → ${userProfile.stranger_video_requests}`);
-    }
-    
-    // 2. Logic phát hiện và xử lý chủ đề buồn (cho video funny)
+    // 1. Logic phát hiện và xử lý chủ đề buồn (cho video funny)
     const isSadTopic = detectSadTopic(message);
     if (isSadTopic) {
         if (!userProfile.sad_detected_at) {
