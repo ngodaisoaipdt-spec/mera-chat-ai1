@@ -3975,6 +3975,8 @@ async function createElevenLabsVoice(textToSpeak, character) {
 
 async function sendMediaFile(memory, character, mediaType, topic, subject) {
     try {
+        console.log(`📂 [${character.toUpperCase()}] sendMediaFile: type=${mediaType}, topic=${topic}, subject=${subject}`);
+        
         // Map character với folder name
         let charFolder;
         if (character === 'mera') {
@@ -4022,22 +4024,33 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
             }
         }
         
+        console.log(`📂 [${character.toUpperCase()}] Folder: ${folderPath}, Pattern: ${fileNamePattern}-XX${fileExtension}`);
+        
         // Đọc danh sách file trong folder
         let files;
         try {
             files = await fs.readdir(folderPath);
+            console.log(`📂 [${character.toUpperCase()}] Tìm thấy ${files.length} file trong folder`);
         } catch (err) {
-            console.error(`❌ Không thể đọc folder ${folderPath}:`, err.message);
-            return { success: false, message: "Không tìm thấy media" };
+            console.error(`❌ [${character.toUpperCase()}] Không thể đọc folder ${folderPath}:`, err.message);
+            return { success: false, message: `Không tìm thấy media: ${err.message}` };
         }
         
         // Lọc file theo pattern (bắt đầu với fileNamePattern và kết thúc bằng fileExtension)
-        const patternRegex = new RegExp(`^${fileNamePattern}-\\d+\\${fileExtension}$`);
+        // Escape dấu chấm trong fileExtension
+        const escapedExtension = fileExtension.replace('.', '\\.');
+        const patternRegex = new RegExp(`^${fileNamePattern}-\\d+${escapedExtension}$`);
         const matchingFiles = files.filter(file => patternRegex.test(file));
         
+        console.log(`📂 [${character.toUpperCase()}] Pattern regex: ${patternRegex}, Matching files: ${matchingFiles.length}`);
+        if (matchingFiles.length > 0) {
+            console.log(`📂 [${character.toUpperCase()}] Files: ${matchingFiles.slice(0, 5).join(', ')}${matchingFiles.length > 5 ? '...' : ''}`);
+        }
+        
         if (matchingFiles.length === 0) {
-            console.warn(`⚠️ Không tìm thấy file nào với pattern ${fileNamePattern}-XX${fileExtension} trong ${folderPath}`);
-            return { success: false, message: "Không tìm thấy media phù hợp" };
+            console.warn(`⚠️ [${character.toUpperCase()}] Không tìm thấy file nào với pattern ${fileNamePattern}-XX${fileExtension} trong ${folderPath}`);
+            console.warn(`⚠️ [${character.toUpperCase()}] Tất cả files trong folder: ${files.slice(0, 10).join(', ')}${files.length > 10 ? '...' : ''}`);
+            return { success: false, message: `Không tìm thấy media phù hợp: pattern ${fileNamePattern}-XX${fileExtension}` };
         }
         
         // Lấy danh sách file đã gửi
@@ -4078,7 +4091,8 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
             memory.user_profile.sent_video_files.push(selectedFile);
         }
         
-        console.log(`✅ Đã chọn ${mediaType}: ${selectedFile} từ ${folderPath}`);
+        console.log(`✅ [${character.toUpperCase()}] Đã chọn ${mediaType}: ${selectedFile} từ ${folderPath}`);
+        console.log(`✅ [${character.toUpperCase()}] Media URL: ${relativePath}`);
         
         return {
             success: true,
@@ -4088,8 +4102,9 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
         };
         
     } catch (error) {
-        console.error("❌ Lỗi trong sendMediaFile:", error);
-        return { success: false, message: "Lỗi khi tìm media" };
+        console.error(`❌ [${character.toUpperCase()}] Lỗi trong sendMediaFile:`, error);
+        console.error(`❌ [${character.toUpperCase()}] Stack trace:`, error.stack);
+        return { success: false, message: `Lỗi khi tìm media: ${error.message}` };
     }
 }
 
