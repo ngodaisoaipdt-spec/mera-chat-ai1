@@ -2486,7 +2486,7 @@ app.post('/chat', async (req, res) => {
     
     if (mediaMatch) {
         const [, type, topic, subject] = mediaMatch;
-        console.log(`🖼️ Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}, stage: ${relationshipStage}`);
+        console.log(`🖼️ [${character.toUpperCase()}] Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}, stage: ${relationshipStage}`);
         
         let shouldSend = true;
         let refusalReason = null;
@@ -2498,9 +2498,14 @@ app.post('/chat', async (req, res) => {
         if (!isFunnyVideo && shouldRefuseFirstRequest(type)) {
             shouldSend = false;
             refusalReason = 'first_refusal';
-            console.log(`🚫 [FIRST REFUSAL] Từ chối lần đầu - type: ${type}, stage: ${relationshipStage}`);
+            console.log(`🚫 [${character.toUpperCase()}] [FIRST REFUSAL] Từ chối lần đầu - type: ${type}, stage: ${relationshipStage}`);
             // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
             rawReply = rawReply.replace(mediaRegex, '').trim();
+            // Đảm bảo không có mediaUrl được trả về
+            mediaUrl = null;
+            mediaType = null;
+            mediaTopic = null;
+            mediaSubject = null;
         }
         
         // 2. Check quota (Stranger và Friend stage) - Bỏ qua nếu là video funny
@@ -2509,9 +2514,14 @@ app.post('/chat', async (req, res) => {
             if (!quotaCheck.allowed) {
                 shouldSend = false;
                 refusalReason = 'quota_exceeded';
-                console.log(`🚫 [QUOTA] Hết quota - type: ${type}, topic: ${topic}, subject: ${subject}, stage: ${relationshipStage}, sent: ${quotaCheck.sent}/${quotaCheck.maxQuota}`);
+                console.log(`🚫 [${character.toUpperCase()}] [QUOTA] Hết quota - type: ${type}, topic: ${topic}, subject: ${subject}, stage: ${relationshipStage}, sent: ${quotaCheck.sent}/${quotaCheck.maxQuota}`);
                 // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
                 rawReply = rawReply.replace(mediaRegex, '').trim();
+                // Đảm bảo không có mediaUrl được trả về
+                mediaUrl = null;
+                mediaType = null;
+                mediaTopic = null;
+                mediaSubject = null;
             }
         }
         
@@ -2536,15 +2546,21 @@ app.post('/chat', async (req, res) => {
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         shouldSend = false; // Đã gửi fallback, không gửi tiếp
                     } else {
+                        console.warn(`⚠️ [${character.toUpperCase()}] Không thể gửi fallback media:`, mediaResult?.message || 'Unknown error');
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         shouldSend = false;
+                        // Đảm bảo không có mediaUrl được trả về
+                        mediaUrl = null;
+                        mediaType = null;
+                        mediaTopic = null;
+                        mediaSubject = null;
                     }
                 } else if (isBodyMedia) {
                     // Body media được phép ở Friend stage, tiếp tục gửi
-                    console.log(`✅ Body media được phép ở Friend stage: ${type} ${subject}`);
+                    console.log(`✅ [${character.toUpperCase()}] Body media được phép ở Friend stage: ${type} ${subject}`);
                 } else {
                     // Các sensitive khác không được phép
-                    console.log(`🚫 Sensitive media khác bị cấm ở Friend stage. Dùng normal.`);
+                    console.log(`🚫 [${character.toUpperCase()}] Sensitive media khác bị cấm ở Friend stage. Dùng normal.`);
                     const fallbackSubject = type === 'image' ? 'selfie' : 'moment';
                     const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
                     if (mediaResult && mediaResult.success) {
@@ -2556,13 +2572,19 @@ app.post('/chat', async (req, res) => {
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         shouldSend = false; // Đã gửi fallback, không gửi tiếp
                     } else {
+                        console.warn(`⚠️ [${character.toUpperCase()}] Không thể gửi fallback media:`, mediaResult?.message || 'Unknown error');
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         shouldSend = false;
+                        // Đảm bảo không có mediaUrl được trả về
+                        mediaUrl = null;
+                        mediaType = null;
+                        mediaTopic = null;
+                        mediaSubject = null;
                     }
                 }
             } else if (relationshipStage !== 'lover' || !isPremiumUser) {
                 // Stranger stage hoặc chưa Premium: chặn tất cả sensitive
-                console.log(`🚫 Sensitive bị cấm ở stage ${relationshipStage} hoặc chưa Premium. Dùng normal.`);
+                console.log(`🚫 [${character.toUpperCase()}] Sensitive bị cấm ở stage ${relationshipStage} hoặc chưa Premium. Dùng normal.`);
                 const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
                 const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
                 if (mediaResult && mediaResult.success) {
@@ -2573,15 +2595,23 @@ app.post('/chat', async (req, res) => {
                     memory.user_profile = mediaResult.updatedMemory.user_profile;
                     rawReply = rawReply.replace(mediaRegex, '').trim();
                     shouldSend = false; // Đã gửi fallback, không gửi tiếp
+                    console.log(`✅ [${character.toUpperCase()}] Đã gửi fallback normal media: ${mediaUrl}`);
                 } else {
+                    console.warn(`⚠️ [${character.toUpperCase()}] Không thể gửi fallback media:`, mediaResult?.message || 'Unknown error');
                     rawReply = rawReply.replace(mediaRegex, '').trim();
                     shouldSend = false;
+                    // Đảm bảo không có mediaUrl được trả về
+                    mediaUrl = null;
+                    mediaType = null;
+                    mediaTopic = null;
+                    mediaSubject = null;
                 }
             }
         }
         
         if (shouldSend) {
             // Gửi media bình thường
+            console.log(`📤 [${character.toUpperCase()}] Đang gửi media: type=${type}, topic=${topic}, subject=${subject}`);
             const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
             if (mediaResult && mediaResult.success) {
                 mediaUrl = mediaResult.mediaUrl;
@@ -2590,11 +2620,18 @@ app.post('/chat', async (req, res) => {
                 mediaSubject = subject;
                 memory.user_profile = mediaResult.updatedMemory.user_profile;
                 rawReply = rawReply.replace(mediaRegex, '').trim();
-                console.log(`✅ Đã gửi media: ${mediaUrl} (topic: ${topic}, subject: ${subject})`);
+                console.log(`✅ [${character.toUpperCase()}] ✅ Đã gửi media thành công: ${mediaUrl} (topic: ${topic}, subject: ${subject})`);
             } else {
-                console.warn(`⚠️ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
+                console.warn(`⚠️ [${character.toUpperCase()}] ❌ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
+                // Xóa [SEND_MEDIA] tag và đảm bảo không có mediaUrl được trả về
                 rawReply = rawReply.replace(mediaRegex, '').trim();
+                mediaUrl = null;
+                mediaType = null;
+                mediaTopic = null;
+                mediaSubject = null;
             }
+        } else {
+            console.log(`🚫 [${character.toUpperCase()}] Không gửi media - reason: ${refusalReason || 'unknown'}`);
         }
     }
     
