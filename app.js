@@ -2559,6 +2559,20 @@ app.post('/chat', async (req, res) => {
             console.log(`🚫 [${character.toUpperCase()}] [FIRST REFUSAL] Từ chối lần đầu - type: ${type}, stage: ${relationshipStage}`);
             // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
             rawReply = rawReply.replace(mediaRegex, '').trim();
+            // Loại bỏ các câu nói về việc đã gửi video/ảnh (nếu AI vẫn nói)
+            if (type === 'video') {
+                const isEnglish = (character === 'zoe' || character === 'kai');
+                const sentVideoPatterns = isEnglish 
+                    ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*video/gi
+                    : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(video|vid)/gi;
+                rawReply = rawReply.replace(sentVideoPatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
+            } else if (type === 'image') {
+                const isEnglish = (character === 'zoe' || character === 'kai');
+                const sentImagePatterns = isEnglish 
+                    ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*(photo|picture|image|pic)/gi
+                    : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(ảnh|hình|photo|pic)/gi;
+                rawReply = rawReply.replace(sentImagePatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
+            }
             // Đảm bảo không có mediaUrl được trả về
             mediaUrl = null;
             mediaType = null;
@@ -2698,6 +2712,31 @@ app.post('/chat', async (req, res) => {
             }
         } else {
             console.log(`🚫 [${character.toUpperCase()}] Không gửi media - reason: ${refusalReason || 'unknown'}`);
+        }
+    }
+    
+    // Kiểm tra và loại bỏ text "đã gửi video/ảnh" nếu user yêu cầu nhưng không có media được gửi
+    // (Trường hợp AI nói "đã gửi" nhưng không có [SEND_MEDIA] tag hoặc mediaUrl)
+    if (!mediaUrl && (userRequestedVideo || userRequestedImage)) {
+        const isEnglish = (character === 'zoe' || character === 'kai');
+        if (userRequestedVideo) {
+            // Loại bỏ text "đã gửi video"
+            const sentVideoPatterns = isEnglish 
+                ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*video/gi
+                : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(video|vid)/gi;
+            if (sentVideoPatterns.test(rawReply)) {
+                rawReply = rawReply.replace(sentVideoPatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
+                console.log(`⚠️ [${character.toUpperCase()}] [CLEANUP] Đã loại bỏ text "đã gửi video" vì không có media được gửi`);
+            }
+        } else if (userRequestedImage) {
+            // Loại bỏ text "đã gửi ảnh"
+            const sentImagePatterns = isEnglish 
+                ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*(photo|picture|image|pic)/gi
+                : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(ảnh|hình|photo|pic)/gi;
+            if (sentImagePatterns.test(rawReply)) {
+                rawReply = rawReply.replace(sentImagePatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
+                console.log(`⚠️ [${character.toUpperCase()}] [CLEANUP] Đã loại bỏ text "đã gửi ảnh" vì không có media được gửi`);
+            }
         }
     }
     
