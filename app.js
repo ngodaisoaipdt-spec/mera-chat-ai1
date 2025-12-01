@@ -2313,7 +2313,9 @@ app.post('/chat', async (req, res) => {
         
         const requestField = type === 'image' ? 'stranger_image_requests' : 'stranger_video_requests';
         const requestCount = userProfile[requestField] || 0;
-        return requestCount === 1; // Lần đầu = 1 (vì đã tăng counter trước đó)
+        const shouldRefuse = requestCount === 1; // Lần đầu = 1 (vì đã tăng counter trước đó)
+        console.log(`🔍 [${character.toUpperCase()}] [FIRST REFUSAL CHECK] type=${type}, requestField=${requestField}, requestCount=${requestCount}, shouldRefuse=${shouldRefuse}`);
+        return shouldRefuse;
     }
     
     // Helper: Phát hiện chủ đề buồn (AI tự phát hiện qua nội dung)
@@ -2349,10 +2351,14 @@ app.post('/chat', async (req, res) => {
     
     // 1. Track số lần yêu cầu (để check lần đầu từ chối)
     if (userRequestedImage) {
-        userProfile.stranger_image_requests = (userProfile.stranger_image_requests || 0) + 1;
+        const oldCount = userProfile.stranger_image_requests || 0;
+        userProfile.stranger_image_requests = oldCount + 1;
+        console.log(`📊 [${character.toUpperCase()}] User yêu cầu ảnh - counter: ${oldCount} → ${userProfile.stranger_image_requests}`);
     }
     if (userRequestedVideo) {
-        userProfile.stranger_video_requests = (userProfile.stranger_video_requests || 0) + 1;
+        const oldCount = userProfile.stranger_video_requests || 0;
+        userProfile.stranger_video_requests = oldCount + 1;
+        console.log(`📊 [${character.toUpperCase()}] User yêu cầu video - counter: ${oldCount} → ${userProfile.stranger_video_requests}`);
     }
     
     // 2. Logic phát hiện và xử lý chủ đề buồn (cho video funny)
@@ -4463,8 +4469,13 @@ async function generateFollowUpMessage(memory, character, userMessage, conversat
         // Làm sạch content để tránh ký tự đặc biệt gây lỗi JSON parsing
         const recentContext = conversationHistory.slice(-5).map(msg => {
             const content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
-            // Loại bỏ các ký tự control và làm sạch
-            const cleanContent = content.replace(/[\x00-\x1F\x7F-\x9F]/g, '').substring(0, 100);
+            // Loại bỏ các ký tự control, hex escape sequences, và làm sạch
+            // Loại bỏ các ký tự có thể gây lỗi JSON parsing: \x00-\x1F, \x7F-\x9F, và các hex escape không hợp lệ
+            let cleanContent = content
+                .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '') // Loại bỏ control characters
+                .replace(/\\x[0-9A-Fa-f]{0,1}(?![0-9A-Fa-f])/g, '') // Loại bỏ hex escape không hoàn chỉnh
+                .replace(/\\u[0-9A-Fa-f]{0,3}(?![0-9A-Fa-f])/g, '') // Loại bỏ unicode escape không hoàn chỉnh
+                .substring(0, 100);
             if (msg.role === 'user') {
                 return `User: ${cleanContent}`;
             } else {
@@ -4553,26 +4564,46 @@ Hãy tạo một tin nhắn NGẮN GỌN (15-25 từ) để hỏi han, follow-up
 
 Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai đoạn quan hệ và nội dung cuộc trò chuyện:`;
 
-        // Thay thế placeholder bằng userMessage - KHÔNG escape thủ công, để OpenAI SDK tự xử lý
-        // Chỉ đảm bảo userMessage là string hợp lệ
-        const safeUserMessage = typeof userMessage === 'string' ? userMessage : String(userMessage || '');
+        // Thay thế placeholder bằng userMessage - Làm sạch để tránh lỗi JSON parsing
+        // Loại bỏ các ký tự có thể gây lỗi JSON parsing
+        let safeUserMessage = typeof userMessage === 'string' ? userMessage : String(userMessage || '');
+        // Loại bỏ các ký tự control và hex escape không hợp lệ
+        safeUserMessage = safeUserMessage
+            .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '') // Loại bỏ control characters
+            .replace(/\\x[0-9A-Fa-f]{0,1}(?![0-9A-Fa-f])/g, '') // Loại bỏ hex escape không hoàn chỉnh
+            .replace(/\\u[0-9A-Fa-f]{0,3}(?![0-9A-Fa-f])/g, ''); // Loại bỏ unicode escape không hoàn chỉnh
+        
         const finalPrompt = followUpPrompt.replace(new RegExp(userMessagePlaceholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), safeUserMessage);
         
         // Tạo messages array - OpenAI SDK sẽ tự xử lý JSON serialization
-        // KHÔNG escape thủ công vì SDK sẽ tự làm điều này
+        // Làm sạch content để tránh lỗi JSON parsing
         const systemMessage = { role: 'system', content: finalPrompt };
         
-        // Không escape - để OpenAI SDK tự xử lý
-        const escapedHistory = conversationHistory.slice(-10).map(msg => ({
-            role: msg.role,
-            content: typeof msg.content === 'string' ? msg.content : String(msg.content || '')
-        }));
+        // Làm sạch conversation history để tránh lỗi JSON parsing
+        const escapedHistory = conversationHistory.slice(-10).map(msg => {
+            let cleanContent = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
+            // Loại bỏ các ký tự có thể gây lỗi JSON parsing
+            cleanContent = cleanContent
+                .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '') // Loại bỏ control characters
+                .replace(/\\x[0-9A-Fa-f]{0,1}(?![0-9A-Fa-f])/g, '') // Loại bỏ hex escape không hoàn chỉnh
+                .replace(/\\u[0-9A-Fa-f]{0,3}(?![0-9A-Fa-f])/g, ''); // Loại bỏ unicode escape không hoàn chỉnh
+            return {
+                role: msg.role,
+                content: cleanContent
+            };
+        });
+        
+        // Làm sạch userMessage trong userContextMessage
+        const cleanUserMessageForContext = safeUserMessage
+            .replace(/"/g, '\\"') // Escape dấu ngoặc kép
+            .replace(/\n/g, ' ') // Thay newline bằng space
+            .substring(0, 200); // Giới hạn độ dài
         
         const userContextMessage = {
             role: 'user',
             content: isEnglish ? 
-                `[CONTEXT: User just said: "${safeUserMessage}". Create a follow-up message based on this and conversation history.]` :
-                `[CONTEXT: Người dùng vừa nói: "${safeUserMessage}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]`
+                `[CONTEXT: User just said: "${cleanUserMessageForContext}". Create a follow-up message based on this and conversation history.]` :
+                `[CONTEXT: Người dùng vừa nói: "${cleanUserMessageForContext}". Hãy tạo tin nhắn follow-up dựa trên điều này và lịch sử cuộc trò chuyện.]`
         };
         
         const messages = [systemMessage, ...escapedHistory, userContextMessage];
