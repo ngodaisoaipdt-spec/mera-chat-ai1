@@ -2402,17 +2402,37 @@ app.post('/chat', async (req, res) => {
     }
     
     // 5. Logic Lover stage - Auto-send 18+ media
+    // Sau 3 tin nhắn 18+ → chủ động gửi private/body (ưu tiên private trước)
     if (relationshipStage === 'lover' && userProfile.lover_18plus_exchanges >= MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges) {
         if (userProfile.lover_18plus_exchanges % MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges === 0) {
-            // Cứ mỗi 3 lượt trao đổi 18+ → gửi body/private
+            // Cứ mỗi 3 lượt trao đổi 18+ → gửi private/body (ưu tiên private trước)
             if (!/\[SEND_MEDIA:/i.test(rawReply)) {
+                // Ưu tiên private trước (70% private, 30% body/bikini)
+                const preferPrivate = Math.random() < 0.7;
                 const mediaType = Math.random() > 0.5 ? 'image' : 'video';
-                const mediaTopic = Math.random() > 0.5 ? 'sensitive' : 'sensitive';
-                const mediaSubject = mediaType === 'image' ? 'body' : (Math.random() > 0.5 ? 'body' : 'private');
+                const mediaTopic = 'sensitive';
+                
+                let mediaSubject;
+                if (preferPrivate) {
+                    // Ưu tiên private
+                    mediaSubject = 'private';
+                } else {
+                    // Body/bikini/shape tùy theo character
+                    if (character === 'mera' || character === 'zoe') {
+                        // Mera/Zoe: bikini cho image, shape cho video
+                        mediaSubject = mediaType === 'image' ? 'bikini' : 'shape';
+                    } else if (character === 'thang') {
+                        // Thắng: body cho image, private cho video (vì không có video body)
+                        mediaSubject = mediaType === 'image' ? 'body' : 'private';
+                    } else {
+                        // Kai: body cho image, shape cho video
+                        mediaSubject = mediaType === 'image' ? 'body' : 'shape';
+                    }
+                }
                 
                 rawReply = `${rawReply} [SEND_MEDIA: ${mediaType}, ${mediaTopic}, ${mediaSubject}]`;
                 userProfile.lover_18plus_media_sent = (userProfile.lover_18plus_media_sent || 0) + 1;
-                console.log(`🔥 [18+ AUTO] Gửi ${mediaType} ${mediaTopic} ${mediaSubject} - exchanges: ${userProfile.lover_18plus_exchanges}`);
+                console.log(`🔥 [18+ AUTO] Gửi ${mediaType} ${mediaTopic} ${mediaSubject} (ưu tiên private: ${preferPrivate}) - exchanges: ${userProfile.lover_18plus_exchanges}, character: ${character}`);
             }
         }
     }
