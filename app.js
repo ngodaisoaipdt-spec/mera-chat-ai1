@@ -2327,8 +2327,16 @@ app.post('/chat', async (req, res) => {
     
     // Helper: Phát hiện chủ đề 18+ (AI tự phát hiện qua nội dung)
     function detect18PlusTopic(message, aiReply) {
-        // Từ khóa hỗ trợ phát hiện
-        const adultKeywords = ['sex', '18+', 'nóng bỏng', 'gợi cảm', 'riêng tư', 'private', 'body', 'bikini', 'shape', 'sexy', 'nhạy cảm', 'xxx', 'make love', 'bed', 'hot', 'sexy', 'intimate'];
+        // Từ khóa hỗ trợ phát hiện (bao gồm cả từ thô tục tiếng Việt)
+        const adultKeywords = [
+            // Từ khóa tiếng Anh
+            'sex', '18+', 'nóng bỏng', 'gợi cảm', 'riêng tư', 'private', 'body', 'bikini', 'shape', 'sexy', 'nhạy cảm', 'xxx', 'make love', 'bed', 'hot', 'intimate',
+            // Từ thô tục tiếng Việt
+            'đụ', 'lồn', 'cặc', 'bú', 'liếm', 'mút', 'nắc', 'doggy', 'bắn tinh', 'xuất tinh', 'nuốt tinh', 'phun nước', 'sướng', 'địt', 'chơi', 'ra đầy lồn',
+            'co giật', 'siết chặt', 'nóng hổi', 'ướt át', 'rên', 'nghẹn', 'quằn quại', 'run rẩy', 'bấu chặt', 'chồng đít', 'cong mông', 'dạng rộng',
+            'bắn nước', 'phun tung tóe', 'co bóp', 'quấn chặt', 'sướng tê tái', 'sướng điên', 'đụ nát', 'đụ sâu', 'đụ mạnh', 'đụ thật mạnh',
+            'hôn cổ', 'cắn môi', 'bú lồn', 'bú cặc', 'rên á á', 'rên á umm', 'cowgirl', '69', 'anal'
+        ];
         const combinedText = (message + ' ' + aiReply).toLowerCase();
         return adultKeywords.some(keyword => combinedText.includes(keyword));
     }
@@ -2404,7 +2412,10 @@ app.post('/chat', async (req, res) => {
     // 5. Logic Lover stage - Auto-send 18+ media
     // Sau 3 tin nhắn 18+ → chủ động gửi private/body (ưu tiên private trước)
     if (relationshipStage === 'lover' && userProfile.lover_18plus_exchanges >= MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges) {
-        if (userProfile.lover_18plus_exchanges % MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges === 0) {
+        // Kiểm tra xem đã đến lúc gửi chưa (mỗi 3 exchanges: 3, 6, 9, 12...)
+        const shouldAutoSend = userProfile.lover_18plus_exchanges % MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges === 0;
+        
+        if (shouldAutoSend) {
             // Cứ mỗi 3 lượt trao đổi 18+ → gửi private/body (ưu tiên private trước)
             if (!/\[SEND_MEDIA:/i.test(rawReply)) {
                 // Ưu tiên private trước (70% private, 30% body/bikini)
@@ -2432,8 +2443,12 @@ app.post('/chat', async (req, res) => {
                 
                 rawReply = `${rawReply} [SEND_MEDIA: ${mediaType}, ${mediaTopic}, ${mediaSubject}]`;
                 userProfile.lover_18plus_media_sent = (userProfile.lover_18plus_media_sent || 0) + 1;
-                console.log(`🔥 [18+ AUTO] Gửi ${mediaType} ${mediaTopic} ${mediaSubject} (ưu tiên private: ${preferPrivate}) - exchanges: ${userProfile.lover_18plus_exchanges}, character: ${character}`);
+                console.log(`🔥 [18+ AUTO] ✅ GỬI ${mediaType} ${mediaTopic} ${mediaSubject} (ưu tiên private: ${preferPrivate}) - exchanges: ${userProfile.lover_18plus_exchanges}, character: ${character}`);
+            } else {
+                console.log(`🔥 [18+ AUTO] ⚠️ Đã có [SEND_MEDIA] tag khác, bỏ qua auto-send`);
             }
+        } else {
+            console.log(`🔥 [18+ AUTO] ⏳ Chưa đến lúc gửi - exchanges: ${userProfile.lover_18plus_exchanges}, cần: ${MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges}`);
         }
     }
     
