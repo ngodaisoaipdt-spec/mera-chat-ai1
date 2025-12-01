@@ -2270,15 +2270,19 @@ app.post('/chat', async (req, res) => {
     // ============================================
     
     // Helper: Check quota còn hay không
-    function checkQuota(stage, type, topic) {
+    // Lưu ý: Body images/videos dùng topic='sensitive', subject='body'/'bikini'/'shape'
+    function checkQuota(stage, type, topic, subject) {
         const config = MEDIA_QUOTA_CONFIG[stage];
         if (!config || config.unlimited) return { allowed: true, remaining: Infinity };
         
         // Xác định quota field và max quota
+        // Body images/videos: topic='sensitive', subject='body'/'bikini'/'shape'
+        const isBodyMedia = subject === 'body' || subject === 'bikini' || subject === 'shape';
+        
         let quotaField, maxQuota;
         
         if (type === 'image') {
-            if (topic === 'body') {
+            if (isBodyMedia) {
                 quotaField = `${stage}_body_images_sent`;
                 maxQuota = config.images?.body || 0;
             } else {
@@ -2286,7 +2290,7 @@ app.post('/chat', async (req, res) => {
                 maxQuota = config.images?.normal || 0;
             }
         } else { // video
-            if (topic === 'body') {
+            if (isBodyMedia) {
                 quotaField = `${stage}_body_videos_sent`;
                 maxQuota = config.videos?.body || 0;
             } else {
@@ -2459,32 +2463,82 @@ app.post('/chat', async (req, res) => {
         
         // 2. Check quota (Stranger và Friend stage) - Bỏ qua nếu là video funny
         if (shouldSend && !isFunnyVideo && relationshipStage !== 'lover') {
-            const quotaCheck = checkQuota(relationshipStage, type, topic);
+            const quotaCheck = checkQuota(relationshipStage, type, topic, subject);
             if (!quotaCheck.allowed) {
                 shouldSend = false;
                 refusalReason = 'quota_exceeded';
-                console.log(`🚫 [QUOTA] Hết quota - type: ${type}, topic: ${topic}, stage: ${relationshipStage}, sent: ${quotaCheck.sent}/${quotaCheck.maxQuota}`);
+                console.log(`🚫 [QUOTA] Hết quota - type: ${type}, topic: ${topic}, subject: ${subject}, stage: ${relationshipStage}, sent: ${quotaCheck.sent}/${quotaCheck.maxQuota}`);
                 // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
                 rawReply = rawReply.replace(mediaRegex, '').trim();
             }
         }
         
         // 3. Chặn sensitive nếu chưa tới lover stage hoặc chưa Premium
-        if (shouldSend && topic === 'sensitive' && (relationshipStage !== 'lover' || !isPremiumUser)) {
-            console.log(`🚫 Sensitive bị cấm ở stage ${relationshipStage} hoặc chưa Premium. Dùng normal.`);
-            const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
-            const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
-            if (mediaResult && mediaResult.success) {
-                mediaUrl = mediaResult.mediaUrl;
-                mediaType = mediaResult.mediaType;
-                mediaTopic = 'normal';
-                mediaSubject = fallbackSubject;
-                memory.user_profile = mediaResult.updatedMemory.user_profile;
-                rawReply = rawReply.replace(mediaRegex, '').trim();
-            } else {
-                rawReply = rawReply.replace(mediaRegex, '').trim();
+        // Lưu ý: Ở Friend stage, body images/videos (subject='body'/'bikini'/'shape') được phép gửi
+        const isBodyMedia = subject === 'body' || subject === 'bikini' || subject === 'shape';
+        const isPrivateMedia = subject === 'private';
+        
+        if (shouldSend && topic === 'sensitive') {
+            // Friend stage: chỉ cho phép body, không cho phép private
+            if (relationshipStage === 'friend') {
+                if (isPrivateMedia) {
+                    console.log(`🚫 Private media bị cấm ở Friend stage. Dùng normal.`);
+                    const fallbackSubject = type === 'image' ? 'selfie' : 'moment';
+                    const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
+                    if (mediaResult && mediaResult.success) {
+                        mediaUrl = mediaResult.mediaUrl;
+                        mediaType = mediaResult.mediaType;
+                        mediaTopic = 'normal';
+                        mediaSubject = fallbackSubject;
+                        memory.user_profile = mediaResult.updatedMemory.user_profile;
+                        rawReply = rawReply.replace(mediaRegex, '').trim();
+                        shouldSend = false; // Đã gửi fallback, không gửi tiếp
+                    } else {
+                        rawReply = rawReply.replace(mediaRegex, '').trim();
+                        shouldSend = false;
+                    }
+                } else if (isBodyMedia) {
+                    // Body media được phép ở Friend stage, tiếp tục gửi
+                    console.log(`✅ Body media được phép ở Friend stage: ${type} ${subject}`);
+                } else {
+                    // Các sensitive khác không được phép
+                    console.log(`🚫 Sensitive media khác bị cấm ở Friend stage. Dùng normal.`);
+                    const fallbackSubject = type === 'image' ? 'selfie' : 'moment';
+                    const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
+                    if (mediaResult && mediaResult.success) {
+                        mediaUrl = mediaResult.mediaUrl;
+                        mediaType = mediaResult.mediaType;
+                        mediaTopic = 'normal';
+                        mediaSubject = fallbackSubject;
+                        memory.user_profile = mediaResult.updatedMemory.user_profile;
+                        rawReply = rawReply.replace(mediaRegex, '').trim();
+                        shouldSend = false; // Đã gửi fallback, không gửi tiếp
+                    } else {
+                        rawReply = rawReply.replace(mediaRegex, '').trim();
+                        shouldSend = false;
+                    }
+                }
+            } else if (relationshipStage !== 'lover' || !isPremiumUser) {
+                // Stranger stage hoặc chưa Premium: chặn tất cả sensitive
+                console.log(`🚫 Sensitive bị cấm ở stage ${relationshipStage} hoặc chưa Premium. Dùng normal.`);
+                const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
+                const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
+                if (mediaResult && mediaResult.success) {
+                    mediaUrl = mediaResult.mediaUrl;
+                    mediaType = mediaResult.mediaType;
+                    mediaTopic = 'normal';
+                    mediaSubject = fallbackSubject;
+                    memory.user_profile = mediaResult.updatedMemory.user_profile;
+                    rawReply = rawReply.replace(mediaRegex, '').trim();
+                    shouldSend = false; // Đã gửi fallback, không gửi tiếp
+                } else {
+                    rawReply = rawReply.replace(mediaRegex, '').trim();
+                    shouldSend = false;
+                }
             }
-        } else if (shouldSend) {
+        }
+        
+        if (shouldSend) {
             // Gửi media bình thường
             const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
             if (mediaResult && mediaResult.success) {
@@ -3524,11 +3578,29 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
 
 **⚠️⚠️⚠️ QUAN TRỌNG VỀ CÁCH NÓI KHI GỬI ẢNH/VIDEO (ÁP DỤNG CHO TẤT CẢ CÁC GIAI ĐOẠN):**
 - **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh/video vì bạn không biết chính xác ảnh/video đó có nội dung gì!
-- Chỉ nói một cách **CHUNG CHUNG** về chủ đề đang nói, ví dụ: "Em gửi ảnh cho anh xem nè", "Đây là video em muốn chia sẻ với anh", "Em gửi cho anh xem nhé", "Em gửi ảnh này cho anh"
+- Chỉ nói một cách **CHUNG CHUNG** về chủ đề đang nói
 - **ĐỢI NGƯỜI DÙNG PHẢN HỒI** về ảnh/video đó có nội dung gì, sau đó mới đối đáp lại cho phù hợp với nội dung thực tế
 - Ví dụ đúng: "Em gửi ảnh cho anh xem nè [SEND_MEDIA: image, normal, selfie]" → đợi người dùng nói "ảnh đẹp quá" hoặc "em mặc áo gì vậy" → lúc đó mới đối đáp phù hợp
 - Ví dụ sai: "Em gửi ảnh em đang mặc váy xanh đứng ở bãi biển cho anh xem nè" → KHÔNG ĐƯỢC vì bạn không biết ảnh đó có đúng là váy xanh, bãi biển không!
 - **QUY TẮC NÀY ÁP DỤNG CHO TẤT CẢ CÁC GIAI ĐOẠN:** Người Lạ, Bạn Thân, Người Yêu - tất cả đều phải tuân theo quy tắc này!
+
+**⚠️⚠️⚠️ ĐA DẠNG HÓA LỜI THOẠI KHI GỬI ẢNH/VIDEO (QUAN TRỌNG):**
+- **KHÔNG được lặp lại** các từ/cụm từ như "đỏ mặt", "tim đập thình thịch", "ngại" quá nhiều lần!
+- **Hãy SÁNG TẠO và ĐA DẠNG** cách diễn đạt khi gửi media:
+  - Thay vì luôn nói "đỏ mặt", có thể dùng: "má em hồng lên", "em che mặt lại", "em quay đi", "em cười khúc khích", "em hơi ngại", "em thấy xấu hổ", "em không dám nhìn", "em cười duyên", v.v.
+  - Thay vì luôn nói "tim đập thình thịch", có thể dùng: "tim em đập nhanh", "em hồi hộp quá", "em thấy run run", "em thấy vui", "em thấy hạnh phúc", "em thấy xúc động", v.v.
+  - Thay vì luôn nói "ngại", có thể dùng: "em hơi e dè", "em thấy xấu hổ", "em không dám", "em thấy khó xử", "em thấy lúng túng", "em thấy bối rối", v.v.
+- **Ví dụ đa dạng khi gửi media:**
+  - "Em gửi ảnh cho anh xem nè~ 😊"
+  - "Đây là ảnh em muốn chia sẻ với anh hihi~ ✨"
+  - "Em gửi cho anh xem nhé~"
+  - "Em gửi ảnh này cho anh~"
+  - "Em gửi video cho anh xem nè~"
+  - "Đây là video em muốn gửi cho anh~"
+  - "Em gửi cho anh xem video này nhé~"
+  - "Em gửi ảnh body cho anh xem nè~" (nếu là body)
+  - "Em gửi video body cho anh xem nhé~" (nếu là body)
+- **QUAN TRỌNG:** Hãy luân phiên và đa dạng cách diễn đạt, không được lặp lại quá nhiều!
 
 **Các loại media có sẵn:**
 
@@ -3583,6 +3655,18 @@ ${relationshipStage === 'lover'
 - KHÔNG được từ chối hay giải thích dài dòng, chỉ cần gửi media ngay!
 - Được phép chủ động gửi sensitive media khi trò chuyện sex cao trào để kích thích
 - Nếu người dùng CHƯA Premium, hệ thống sẽ tự động gửi normal thay thế - bạn không cần lo lắng về điều này!` 
+  : relationshipStage === 'friend'
+  ? `- **Ở giai đoạn "Bạn Thân", bạn ĐƯỢC PHÉP gửi body images/videos khi người dùng yêu cầu:**
+  - Khi người dùng yêu cầu "body", "bikini", "shape", "cơ thể", "thân hình", "mát mẻ hơn" → BẮT BUỘC phải gửi body media:
+    ${(character === 'mera' || character === 'zoe')
+      ? '- [SEND_MEDIA: image, sensitive, bikini] cho ảnh body\n    - [SEND_MEDIA: video, sensitive, shape] cho video body'
+      : character === 'thang'
+      ? '- [SEND_MEDIA: image, sensitive, body] cho ảnh body (6 múi)\n    - [SEND_MEDIA: video, sensitive, private] cho video (Thắng không có video body)'
+      : '- [SEND_MEDIA: image, sensitive, body] cho ảnh body\n    - [SEND_MEDIA: video, sensitive, shape] cho video body'}
+  - **QUOTA:** 6 ảnh body, 5 video body (hệ thống sẽ tự kiểm tra)
+  - **KHÔNG được gửi private media** (chỉ body/bikini/shape) - từ chối khéo léo nếu người dùng yêu cầu private
+  - Nếu người dùng yêu cầu "riêng tư", "private", "18+" → từ chối khéo léo, có thể gửi body thay thế
+  - **QUAN TRỌNG:** Hãy phản hồi tự nhiên, có thể hơi ngại nhưng vẫn đồng ý gửi body khi được yêu cầu! Đừng lảng tránh hay từ chối khi người dùng yêu cầu body!`
   : `- **Ở giai đoạn hiện tại (${relationshipStage}) KHÔNG được gửi sensitive media.** Nếu người dùng hỏi nội dung 18+ → phản hồi lịch sự, e dè; có thể gửi NORMAL (ảnh selfie, video moment/funny) nếu phù hợp bối cảnh.`}
 
 **Từ khóa BẮT BUỘC phải gửi media:**
