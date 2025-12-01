@@ -2375,14 +2375,20 @@ app.post('/chat', async (req, res) => {
     }
     
     // 3. Logic phát hiện chủ đề 18+ (cho Lover stage)
+    let is18Plus = false;
     if (relationshipStage === 'lover') {
-        const is18Plus = detect18PlusTopic(message, rawReply);
+        is18Plus = detect18PlusTopic(message, rawReply);
         if (is18Plus) {
             userProfile.lover_18plus_exchanges = (userProfile.lover_18plus_exchanges || 0) + 1;
             console.log(`🔥 [18+] Phát hiện chủ đề 18+ - exchanges: ${userProfile.lover_18plus_exchanges}`);
         } else {
             // Tăng counter tin nhắn bình thường
             userProfile.lover_normal_messages = (userProfile.lover_normal_messages || 0) + 1;
+            // Reset counter 18+ khi chuyển sang chủ đề khác (để không gửi auto-send khi đã hết 18+)
+            if (userProfile.lover_18plus_exchanges > 0) {
+                console.log(`🔥 [18+] Chuyển sang chủ đề khác, reset counter 18+ (từ ${userProfile.lover_18plus_exchanges} về 0)`);
+                userProfile.lover_18plus_exchanges = 0;
+            }
         }
     }
     
@@ -2411,7 +2417,8 @@ app.post('/chat', async (req, res) => {
     
     // 5. Logic Lover stage - Auto-send 18+ media
     // Sau 3 tin nhắn 18+ → chủ động gửi private/body (ưu tiên private trước)
-    if (relationshipStage === 'lover' && userProfile.lover_18plus_exchanges >= MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges) {
+    // QUAN TRỌNG: Chỉ gửi khi đang trong cuộc trò chuyện 18+ (is18Plus === true)
+    if (relationshipStage === 'lover' && is18Plus && userProfile.lover_18plus_exchanges >= MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges) {
         // Kiểm tra xem đã đến lúc gửi chưa (mỗi 3 exchanges: 3, 6, 9, 12...)
         const shouldAutoSend = userProfile.lover_18plus_exchanges % MEDIA_QUOTA_CONFIG.lover.autoSend18Plus.exchanges === 0;
         
