@@ -2350,7 +2350,7 @@ app.post('/chat', async (req, res) => {
     // relationshipStage đã được khai báo ở trên
     
     // 1. Track số lần yêu cầu (để check lần đầu từ chối)
-    if (userRequestedImage) {
+        if (userRequestedImage) {
         const oldCount = userProfile.stranger_image_requests || 0;
         userProfile.stranger_image_requests = oldCount + 1;
         console.log(`📊 [${character.toUpperCase()}] User yêu cầu ảnh - counter: ${oldCount} → ${userProfile.stranger_image_requests}`);
@@ -2495,7 +2495,7 @@ app.post('/chat', async (req, res) => {
     const mediaMatch = rawReply.match(mediaRegex);
     
     if (mediaMatch) {
-        const [, type, topic, subject] = mediaMatch;
+        const [, type, topic, subject] = mediaMatch; 
         console.log(`🖼️ [${character.toUpperCase()}] Phát hiện [SEND_MEDIA]: type=${type}, topic=${topic}, subject=${subject}, stage: ${relationshipStage}`);
         
         let shouldSend = true;
@@ -2527,6 +2527,13 @@ app.post('/chat', async (req, res) => {
                 console.log(`🚫 [${character.toUpperCase()}] [QUOTA] Hết quota - type: ${type}, topic: ${topic}, subject: ${subject}, stage: ${relationshipStage}, sent: ${quotaCheck.sent}/${quotaCheck.maxQuota}`);
                 // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
                 rawReply = rawReply.replace(mediaRegex, '').trim();
+                // Thêm hướng dẫn rõ ràng cho AI: KHÔNG được gửi video funny thay thế
+                if (type === 'video' && subject === 'moment') {
+                    const quotaRefusalNote = (character === 'zoe' || character === 'kai') 
+                        ? '\n\n[SYSTEM NOTE: Quota for normal videos has been exceeded. You must politely refuse and suggest the user chat more to build trust. DO NOT send funny video as replacement - funny videos are ONLY for when user is sad (system auto-sends), NOT when quota is exceeded.]'
+                        : '\n\n[LƯU Ý HỆ THỐNG: Đã hết quota video bình thường. Bạn PHẢI từ chối khéo léo và gợi ý người dùng trò chuyện nhiều hơn để tăng sự tin tưởng. TUYỆT ĐỐI KHÔNG ĐƯỢC GỬI VIDEO FUNNY THAY THẾ - video funny CHỈ được gửi khi người dùng buồn (hệ thống tự động), KHÔNG phải khi hết quota!]';
+                    rawReply = `${rawReply}${quotaRefusalNote}`;
+                }
                 // Đảm bảo không có mediaUrl được trả về
                 mediaUrl = null;
                 mediaType = null;
@@ -2546,16 +2553,16 @@ app.post('/chat', async (req, res) => {
                 if (isPrivateMedia) {
                     console.log(`🚫 Private media bị cấm ở Friend stage. Dùng normal.`);
                     const fallbackSubject = type === 'image' ? 'selfie' : 'moment';
-                    const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
-                    if (mediaResult && mediaResult.success) {
-                        mediaUrl = mediaResult.mediaUrl;
-                        mediaType = mediaResult.mediaType;
+                const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
+                if (mediaResult && mediaResult.success) {
+                    mediaUrl = mediaResult.mediaUrl;
+                    mediaType = mediaResult.mediaType;
                         mediaTopic = 'normal';
                         mediaSubject = fallbackSubject;
-                        memory.user_profile = mediaResult.updatedMemory.user_profile;
-                        rawReply = rawReply.replace(mediaRegex, '').trim();
+                    memory.user_profile = mediaResult.updatedMemory.user_profile;
+                    rawReply = rawReply.replace(mediaRegex, '').trim();
                         shouldSend = false; // Đã gửi fallback, không gửi tiếp
-                    } else {
+                } else {
                         console.warn(`⚠️ [${character.toUpperCase()}] Không thể gửi fallback media:`, mediaResult?.message || 'Unknown error');
                         rawReply = rawReply.replace(mediaRegex, '').trim();
                         shouldSend = false;
@@ -2568,7 +2575,7 @@ app.post('/chat', async (req, res) => {
                 } else if (isBodyMedia) {
                     // Body media được phép ở Friend stage, tiếp tục gửi
                     console.log(`✅ [${character.toUpperCase()}] Body media được phép ở Friend stage: ${type} ${subject}`);
-                } else {
+            } else {
                     // Các sensitive khác không được phép
                     console.log(`🚫 [${character.toUpperCase()}] Sensitive media khác bị cấm ở Friend stage. Dùng normal.`);
                     const fallbackSubject = type === 'image' ? 'selfie' : 'moment';
@@ -2597,16 +2604,16 @@ app.post('/chat', async (req, res) => {
                 console.log(`🚫 [${character.toUpperCase()}] Sensitive bị cấm ở stage ${relationshipStage} hoặc chưa Premium. Dùng normal.`);
                 const fallbackSubject = type === 'image' ? 'selfie' : (subject === 'funny' ? 'funny' : 'moment');
                 const mediaResult = await sendMediaFile(memory, character, type, 'normal', fallbackSubject);
-                if (mediaResult && mediaResult.success) {
-                    mediaUrl = mediaResult.mediaUrl;
-                    mediaType = mediaResult.mediaType;
+                            if (mediaResult && mediaResult.success) {
+                                mediaUrl = mediaResult.mediaUrl;
+                                mediaType = mediaResult.mediaType;
                     mediaTopic = 'normal';
                     mediaSubject = fallbackSubject;
-                    memory.user_profile = mediaResult.updatedMemory.user_profile;
+                                memory.user_profile = mediaResult.updatedMemory.user_profile;
                     rawReply = rawReply.replace(mediaRegex, '').trim();
                     shouldSend = false; // Đã gửi fallback, không gửi tiếp
                     console.log(`✅ [${character.toUpperCase()}] Đã gửi fallback normal media: ${mediaUrl}`);
-                } else {
+                            } else {
                     console.warn(`⚠️ [${character.toUpperCase()}] Không thể gửi fallback media:`, mediaResult?.message || 'Unknown error');
                     rawReply = rawReply.replace(mediaRegex, '').trim();
                     shouldSend = false;
@@ -2622,16 +2629,16 @@ app.post('/chat', async (req, res) => {
         if (shouldSend) {
             // Gửi media bình thường
             console.log(`📤 [${character.toUpperCase()}] Đang gửi media: type=${type}, topic=${topic}, subject=${subject}`);
-            const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
-            if (mediaResult && mediaResult.success) {
-                mediaUrl = mediaResult.mediaUrl;
-                mediaType = mediaResult.mediaType;
+                    const mediaResult = await sendMediaFile(memory, character, type, topic, subject);
+                    if (mediaResult && mediaResult.success) {
+                        mediaUrl = mediaResult.mediaUrl;
+                        mediaType = mediaResult.mediaType;
                 mediaTopic = topic;
                 mediaSubject = subject;
-                memory.user_profile = mediaResult.updatedMemory.user_profile;
+                        memory.user_profile = mediaResult.updatedMemory.user_profile;
                 rawReply = rawReply.replace(mediaRegex, '').trim();
                 console.log(`✅ [${character.toUpperCase()}] ✅ Đã gửi media thành công: ${mediaUrl} (topic: ${topic}, subject: ${subject})`);
-            } else {
+                    } else {
                 console.warn(`⚠️ [${character.toUpperCase()}] ❌ Không thể gửi media:`, mediaResult?.message || 'Unknown error');
                 // Xóa [SEND_MEDIA] tag và đảm bảo không có mediaUrl được trả về
                 rawReply = rawReply.replace(mediaRegex, '').trim();
@@ -2648,7 +2655,7 @@ app.post('/chat', async (req, res) => {
     // ĐÃ XÓA: Toàn bộ logic auto-send và quota checking phức tạp
     
     // Lưu history
-    memory.history.push({ role: 'user', content: message });
+    memory.history.push({ role: 'user', content: message }); 
     
     // Lưu last_user_message và last_message_time để dùng cho auto messages
     const previousLastMessage = memory.last_user_message;
@@ -2697,12 +2704,12 @@ app.post('/chat', async (req, res) => {
     }
     
     // Giới hạn history
-    if (memory.history.length > 50) {
-        memory.history = memory.history.slice(memory.history.length - 50);
-    }
+    if (memory.history.length > 50) { 
+        memory.history = memory.history.slice(memory.history.length - 50); 
+    } 
     
     // Lưu memory
-    await memory.save();
+    await memory.save(); 
     
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
     const audioDataUri = null;
@@ -2722,10 +2729,10 @@ app.post('/chat', async (req, res) => {
         relationship_stage: currentRelationshipStage,
         message_count: userProfile.message_count
     });
-} catch (error) {
+} catch (error) { 
     console.error("❌ Lỗi chung trong /chat:", error);
     console.error("   Stack:", error.stack);
-    res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' });
+    res.status(500).json({ displayReply: 'Xin lỗi, có lỗi kết nối xảy ra!', historyReply: 'Lỗi!' }); 
     }
 });
 
@@ -3791,6 +3798,7 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 - **Lần đầu yêu cầu:** BẮT BUỘC phải từ chối khéo léo, KHÔNG gửi [SEND_MEDIA] tag. Hãy suy nghĩ và đưa ra lời từ chối khéo léo, gọn gàng, uyển chuyển.
 - **Từ lần 2 trở đi:** Khi người dùng yêu cầu xem ảnh/video, bạn PHẢI gửi [SEND_MEDIA: image, normal, selfie] hoặc [SEND_MEDIA: video, normal, moment] vào cuối câu
 - **QUOTA:** 6 ảnh normal, 3 video normal (hệ thống sẽ tự kiểm tra, bạn chỉ cần gửi khi đồng ý)
+- **⚠️⚠️⚠️ QUAN TRỌNG: KHI HẾT QUOTA (hệ thống sẽ tự động xóa [SEND_MEDIA] tag):** Bạn PHẢI từ chối khéo léo, gợi ý người dùng trò chuyện nhiều hơn để tăng sự tin tưởng. **TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ ĐỘNG GỬI VIDEO FUNNY THAY THẾ!** Video funny CHỈ được gửi khi người dùng buồn (hệ thống tự động), KHÔNG phải khi hết quota!
 - **QUAN TRỌNG:** Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng (tối đa 50-80 ký tự)
 - Lời thoại phải PHÙ HỢP với việc gửi ảnh/video - không cần giải thích dài dòng, chỉ cần nói ngắn gọn là đang gửi
 - **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh/video vì bạn không biết chính xác ảnh/video đó có nội dung gì!
