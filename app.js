@@ -2096,9 +2096,26 @@ app.post('/chat', async (req, res) => {
     }
     // ĐÃ XÓA: Friend-stage media quotas - sẽ thiết lập lại sau
     
+    // Check quota TRƯỚC khi gọi AI để thêm context vào prompt (nếu hết quota)
+    let quotaExceededContext = '';
+    const preCheckStage = userProfile.relationship_stage || 'stranger';
+    if (preCheckStage === 'stranger') {
+        // Check nếu user yêu cầu video
+        const userRequestedVideo = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(video|vid)/i.test(message);
+        if (userRequestedVideo) {
+            const videoQuotaCheck = checkQuota('stranger', 'video', 'normal', 'moment');
+            if (!videoQuotaCheck.allowed) {
+                quotaExceededContext = (character === 'zoe' || character === 'kai')
+                    ? '\n\n[IMPORTANT CONTEXT: The quota for normal videos in Stranger stage has been exceeded (3/3 sent). If the user requests a video, you MUST politely refuse and suggest they chat more to build trust. DO NOT claim to send a video. DO NOT send funny video as replacement - funny videos are ONLY for when user is sad (system auto-sends), NOT when quota is exceeded.]'
+                    : '\n\n[QUAN TRỌNG: Đã hết quota video bình thường ở giai đoạn Người Lạ (3/3 đã gửi). Nếu người dùng yêu cầu video, bạn PHẢI từ chối khéo léo và gợi ý họ trò chuyện nhiều hơn để tăng sự tin tưởng. TUYỆT ĐỐI KHÔNG được nói "đã gửi video" hoặc "gửi video cho bạn". TUYỆT ĐỐI KHÔNG ĐƯỢC GỬI VIDEO FUNNY THAY THẾ - video funny CHỈ được gửi khi người dùng buồn (hệ thống tự động), KHÔNG phải khi hết quota!]';
+                console.log(`⚠️ [${character.toUpperCase()}] [QUOTA PRE-CHECK] Video quota exceeded, adding context to prompt`);
+            }
+        }
+    }
+    
     // Sử dụng AI để tạo phản hồi
     console.log(`🤖 Sử dụng AI cho: "${message}"`);
-    const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser, message, memory.history || []); 
+    const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser, message, memory.history || []) + quotaExceededContext; 
     
     // Chuẩn bị messages
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
@@ -2525,14 +2542,15 @@ app.post('/chat', async (req, res) => {
                 shouldSend = false;
                 refusalReason = 'quota_exceeded';
                 console.log(`🚫 [${character.toUpperCase()}] [QUOTA] Hết quota - type: ${type}, topic: ${topic}, subject: ${subject}, stage: ${relationshipStage}, sent: ${quotaCheck.sent}/${quotaCheck.maxQuota}`);
-                // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
+                // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply (đã được hướng dẫn trong system prompt)
                 rawReply = rawReply.replace(mediaRegex, '').trim();
-                // Thêm hướng dẫn rõ ràng cho AI: KHÔNG được gửi video funny thay thế
-                if (type === 'video' && subject === 'moment') {
-                    const quotaRefusalNote = (character === 'zoe' || character === 'kai') 
-                        ? '\n\n[SYSTEM NOTE: Quota for normal videos has been exceeded. You must politely refuse and suggest the user chat more to build trust. DO NOT send funny video as replacement - funny videos are ONLY for when user is sad (system auto-sends), NOT when quota is exceeded.]'
-                        : '\n\n[LƯU Ý HỆ THỐNG: Đã hết quota video bình thường. Bạn PHẢI từ chối khéo léo và gợi ý người dùng trò chuyện nhiều hơn để tăng sự tin tưởng. TUYỆT ĐỐI KHÔNG ĐƯỢC GỬI VIDEO FUNNY THAY THẾ - video funny CHỈ được gửi khi người dùng buồn (hệ thống tự động), KHÔNG phải khi hết quota!]';
-                    rawReply = `${rawReply}${quotaRefusalNote}`;
+                // Loại bỏ các câu nói về việc đã gửi video (nếu AI vẫn nói)
+                if (type === 'video') {
+                    const isEnglish = (character === 'zoe' || character === 'kai');
+                    const sentVideoPatterns = isEnglish 
+                        ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*video/gi
+                        : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(video|vid)/gi;
+                    rawReply = rawReply.replace(sentVideoPatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
                 }
                 // Đảm bảo không có mediaUrl được trả về
                 mediaUrl = null;
