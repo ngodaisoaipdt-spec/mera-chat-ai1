@@ -2096,14 +2096,47 @@ app.post('/chat', async (req, res) => {
     }
     // ĐÃ XÓA: Friend-stage media quotas - sẽ thiết lập lại sau
     
-    // Check quota TRƯỚC khi gọi AI để thêm context vào prompt (nếu hết quota)
+    // Tăng counter TRƯỚC để check context chính xác
+    const userRequestedMedia = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(ảnh|hình|image|video|vid|picture|photo|pic)/i.test(message);
+    const userRequestedVideo = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(video|vid)/i.test(message);
+    const userRequestedImage = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(ảnh|hình|image|picture|photo|pic)/i.test(message);
+    
+    // Tăng counter TRƯỚC khi check context
+    if (userRequestedImage) {
+        const oldCount = userProfile.stranger_image_requests || 0;
+        userProfile.stranger_image_requests = oldCount + 1;
+        console.log(`📊 [${character.toUpperCase()}] User yêu cầu ảnh - counter: ${oldCount} → ${userProfile.stranger_image_requests}`);
+    }
+    if (userRequestedVideo) {
+        const oldCount = userProfile.stranger_video_requests || 0;
+        userProfile.stranger_video_requests = oldCount + 1;
+        console.log(`📊 [${character.toUpperCase()}] User yêu cầu video - counter: ${oldCount} → ${userProfile.stranger_video_requests}`);
+    }
+    
+    // Check quota và request count TRƯỚC khi gọi AI để thêm context vào prompt
     let quotaExceededContext = '';
+    let requestCountContext = '';
     const preCheckStage = userProfile.relationship_stage || 'stranger';
     if (preCheckStage === 'stranger') {
         // Check nếu user yêu cầu video
-        const userRequestedVideo = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(video|vid)/i.test(message);
         if (userRequestedVideo) {
+            const videoRequestCount = userProfile.stranger_video_requests || 0; // Đã được tăng ở trên
             const videoQuotaCheck = checkQuota('stranger', 'video', 'normal', 'moment');
+            
+            // Thêm context về số lần yêu cầu
+            if (videoRequestCount === 1) {
+                // Lần đầu - sẽ từ chối
+                requestCountContext = (character === 'zoe' || character === 'kai')
+                    ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting a video. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
+                    : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu video. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
+            } else if (videoRequestCount >= 2) {
+                // Từ lần 2 trở đi - PHẢI gửi
+                requestCountContext = (character === 'zoe' || character === 'kai')
+                    ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again!]`
+                    : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
+            }
+            
+            // Check quota
             if (!videoQuotaCheck.allowed) {
                 quotaExceededContext = (character === 'zoe' || character === 'kai')
                     ? '\n\n[IMPORTANT CONTEXT: The quota for normal videos in Stranger stage has been exceeded (3/3 sent). If the user requests a video, you MUST politely refuse and suggest they chat more to build trust. DO NOT claim to send a video. DO NOT send funny video as replacement - funny videos are ONLY for when user is sad (system auto-sends), NOT when quota is exceeded.]'
@@ -2111,11 +2144,25 @@ app.post('/chat', async (req, res) => {
                 console.log(`⚠️ [${character.toUpperCase()}] [QUOTA PRE-CHECK] Video quota exceeded, adding context to prompt`);
             }
         }
+        
+        // Check nếu user yêu cầu ảnh
+        if (userRequestedImage && !userRequestedVideo) {
+            const imageRequestCount = userProfile.stranger_image_requests || 0; // Đã được tăng ở trên
+            if (imageRequestCount === 1) {
+                requestCountContext = (character === 'zoe' || character === 'kai')
+                    ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting an image. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
+                    : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu ảnh. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
+            } else if (imageRequestCount >= 2) {
+                requestCountContext = (character === 'zoe' || character === 'kai')
+                    ? `\n\n[IMPORTANT CONTEXT: This is request #${imageRequestCount} for an image. You have already refused once. NOW you MUST send the image by adding [SEND_MEDIA: image, normal, selfie] at the end of your reply. DO NOT refuse again!]`
+                    : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${imageRequestCount} về ảnh. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi ảnh bằng cách thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
+            }
+        }
     }
     
     // Sử dụng AI để tạo phản hồi
     console.log(`🤖 Sử dụng AI cho: "${message}"`);
-    const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser, message, memory.history || []) + quotaExceededContext; 
+    const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser, message, memory.history || []) + requestCountContext + quotaExceededContext; 
     
     // Chuẩn bị messages
     const messages = [{ role: 'system', content: systemPrompt }, ...memory.history];
@@ -2261,11 +2308,7 @@ app.post('/chat', async (req, res) => {
     // ĐÃ XÓA: Logic video funny - sẽ thiết lập lại sau
     let mediaUrl = null, mediaType = null, mediaTopic = null, mediaSubject = null; 
     
-    // Kiểm tra xem user có yêu cầu media không
-    // Hỗ trợ cả tiếng Việt và tiếng Anh cho Zoe/Kai
-    const userRequestedMedia = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(ảnh|hình|image|video|vid|picture|photo|pic)/i.test(message);
-    const userRequestedVideo = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(video|vid)/i.test(message);
-    const userRequestedImage = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(ảnh|hình|image|picture|photo|pic)/i.test(message);
+    // Kiểm tra xem user có yêu cầu media không (đã được khai báo ở trên khi check context)
     const userRequestedSensitive = /(nóng bỏng|gợi cảm|riêng tư|private|body|bikini|6 múi|shape|sexy|18\+|nhạy cảm|sex|xxx)/i.test(message);
     
     
