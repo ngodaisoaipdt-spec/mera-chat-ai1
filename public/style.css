@@ -6,9 +6,9 @@
 .character-box { max-width: 680px; padding: 35px 45px; }
 @media (max-width: 480px) {
     .character-box {
-        padding: 20px 12px;
-        max-width: 92vw;
-        margin: 0 auto;
+        padding: 18px 10px;
+        max-width: 88vw;
+        margin: 15px auto;
     }
     .character-box h2 {
         font-size: 1.1em;
@@ -309,8 +309,9 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
         max-height: 250px;
     }
     .character-box {
-        padding: 25px 20px;
-        max-width: 360px;
+        padding: 20px 10px;
+        max-width: 90vw;
+        margin: 10px auto;
     }
     .selection-box h1 {
         margin-top: 40px;
