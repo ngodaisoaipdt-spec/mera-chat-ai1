@@ -2418,7 +2418,14 @@ app.post('/chat', async (req, res) => {
         const requestField = type === 'image' ? 'stranger_image_requests' : 'stranger_video_requests';
         const requestCount = userProfile[requestField] || 0;
         const shouldRefuse = requestCount === 1; // Lần đầu = 1 (vì đã tăng counter trước đó)
-        console.log(`🔍 [${character.toUpperCase()}] [FIRST REFUSAL CHECK] type=${type}, requestField=${requestField}, requestCount=${requestCount}, shouldRefuse=${shouldRefuse}`);
+        
+        // Log chi tiết cho Kai để debug
+        if (character === 'kai') {
+            console.log(`🔍 [KAI] [FIRST REFUSAL CHECK] type=${type}, requestField=${requestField}, requestCount=${requestCount}, shouldRefuse=${shouldRefuse}, userProfile.stranger_video_requests=${userProfile.stranger_video_requests}, userProfile.stranger_images_sent=${userProfile.stranger_images_sent}, userProfile.stranger_videos_sent=${userProfile.stranger_videos_sent}`);
+        } else {
+            console.log(`🔍 [${character.toUpperCase()}] [FIRST REFUSAL CHECK] type=${type}, requestField=${requestField}, requestCount=${requestCount}, shouldRefuse=${shouldRefuse}`);
+        }
+        
         return shouldRefuse;
     }
     
