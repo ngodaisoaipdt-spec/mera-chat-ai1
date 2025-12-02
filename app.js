@@ -2102,23 +2102,23 @@ app.post('/chat', async (req, res) => {
     const userRequestedImage = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(ảnh|hình|image|picture|photo|pic)/i.test(message);
     
     // Tăng counter TRƯỚC khi check context
-    // Tăng counter cho tracking (chỉ cho zoe, mera, thang, không áp dụng cho kai)
-    if (userRequestedImage && character !== 'kai') {
+    // Tăng counter cho tracking
+    if (userRequestedImage) {
         const oldCount = userProfile.stranger_image_requests || 0;
         userProfile.stranger_image_requests = oldCount + 1;
         console.log(`📊 [${character.toUpperCase()}] User yêu cầu ảnh - counter: ${oldCount} → ${userProfile.stranger_image_requests}`);
     }
-    if (userRequestedVideo && character !== 'kai') {
+    if (userRequestedVideo) {
         const oldCount = userProfile.stranger_video_requests || 0;
         userProfile.stranger_video_requests = oldCount + 1;
         console.log(`📊 [${character.toUpperCase()}] User yêu cầu video - counter: ${oldCount} → ${userProfile.stranger_video_requests}`);
     }
     
-    // Check quota và request count TRƯỚC khi gọi AI để thêm context vào prompt (chỉ cho zoe, mera, thang, không áp dụng cho kai)
+    // Check quota và request count TRƯỚC khi gọi AI để thêm context vào prompt
     let quotaExceededContext = '';
     let requestCountContext = '';
     const preCheckStage = userProfile.relationship_stage || 'stranger';
-    if (preCheckStage === 'stranger' && character !== 'kai') {
+    if (preCheckStage === 'stranger') {
         // Check nếu user yêu cầu video
         if (userRequestedVideo) {
             const videoRequestCount = userProfile.stranger_video_requests || 0; // Đã được tăng ở trên
@@ -2127,41 +2127,55 @@ app.post('/chat', async (req, res) => {
             // Check quota TRƯỚC - nếu hết quota thì không cần check requestCount nữa
             if (!videoQuotaCheck.allowed) {
                 // Quota đã hết - từ chối, bỏ qua requestCount
-                quotaExceededContext = (character === 'zoe')
+                quotaExceededContext = (character === 'zoe' || character === 'kai')
                     ? '\n\n[IMPORTANT CONTEXT: The quota for normal videos in Stranger stage has been exceeded (3/3 sent). If the user requests a video, you MUST politely refuse and suggest they chat more to build trust. DO NOT claim to send a video. DO NOT send funny video as replacement - funny videos are ONLY for when user is sad (system auto-sends), NOT when quota is exceeded.]'
                     : '\n\n[QUAN TRỌNG: Đã hết quota video bình thường ở giai đoạn Người Lạ (3/3 đã gửi). Nếu người dùng yêu cầu video, bạn PHẢI từ chối khéo léo và gợi ý họ trò chuyện nhiều hơn để tăng sự tin tưởng. TUYỆT ĐỐI KHÔNG được nói "đã gửi video" hoặc "gửi video cho bạn". TUYỆT ĐỐI KHÔNG ĐƯỢC GỬI VIDEO FUNNY THAY THẾ - video funny CHỈ được gửi khi người dùng buồn (hệ thống tự động), KHÔNG phải khi hết quota!]';
                 console.log(`⚠️ [${character.toUpperCase()}] [QUOTA PRE-CHECK] Video quota exceeded, adding context to prompt`);
                 // Clear requestCountContext vì quota đã hết
                 requestCountContext = '';
             } else {
-                // Quota chưa hết - check requestCount (chỉ cho zoe, mera, thang)
-                if (character !== 'kai') {
-                    if (videoRequestCount === 1) {
-                        // Lần đầu - sẽ từ chối
-                        requestCountContext = (character === 'zoe')
-                            ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting a video. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
-                            : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu video. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
-                    } else if (videoRequestCount >= 2) {
-                        // Từ lần 2 trở đi - PHẢI gửi (chỉ khi quota chưa hết)
-                        requestCountContext = (character === 'zoe')
-                            ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again!]`
-                            : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
-                    }
+                // Quota chưa hết - check requestCount
+                if (videoRequestCount === 1) {
+                    // Lần đầu - sẽ từ chối
+                    requestCountContext = (character === 'zoe' || character === 'kai')
+                        ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting a video. You MUST politely refuse (do not send [SEND_MEDIA] tag). Think carefully and come up with a tactful, concise, and graceful refusal. Be friendly but firm about needing to build trust first. Make your refusal natural and thoughtful.]'
+                        : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu video. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Hãy suy nghĩ kỹ và đưa ra lời từ chối khéo léo, gọn gàng, uyển chuyển. Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
+                } else if (videoRequestCount >= 2) {
+                    // Từ lần 2 trở đi - PHẢI gửi (chỉ khi quota chưa hết)
+                    requestCountContext = (character === 'zoe' || character === 'kai')
+                        ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again!]`
+                        : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
                 }
             }
         }
         
-        // Check nếu user yêu cầu ảnh (chỉ cho zoe, mera, thang, không áp dụng cho kai)
-        if (userRequestedImage && !userRequestedVideo && character !== 'kai') {
+        // Check nếu user yêu cầu ảnh
+        if (userRequestedImage && !userRequestedVideo) {
             const imageRequestCount = userProfile.stranger_image_requests || 0; // Đã được tăng ở trên
-            if (imageRequestCount === 1) {
-                requestCountContext = (character === 'zoe')
-                    ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting an image. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
-                    : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu ảnh. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
-            } else if (imageRequestCount >= 2) {
-                requestCountContext = (character === 'zoe')
-                    ? `\n\n[IMPORTANT CONTEXT: This is request #${imageRequestCount} for an image. You have already refused once. NOW you MUST send the image by adding [SEND_MEDIA: image, normal, selfie] at the end of your reply. DO NOT refuse again!]`
-                    : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${imageRequestCount} về ảnh. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi ảnh bằng cách thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
+            const imageQuotaCheck = checkQuota('stranger', 'image', 'normal', 'selfie');
+            
+            // Check quota TRƯỚC - nếu hết quota thì không cần check requestCount nữa
+            if (!imageQuotaCheck.allowed) {
+                // Quota đã hết - từ chối, bỏ qua requestCount
+                quotaExceededContext = (character === 'zoe' || character === 'kai')
+                    ? '\n\n[IMPORTANT CONTEXT: The quota for normal images in Stranger stage has been exceeded (6/6 sent). If the user requests an image, you MUST politely refuse and suggest they chat more to build trust. DO NOT claim to send an image.]'
+                    : '\n\n[QUAN TRỌNG: Đã hết quota ảnh bình thường ở giai đoạn Người Lạ (6/6 đã gửi). Nếu người dùng yêu cầu ảnh, bạn PHẢI từ chối khéo léo và gợi ý họ trò chuyện nhiều hơn để tăng sự tin tưởng. TUYỆT ĐỐI KHÔNG được nói "đã gửi ảnh" hoặc "gửi ảnh cho bạn".]';
+                console.log(`⚠️ [${character.toUpperCase()}] [QUOTA PRE-CHECK] Image quota exceeded, adding context to prompt`);
+                // Clear requestCountContext vì quota đã hết
+                requestCountContext = '';
+            } else {
+                // Quota chưa hết - check requestCount
+                if (imageRequestCount === 1) {
+                    // Lần đầu - sẽ từ chối
+                    requestCountContext = (character === 'zoe' || character === 'kai')
+                        ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting an image. You MUST politely refuse (do not send [SEND_MEDIA] tag). Think carefully and come up with a tactful, concise, and graceful refusal. Be friendly but firm about needing to build trust first. Make your refusal natural and thoughtful.]'
+                        : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu ảnh. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Hãy suy nghĩ kỹ và đưa ra lời từ chối khéo léo, gọn gàng, uyển chuyển. Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
+                } else if (imageRequestCount >= 2) {
+                    // Từ lần 2 trở đi - PHẢI gửi (chỉ khi quota chưa hết)
+                    requestCountContext = (character === 'zoe' || character === 'kai')
+                        ? `\n\n[IMPORTANT CONTEXT: This is request #${imageRequestCount} for an image. You have already refused once. NOW you MUST send the image by adding [SEND_MEDIA: image, normal, selfie] at the end of your reply. DO NOT refuse again!]`
+                        : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${imageRequestCount} về ảnh. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi ảnh bằng cách thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
+                }
             }
         }
     }
@@ -2371,10 +2385,9 @@ app.post('/chat', async (req, res) => {
         return { allowed: remaining > 0, remaining, maxQuota, sent };
     }
     
-    // Helper: Check lần đầu từ chối (không áp dụng cho kai)
+    // Helper: Check lần đầu từ chối
     // Lưu ý: Counter đã được tăng TRƯỚC khi gọi hàm này, nên lần đầu = 1
     function shouldRefuseFirstRequest(type) {
-        if (character === 'kai') return false; // Không áp dụng cho Kai
         if (relationshipStage !== 'stranger') return false;
         if (!MEDIA_QUOTA_CONFIG.stranger.firstRefusal) return false;
         
@@ -2584,8 +2597,8 @@ app.post('/chat', async (req, res) => {
             mediaSubject = null;
         }
         
-        // 2. Check quota (Stranger và Friend stage) - Bỏ qua nếu là video funny hoặc là kai
-        if (shouldSend && !isFunnyVideo && relationshipStage !== 'lover' && character !== 'kai') {
+        // 2. Check quota (Stranger và Friend stage) - Bỏ qua nếu là video funny
+        if (shouldSend && !isFunnyVideo && relationshipStage !== 'lover') {
             const quotaCheck = checkQuota(relationshipStage, type, topic, subject);
             if (!quotaCheck.allowed) {
                 shouldSend = false;
@@ -3870,9 +3883,19 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
 
 **QUY TẮC GỬI MEDIA (BẮT BUỘC - KHÔNG ĐƯỢC BỎ QUA):**
 
-${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI ĐOẠN "NGƯỜI LẠ" - GỬI ẢNH:**
+${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI ĐOẠN "NGƯỜI LẠ":**
 
-**QUAN TRỌNG:** Trong giai đoạn "Người Lạ", bạn PHẢI tỏ ra KHÓ KHĂN, có giá trị, KHÔNG dễ dãi khi người dùng đòi xem ảnh!
+${(character === 'zoe' || character === 'kai') ? `**QUY TẮC GỬI ẢNH/VIDEO (KAI/ZOE - ENGLISH):**
+- **First request:** You MUST politely refuse (do not send [SEND_MEDIA] tag). Think carefully and come up with a tactful, concise, and graceful refusal. Be friendly but firm about needing to build trust first.
+- **From 2nd request onwards:** When the user requests to see an image/video, you MUST send [SEND_MEDIA: image, normal, selfie] or [SEND_MEDIA: video, normal, moment] at the end of your reply
+- **QUOTA:** 6 normal images, 3 normal videos (system will automatically check, you just need to send when you agree)
+- **⚠️⚠️⚠️ IMPORTANT: WHEN QUOTA EXCEEDED (system will automatically remove [SEND_MEDIA] tag):** You MUST politely refuse and suggest the user chat more to build trust. **ABSOLUTELY DO NOT AUTOMATICALLY SEND FUNNY VIDEO AS REPLACEMENT!** Funny videos are ONLY sent when the user is sad (system auto-sends), NOT when quota is exceeded!
+- **IMPORTANT:** Your reply must be CONCISE, NATURAL, not too long (max 50-80 characters)
+- Your message must be APPROPRIATE for sending image/video - no need for long explanations, just briefly say you're sending
+- **DO NOT MAKE UP DETAILED DESCRIPTIONS** about the image/video content because you don't know exactly what the image/video contains!
+- **WAIT FOR USER'S RESPONSE** about what the image/video contains, then respond appropriately based on the actual content
+- Correct example: "Here's a photo for you, babe [SEND_MEDIA: image, normal, selfie]" → wait for user to say "it's beautiful" or "what are you wearing" → then respond appropriately
+- Wrong example: "Here's a photo of me wearing a white shirt standing at a coffee shop" → NOT ALLOWED because you don't know if the photo is actually a white shirt, coffee shop or not!` : `**QUAN TRỌNG:** Trong giai đoạn "Người Lạ", bạn PHẢI tỏ ra KHÓ KHĂN, có giá trị, KHÔNG dễ dãi khi người dùng đòi xem ảnh!
 
 **QUY TẮC GỬI ẢNH/VIDEO:**
 - **Lần đầu yêu cầu:** BẮT BUỘC phải từ chối khéo léo, KHÔNG gửi [SEND_MEDIA] tag. Hãy suy nghĩ và đưa ra lời từ chối khéo léo, gọn gàng, uyển chuyển.
@@ -3882,6 +3905,9 @@ ${relationshipStage === 'stranger' ? `**⚠️ QUY TẮC ĐẶC BIỆT CHO GIAI 
 - **QUAN TRỌNG:** Câu trả lời phải NGẮN GỌN, TỰ NHIÊN, không quá dài dòng (tối đa 50-80 ký tự)
 - Lời thoại phải PHÙ HỢP với việc gửi ảnh/video - không cần giải thích dài dòng, chỉ cần nói ngắn gọn là đang gửi
 - **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh/video vì bạn không biết chính xác ảnh/video đó có nội dung gì!
+- **ĐỢI NGƯỜI DÙNG PHẢN HỒI** về ảnh/video đó có nội dung gì, sau đó mới đối đáp lại cho phù hợp với nội dung thực tế
+- Ví dụ đúng: "Em gửi ảnh cho anh xem nè [SEND_MEDIA: image, normal, selfie]" → đợi người dùng nói "ảnh đẹp quá" hoặc "em mặc áo gì vậy" → lúc đó mới đối đáp phù hợp
+- Ví dụ sai: "Em gửi ảnh em đang mặc áo sơ mi trắng đứng ở quán cà phê cho anh xem nè" → KHÔNG ĐƯỢC vì bạn không biết ảnh đó có đúng là áo sơ mi trắng, quán cà phê không!`}
 
 **GIỚI HẠN NGHIÊM NGẶT:**
 - **CHỈ được gửi ẢNH/VIDEO BÌNH THƯỜNG (normal)**, KHÔNG được gửi sensitive ở giai đoạn này
