@@ -2135,16 +2135,19 @@ app.post('/chat', async (req, res) => {
                 requestCountContext = '';
             } else {
                 // Quota chưa hết - check requestCount
+                console.log(`🔍 [${character.toUpperCase()}] [VIDEO REQUEST CHECK] videoRequestCount=${videoRequestCount}, quotaAllowed=${videoQuotaCheck.allowed}, quotaSent=${videoQuotaCheck.sent}/${videoQuotaCheck.maxQuota}`);
                 if (videoRequestCount === 1) {
                     // Lần đầu - sẽ từ chối
                     requestCountContext = (character === 'zoe' || character === 'kai')
                         ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting a video. You MUST politely refuse (do not send [SEND_MEDIA] tag). Think carefully and come up with a tactful, concise, and graceful refusal. Be friendly but firm about needing to build trust first. Make your refusal natural and thoughtful.]'
                         : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu video. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Hãy suy nghĩ kỹ và đưa ra lời từ chối khéo léo, gọn gàng, uyển chuyển. Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
+                    console.log(`🚫 [${character.toUpperCase()}] [FIRST REFUSAL CONTEXT] Adding first refusal context for video`);
                 } else if (videoRequestCount >= 2) {
                     // Từ lần 2 trở đi - PHẢI gửi (chỉ khi quota chưa hết)
                     requestCountContext = (character === 'zoe' || character === 'kai')
-                        ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again!]`
-                        : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
+                        ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again! DO NOT say "I've hit my limit" or "I've shared enough" - you MUST send the video now!]`
+                        : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa! KHÔNG được nói "đã hết quota" hoặc "đã gửi đủ" - bạn PHẢI gửi video ngay bây giờ!]`;
+                    console.log(`✅ [${character.toUpperCase()}] [MUST SEND CONTEXT] Adding MUST SEND context for video request #${videoRequestCount}`);
                 }
             }
         }
@@ -2558,6 +2561,11 @@ app.post('/chat', async (req, res) => {
     // Xử lý [SEND_MEDIA] tag với quota checking và lần đầu từ chối
     const mediaRegex = /\[SEND_MEDIA:\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\]/; 
     const mediaMatch = rawReply.match(mediaRegex);
+    
+    // Log nếu không có [SEND_MEDIA] tag nhưng user đã yêu cầu
+    if (!mediaMatch && (userRequestedVideo || userRequestedImage)) {
+        console.log(`⚠️ [${character.toUpperCase()}] [NO MEDIA TAG] User requested ${userRequestedVideo ? 'video' : 'image'} but AI did not generate [SEND_MEDIA] tag. Raw reply: "${rawReply.substring(0, 100)}..."`);
+    }
     
     if (mediaMatch) {
         const [, type, topic, subject] = mediaMatch; 
