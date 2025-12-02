@@ -2761,15 +2761,21 @@ app.post('/chat', async (req, res) => {
                         memory.user_profile = mediaResult.updatedMemory.user_profile;
                         
                         // Tăng counter cho quota tracking
+                        // LƯU Ý: Funny video KHÔNG tăng counter stranger_videos_sent vì không tính vào quota normal video
                         if (relationshipStage === 'stranger') {
                             if (type === 'image') {
                                 const oldSent = userProfile.stranger_images_sent || 0;
                                 userProfile.stranger_images_sent = oldSent + 1;
                                 console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng stranger_images_sent: ${oldSent} → ${userProfile.stranger_images_sent}`);
                             } else if (type === 'video') {
-                                const oldSent = userProfile.stranger_videos_sent || 0;
-                                userProfile.stranger_videos_sent = oldSent + 1;
-                                console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng stranger_videos_sent: ${oldSent} → ${userProfile.stranger_videos_sent}`);
+                                // CHỈ tăng counter khi là normal video (moment), KHÔNG tăng khi là funny video
+                                if (subject !== 'funny') {
+                                    const oldSent = userProfile.stranger_videos_sent || 0;
+                                    userProfile.stranger_videos_sent = oldSent + 1;
+                                    console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng stranger_videos_sent: ${oldSent} → ${userProfile.stranger_videos_sent} (type: ${subject})`);
+                                } else {
+                                    console.log(`📊 [${character.toUpperCase()}] [QUOTA] Funny video KHÔNG tăng stranger_videos_sent counter (không tính vào quota normal video)`);
+                                }
                             }
                         } else if (relationshipStage === 'friend') {
                             if (type === 'image') {
