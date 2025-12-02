@@ -2124,6 +2124,9 @@ app.post('/chat', async (req, res) => {
             const videoRequestCount = userProfile.stranger_video_requests || 0; // Đã được tăng ở trên
             const videoQuotaCheck = checkQuota('stranger', 'video', 'normal', 'moment');
             
+            // Log chi tiết để debug
+            console.log(`🔍 [${character.toUpperCase()}] [VIDEO QUOTA DEBUG] requestCount=${videoRequestCount}, quotaSent=${videoQuotaCheck.sent}, quotaMax=${videoQuotaCheck.maxQuota}, quotaAllowed=${videoQuotaCheck.allowed}`);
+            
             // Check quota TRƯỚC - nếu hết quota thì không cần check requestCount nữa
             if (!videoQuotaCheck.allowed) {
                 // Quota đã hết - từ chối, bỏ qua requestCount
@@ -2724,6 +2727,42 @@ app.post('/chat', async (req, res) => {
                 mediaTopic = topic;
                 mediaSubject = subject;
                         memory.user_profile = mediaResult.updatedMemory.user_profile;
+                        
+                        // Tăng counter cho quota tracking
+                        if (relationshipStage === 'stranger') {
+                            if (type === 'image') {
+                                const oldSent = userProfile.stranger_images_sent || 0;
+                                userProfile.stranger_images_sent = oldSent + 1;
+                                console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng stranger_images_sent: ${oldSent} → ${userProfile.stranger_images_sent}`);
+                            } else if (type === 'video') {
+                                const oldSent = userProfile.stranger_videos_sent || 0;
+                                userProfile.stranger_videos_sent = oldSent + 1;
+                                console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng stranger_videos_sent: ${oldSent} → ${userProfile.stranger_videos_sent}`);
+                            }
+                        } else if (relationshipStage === 'friend') {
+                            if (type === 'image') {
+                                if (topic === 'sensitive' && (subject === 'body' || subject === 'bikini')) {
+                                    const oldSent = userProfile.friend_body_images_sent || 0;
+                                    userProfile.friend_body_images_sent = oldSent + 1;
+                                    console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng friend_body_images_sent: ${oldSent} → ${userProfile.friend_body_images_sent}`);
+                                } else {
+                                    const oldSent = userProfile.friend_images_sent || 0;
+                                    userProfile.friend_images_sent = oldSent + 1;
+                                    console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng friend_images_sent: ${oldSent} → ${userProfile.friend_images_sent}`);
+                                }
+                            } else if (type === 'video') {
+                                if (topic === 'sensitive' && (subject === 'shape' || subject === 'body')) {
+                                    const oldSent = userProfile.friend_body_videos_sent || 0;
+                                    userProfile.friend_body_videos_sent = oldSent + 1;
+                                    console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng friend_body_videos_sent: ${oldSent} → ${userProfile.friend_body_videos_sent}`);
+                                } else {
+                                    const oldSent = userProfile.friend_videos_sent || 0;
+                                    userProfile.friend_videos_sent = oldSent + 1;
+                                    console.log(`📊 [${character.toUpperCase()}] [QUOTA] Tăng friend_videos_sent: ${oldSent} → ${userProfile.friend_videos_sent}`);
+                                }
+                            }
+                        }
+                        
                 rawReply = rawReply.replace(mediaRegex, '').trim();
                 console.log(`✅ [${character.toUpperCase()}] ✅ Đã gửi media thành công: ${mediaUrl} (topic: ${topic}, subject: ${subject})`);
                     } else {
