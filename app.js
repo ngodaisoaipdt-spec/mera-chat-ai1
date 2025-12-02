@@ -2602,7 +2602,8 @@ app.post('/chat', async (req, res) => {
         if (!isFunnyVideo && shouldRefuseFirstRequest(type)) {
             shouldSend = false;
             refusalReason = 'first_refusal';
-            console.log(`🚫 [${character.toUpperCase()}] [FIRST REFUSAL] Từ chối lần đầu - type: ${type}, stage: ${relationshipStage}`);
+            const requestCount = type === 'image' ? (userProfile.stranger_image_requests || 0) : (userProfile.stranger_video_requests || 0);
+            console.log(`🚫 [${character.toUpperCase()}] [FIRST REFUSAL] Từ chối lần đầu - type: ${type}, stage: ${relationshipStage}, requestCount: ${requestCount}`);
             // Xóa [SEND_MEDIA] tag, AI sẽ tự từ chối trong reply
             rawReply = rawReply.replace(mediaRegex, '').trim();
             // Loại bỏ các câu nói về việc đã gửi video/ảnh (nếu AI vẫn nói)
