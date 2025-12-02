@@ -2123,25 +2123,28 @@ app.post('/chat', async (req, res) => {
             const videoRequestCount = userProfile.stranger_video_requests || 0; // Đã được tăng ở trên
             const videoQuotaCheck = checkQuota('stranger', 'video', 'normal', 'moment');
             
-            // Thêm context về số lần yêu cầu
-            if (videoRequestCount === 1) {
-                // Lần đầu - sẽ từ chối
-                requestCountContext = (character === 'zoe' || character === 'kai')
-                    ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting a video. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
-                    : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu video. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
-            } else if (videoRequestCount >= 2) {
-                // Từ lần 2 trở đi - PHẢI gửi
-                requestCountContext = (character === 'zoe' || character === 'kai')
-                    ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again!]`
-                    : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
-            }
-            
-            // Check quota
+            // Check quota TRƯỚC - nếu hết quota thì không cần check requestCount nữa
             if (!videoQuotaCheck.allowed) {
+                // Quota đã hết - từ chối, bỏ qua requestCount
                 quotaExceededContext = (character === 'zoe' || character === 'kai')
                     ? '\n\n[IMPORTANT CONTEXT: The quota for normal videos in Stranger stage has been exceeded (3/3 sent). If the user requests a video, you MUST politely refuse and suggest they chat more to build trust. DO NOT claim to send a video. DO NOT send funny video as replacement - funny videos are ONLY for when user is sad (system auto-sends), NOT when quota is exceeded.]'
                     : '\n\n[QUAN TRỌNG: Đã hết quota video bình thường ở giai đoạn Người Lạ (3/3 đã gửi). Nếu người dùng yêu cầu video, bạn PHẢI từ chối khéo léo và gợi ý họ trò chuyện nhiều hơn để tăng sự tin tưởng. TUYỆT ĐỐI KHÔNG được nói "đã gửi video" hoặc "gửi video cho bạn". TUYỆT ĐỐI KHÔNG ĐƯỢC GỬI VIDEO FUNNY THAY THẾ - video funny CHỈ được gửi khi người dùng buồn (hệ thống tự động), KHÔNG phải khi hết quota!]';
                 console.log(`⚠️ [${character.toUpperCase()}] [QUOTA PRE-CHECK] Video quota exceeded, adding context to prompt`);
+                // Clear requestCountContext vì quota đã hết
+                requestCountContext = '';
+            } else {
+                // Quota chưa hết - check requestCount
+                if (videoRequestCount === 1) {
+                    // Lần đầu - sẽ từ chối
+                    requestCountContext = (character === 'zoe' || character === 'kai')
+                        ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting a video. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
+                        : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu video. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
+                } else if (videoRequestCount >= 2) {
+                    // Từ lần 2 trở đi - PHẢI gửi (chỉ khi quota chưa hết)
+                    requestCountContext = (character === 'zoe' || character === 'kai')
+                        ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again!]`
+                        : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
+                }
             }
         }
         
