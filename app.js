@@ -2591,15 +2591,21 @@ app.post('/chat', async (req, res) => {
             if (type === 'video') {
                 const isEnglish = (character === 'zoe' || character === 'kai');
                 const sentVideoPatterns = isEnglish 
-                    ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*video/gi
-                    : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(video|vid)/gi;
-                rawReply = rawReply.replace(sentVideoPatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
+                    ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the|i'?ll send|i can.*send|i cannot send|i agree.*send|agreed.*send|i'?m sending|sending|sent|here you go|here it is|here'?s your|here'?s the).*video/gi
+                    : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em|đồng ý.*gửi|đã đồng ý|gửi.*cho|gửi.*bạn).*(video|vid)/gi;
+                if (sentVideoPatterns.test(rawReply)) {
+                    rawReply = rawReply.replace(sentVideoPatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
+                    console.log(`⚠️ [${character.toUpperCase()}] [FIRST REFUSAL CLEANUP] Đã loại bỏ text "đã gửi video" từ reply`);
+                }
             } else if (type === 'image') {
                 const isEnglish = (character === 'zoe' || character === 'kai');
                 const sentImagePatterns = isEnglish 
-                    ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*(photo|picture|image|pic)/gi
-                    : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(ảnh|hình|photo|pic)/gi;
-                rawReply = rawReply.replace(sentImagePatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
+                    ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the|i'?ll send|i can.*send|i cannot send|i agree.*send|agreed.*send|i'?m sending|sending|sent|here you go|here it is|here'?s your|here'?s the|sure.*here|alright.*here).*(photo|picture|image|pic|selfie)/gi
+                    : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em|đồng ý.*gửi|đã đồng ý|gửi.*cho|gửi.*bạn|thôi.*được|được.*rồi).*(ảnh|hình|photo|pic|selfie)/gi;
+                if (sentImagePatterns.test(rawReply)) {
+                    rawReply = rawReply.replace(sentImagePatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
+                    console.log(`⚠️ [${character.toUpperCase()}] [FIRST REFUSAL CLEANUP] Đã loại bỏ text "đã gửi ảnh" từ reply`);
+                }
             }
             // Đảm bảo không có mediaUrl được trả về
             mediaUrl = null;
@@ -2784,19 +2790,19 @@ app.post('/chat', async (req, res) => {
     if (!mediaUrl && (userRequestedVideo || userRequestedImage)) {
         const isEnglish = (character === 'zoe' || character === 'kai');
         if (userRequestedVideo) {
-            // Loại bỏ text "đã gửi video"
+            // Loại bỏ text "đã gửi video" - mở rộng pattern để bắt nhiều cách diễn đạt hơn
             const sentVideoPatterns = isEnglish 
-                ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*video/gi
-                : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(video|vid)/gi;
+                ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the|i'?ll send|i can.*send|i cannot send|i agree.*send|agreed.*send|i'?m sending|sending|sent|here you go|here it is|here'?s your|here'?s the|sure.*here|alright.*here|fun clip|quick clip).*video/gi
+                : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em|đồng ý.*gửi|đã đồng ý|gửi.*cho|gửi.*bạn).*(video|vid)/gi;
             if (sentVideoPatterns.test(rawReply)) {
                 rawReply = rawReply.replace(sentVideoPatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
                 console.log(`⚠️ [${character.toUpperCase()}] [CLEANUP] Đã loại bỏ text "đã gửi video" vì không có media được gửi`);
             }
         } else if (userRequestedImage) {
-            // Loại bỏ text "đã gửi ảnh"
+            // Loại bỏ text "đã gửi ảnh" - mở rộng pattern để bắt nhiều cách diễn đạt hơn
             const sentImagePatterns = isEnglish 
-                ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the).*(photo|picture|image|pic)/gi
-                : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em).*(ảnh|hình|photo|pic)/gi;
+                ? /(here'?s|here is|i'?ve sent|i sent|sending you|sent you|here'?s a|here'?s the|i'?ll send|i can.*send|i cannot send|i agree.*send|agreed.*send|i'?m sending|sending|sent|here you go|here it is|here'?s your|here'?s the|sure.*here|alright.*here|quick selfie|recent selfie).*(photo|picture|image|pic|selfie)/gi
+                : /(đây|gửi|đã gửi|gửi cho|gửi bạn|gửi anh|gửi em|đồng ý.*gửi|đã đồng ý|gửi.*cho|gửi.*bạn|thôi.*được|được.*rồi).*(ảnh|hình|photo|pic|selfie)/gi;
             if (sentImagePatterns.test(rawReply)) {
                 rawReply = rawReply.replace(sentImagePatterns, isEnglish ? 'I cannot send' : 'Tôi không thể gửi');
                 console.log(`⚠️ [${character.toUpperCase()}] [CLEANUP] Đã loại bỏ text "đã gửi ảnh" vì không có media được gửi`);
@@ -2861,6 +2867,11 @@ app.post('/chat', async (req, res) => {
     } 
     
     // Lưu memory
+    // Log counter trước khi save
+    if (userRequestedVideo || userRequestedImage) {
+        console.log(`💾 [${character.toUpperCase()}] [BEFORE SAVE] stranger_image_requests=${userProfile.stranger_image_requests}, stranger_video_requests=${userProfile.stranger_video_requests}, stranger_images_sent=${userProfile.stranger_images_sent}, stranger_videos_sent=${userProfile.stranger_videos_sent}`);
+    }
+    
     await memory.save(); 
     
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
