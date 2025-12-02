@@ -321,8 +321,11 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
     }
     .character-grid {
         grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-        padding: 0 2px;
+        gap: 8px;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        box-sizing: border-box;
     }
     .character-card {
         flex-direction: column;
