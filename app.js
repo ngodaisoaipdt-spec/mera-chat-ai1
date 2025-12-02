@@ -1949,7 +1949,23 @@ const characters = {
     } 
 };
 
-async function loadMemory(userId, character) { let memory = await Memory.findOne({ userId, character }); if (!memory) { memory = new Memory({ userId, character, user_profile: {} }); await memory.save(); } return memory; }
+async function loadMemory(userId, character) { 
+    let memory = await Memory.findOne({ userId, character }); 
+    if (!memory) { 
+        memory = new Memory({ userId, character, user_profile: {} }); 
+        await memory.save(); 
+    } else {
+        // Log counter khi load memory để debug
+        const imgReq = memory.user_profile?.stranger_image_requests || 0;
+        const vidReq = memory.user_profile?.stranger_video_requests || 0;
+        const imgSent = memory.user_profile?.stranger_images_sent || 0;
+        const vidSent = memory.user_profile?.stranger_videos_sent || 0;
+        if (imgReq > 0 || vidReq > 0 || imgSent > 0 || vidSent > 0) {
+            console.log(`📥 [${character.toUpperCase()}] [LOAD MEMORY] stranger_image_requests=${imgReq}, stranger_video_requests=${vidReq}, stranger_images_sent=${imgSent}, stranger_videos_sent=${vidSent}`);
+        }
+    }
+    return memory; 
+}
 
 // Hàm kiểm tra và reset daily message count (reset lúc 6h sáng)
 function checkAndResetDailyMessageCount(userProfile) {
