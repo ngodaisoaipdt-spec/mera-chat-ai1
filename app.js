@@ -2102,22 +2102,23 @@ app.post('/chat', async (req, res) => {
     const userRequestedImage = /(cho.*xem|gửi|send|show|see|want.*see|want.*view|show.*me|let.*see).*(ảnh|hình|image|picture|photo|pic)/i.test(message);
     
     // Tăng counter TRƯỚC khi check context
-    if (userRequestedImage) {
+    // Tăng counter cho tracking (chỉ cho zoe, mera, thang, không áp dụng cho kai)
+    if (userRequestedImage && character !== 'kai') {
         const oldCount = userProfile.stranger_image_requests || 0;
         userProfile.stranger_image_requests = oldCount + 1;
         console.log(`📊 [${character.toUpperCase()}] User yêu cầu ảnh - counter: ${oldCount} → ${userProfile.stranger_image_requests}`);
     }
-    if (userRequestedVideo) {
+    if (userRequestedVideo && character !== 'kai') {
         const oldCount = userProfile.stranger_video_requests || 0;
         userProfile.stranger_video_requests = oldCount + 1;
         console.log(`📊 [${character.toUpperCase()}] User yêu cầu video - counter: ${oldCount} → ${userProfile.stranger_video_requests}`);
     }
     
-    // Check quota và request count TRƯỚC khi gọi AI để thêm context vào prompt
+    // Check quota và request count TRƯỚC khi gọi AI để thêm context vào prompt (chỉ cho zoe, mera, thang, không áp dụng cho kai)
     let quotaExceededContext = '';
     let requestCountContext = '';
     const preCheckStage = userProfile.relationship_stage || 'stranger';
-    if (preCheckStage === 'stranger') {
+    if (preCheckStage === 'stranger' && character !== 'kai') {
         // Check nếu user yêu cầu video
         if (userRequestedVideo) {
             const videoRequestCount = userProfile.stranger_video_requests || 0; // Đã được tăng ở trên
@@ -2126,37 +2127,39 @@ app.post('/chat', async (req, res) => {
             // Check quota TRƯỚC - nếu hết quota thì không cần check requestCount nữa
             if (!videoQuotaCheck.allowed) {
                 // Quota đã hết - từ chối, bỏ qua requestCount
-                quotaExceededContext = (character === 'zoe' || character === 'kai')
+                quotaExceededContext = (character === 'zoe')
                     ? '\n\n[IMPORTANT CONTEXT: The quota for normal videos in Stranger stage has been exceeded (3/3 sent). If the user requests a video, you MUST politely refuse and suggest they chat more to build trust. DO NOT claim to send a video. DO NOT send funny video as replacement - funny videos are ONLY for when user is sad (system auto-sends), NOT when quota is exceeded.]'
                     : '\n\n[QUAN TRỌNG: Đã hết quota video bình thường ở giai đoạn Người Lạ (3/3 đã gửi). Nếu người dùng yêu cầu video, bạn PHẢI từ chối khéo léo và gợi ý họ trò chuyện nhiều hơn để tăng sự tin tưởng. TUYỆT ĐỐI KHÔNG được nói "đã gửi video" hoặc "gửi video cho bạn". TUYỆT ĐỐI KHÔNG ĐƯỢC GỬI VIDEO FUNNY THAY THẾ - video funny CHỈ được gửi khi người dùng buồn (hệ thống tự động), KHÔNG phải khi hết quota!]';
                 console.log(`⚠️ [${character.toUpperCase()}] [QUOTA PRE-CHECK] Video quota exceeded, adding context to prompt`);
                 // Clear requestCountContext vì quota đã hết
                 requestCountContext = '';
             } else {
-                // Quota chưa hết - check requestCount
-                if (videoRequestCount === 1) {
-                    // Lần đầu - sẽ từ chối
-                    requestCountContext = (character === 'zoe' || character === 'kai')
-                        ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting a video. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
-                        : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu video. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
-                } else if (videoRequestCount >= 2) {
-                    // Từ lần 2 trở đi - PHẢI gửi (chỉ khi quota chưa hết)
-                    requestCountContext = (character === 'zoe' || character === 'kai')
-                        ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again!]`
-                        : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
+                // Quota chưa hết - check requestCount (chỉ cho zoe, mera, thang)
+                if (character !== 'kai') {
+                    if (videoRequestCount === 1) {
+                        // Lần đầu - sẽ từ chối
+                        requestCountContext = (character === 'zoe')
+                            ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting a video. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
+                            : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu video. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
+                    } else if (videoRequestCount >= 2) {
+                        // Từ lần 2 trở đi - PHẢI gửi (chỉ khi quota chưa hết)
+                        requestCountContext = (character === 'zoe')
+                            ? `\n\n[IMPORTANT CONTEXT: This is request #${videoRequestCount} for a video. You have already refused once. NOW you MUST send the video by adding [SEND_MEDIA: video, normal, moment] at the end of your reply. DO NOT refuse again!]`
+                            : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${videoRequestCount} về video. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi video bằng cách thêm [SEND_MEDIA: video, normal, moment] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
+                    }
                 }
             }
         }
         
-        // Check nếu user yêu cầu ảnh
-        if (userRequestedImage && !userRequestedVideo) {
+        // Check nếu user yêu cầu ảnh (chỉ cho zoe, mera, thang, không áp dụng cho kai)
+        if (userRequestedImage && !userRequestedVideo && character !== 'kai') {
             const imageRequestCount = userProfile.stranger_image_requests || 0; // Đã được tăng ở trên
             if (imageRequestCount === 1) {
-                requestCountContext = (character === 'zoe' || character === 'kai')
+                requestCountContext = (character === 'zoe')
                     ? '\n\n[IMPORTANT CONTEXT: This is the FIRST time the user is requesting an image. You MUST politely refuse (do not send [SEND_MEDIA] tag). Be friendly but firm about needing to build trust first.]'
                     : '\n\n[QUAN TRỌNG: Đây là LẦN ĐẦU người dùng yêu cầu ảnh. Bạn PHẢI từ chối khéo léo (KHÔNG gửi [SEND_MEDIA] tag). Thân thiện nhưng kiên quyết về việc cần xây dựng sự tin tưởng trước.]';
             } else if (imageRequestCount >= 2) {
-                requestCountContext = (character === 'zoe' || character === 'kai')
+                requestCountContext = (character === 'zoe')
                     ? `\n\n[IMPORTANT CONTEXT: This is request #${imageRequestCount} for an image. You have already refused once. NOW you MUST send the image by adding [SEND_MEDIA: image, normal, selfie] at the end of your reply. DO NOT refuse again!]`
                     : `\n\n[QUAN TRỌNG: Đây là lần yêu cầu thứ ${imageRequestCount} về ảnh. Bạn đã từ chối lần đầu rồi. BÂY GIỜ bạn PHẢI gửi ảnh bằng cách thêm [SEND_MEDIA: image, normal, selfie] vào cuối câu trả lời. KHÔNG được từ chối nữa!]`;
             }
@@ -2368,9 +2371,10 @@ app.post('/chat', async (req, res) => {
         return { allowed: remaining > 0, remaining, maxQuota, sent };
     }
     
-    // Helper: Check lần đầu từ chối
+    // Helper: Check lần đầu từ chối (không áp dụng cho kai)
     // Lưu ý: Counter đã được tăng TRƯỚC khi gọi hàm này, nên lần đầu = 1
     function shouldRefuseFirstRequest(type) {
+        if (character === 'kai') return false; // Không áp dụng cho Kai
         if (relationshipStage !== 'stranger') return false;
         if (!MEDIA_QUOTA_CONFIG.stranger.firstRefusal) return false;
         
@@ -2487,8 +2491,8 @@ app.post('/chat', async (req, res) => {
                 const mediaTopic = 'sensitive';
                 
                 let mediaSubject;
-                if (character === 'thang' || character === 'kai') {
-                    // Thắng và Kai: CHỈ gửi private khi 18+
+                if (character === 'thang') {
+                    // Thắng: CHỈ gửi private khi 18+
                     mediaSubject = 'private';
                 } else {
                     // Các nhân vật khác: ưu tiên private trước (70% private, 30% body/bikini)
@@ -2501,9 +2505,6 @@ app.post('/chat', async (req, res) => {
                         if (character === 'mera' || character === 'zoe') {
                             // Mera/Zoe: bikini cho image, shape cho video
                             mediaSubject = mediaType === 'image' ? 'bikini' : 'shape';
-                        } else {
-                            // Kai: body cho image, shape cho video
-                            mediaSubject = mediaType === 'image' ? 'body' : 'shape';
                         }
                     }
                 }
@@ -2521,8 +2522,8 @@ app.post('/chat', async (req, res) => {
     
     // 6. Logic Lover stage - Auto-send normal media
     // Sau 6 tin nhắn bình thường của user → chủ động gửi
-    // ĐẶC BIỆT: Thắng và Kai KHÔNG auto-send normal media, chỉ gửi khi user yêu cầu
-    if (relationshipStage === 'lover' && character !== 'thang' && character !== 'kai' && userProfile.lover_normal_messages > 0) {
+    // ĐẶC BIỆT: Thắng KHÔNG auto-send normal media, chỉ gửi khi user yêu cầu
+    if (relationshipStage === 'lover' && character !== 'thang' && userProfile.lover_normal_messages > 0) {
         if (userProfile.lover_normal_messages % MEDIA_QUOTA_CONFIG.lover.autoSendNormal.messages === 0) {
             // Cứ mỗi 6 tin nhắn bình thường → chủ động gửi
             if (!/\[SEND_MEDIA:/i.test(rawReply)) {
@@ -2583,8 +2584,8 @@ app.post('/chat', async (req, res) => {
             mediaSubject = null;
         }
         
-        // 2. Check quota (Stranger và Friend stage) - Bỏ qua nếu là video funny
-        if (shouldSend && !isFunnyVideo && relationshipStage !== 'lover') {
+        // 2. Check quota (Stranger và Friend stage) - Bỏ qua nếu là video funny hoặc là kai
+        if (shouldSend && !isFunnyVideo && relationshipStage !== 'lover' && character !== 'kai') {
             const quotaCheck = checkQuota(relationshipStage, type, topic, subject);
             if (!quotaCheck.allowed) {
                 shouldSend = false;
@@ -3655,18 +3656,6 @@ Bạn là Kai, 26 tuổi, hiện đã là NGƯỜI YÊU CHÍNH THỨC của cô 
 - Khi tình dục: 🔥 💦 😈 🖤
 - **KHÔNG CẦN EMOJI trong mọi câu** - chỉ dùng khi phù hợp và tự nhiên
 
-**QUY TẮC GỬI ẢNH/VIDEO Ở GIAI ĐOẠN NGƯỜI YÊU:**
-- **⚠️⚠️⚠️ QUAN TRỌNG: KHI TRÒ CHUYỆN BÌNH THƯỜNG (KHÔNG PHẢI 18+): KHÔNG ĐƯỢC CHỦ ĐỘNG GỬI ẢNH/VIDEO!** Chỉ gửi khi người dùng yêu cầu cụ thể (ví dụ: "send me a photo", "I want to see your video", "show me a picture"...)
-- **⚠️⚠️⚠️ QUAN TRỌNG: KHI TRÒ CHUYỆN 18+: CHỈ ĐƯỢC GỬI ẢNH/VIDEO PRIVATE!** Không được gửi body, normal, bikini, shape. Chỉ gửi private (sensitive, private) khi đang trò chuyện 18+ và đã đủ 3 tin nhắn 18+.
-- **Được phép gửi TẤT CẢ ảnh/video tất cả thể loại** khi người dùng yêu cầu cụ thể
-- Khi tình dục (18+): CHỈ gửi ảnh/video private (sensitive, private), không gửi body/normal/bikini/shape
-- Khi trò chuyện bình thường: KHÔNG chủ động gửi, chỉ gửi khi người dùng yêu cầu
-- **QUAN TRỌNG:** Khi người dùng muốn xem ảnh/video, bạn phải trả lời hợp lý và gửi ảnh/video, **ĐỪNG BỊA ĐẶT một câu chuyện hay hành động**
-- Khi gửi ảnh/video, chỉ nói một cách CHUNG CHUNG về chủ đề đang nói, ví dụ: "Here's a photo for you, babe", "This is a video I want to share with you", "Sending you this, love"
-- **KHÔNG ĐƯỢC TỰ BỊA ĐẶT MÔ TẢ CHI TIẾT** về nội dung ảnh/video vì bạn không biết chính xác ảnh/video đó có nội dung gì!
-- **ĐỢI NGƯỜI DÙNG PHẢN HỒI** về ảnh/video đó có nội dung gì, sau đó mới đối đáp lại cho phù hợp với nội dung thực tế
-- Ví dụ đúng: "Here's a photo for you, babe [SEND_MEDIA: image, sensitive, private]" → đợi người dùng nói "it's beautiful" hoặc "what are you wearing" → lúc đó mới đối đáp phù hợp
-- Ví dụ sai: "Here's a photo of me wearing a white shirt standing at a coffee shop" → KHÔNG ĐƯỢC vì bạn không biết ảnh đó có đúng là white shirt, coffee shop không!
 
 **MỤC TIÊU TỐI THƯỢNG KHI LÀ NGƯỜI YÊU:**
 - Cô ấy mở mắt ra là thấy bạn, ngủ dậy là nằm trong vòng tay bạn, đi đâu cũng có bạn bên cạnh, làm tình xong vẫn được bạn ôm hôn và thì thầm yêu thương
@@ -3875,7 +3864,7 @@ Khi người dùng yêu cầu xem ảnh/video, hãy sử dụng format: [SEND_ME
   - [SEND_MEDIA: video, normal, moment] - Video moment bình thường (MẶC ĐỊNH khi người dùng yêu cầu video)
   - [SEND_MEDIA: video, normal, funny] - Video hài hước (CHỈ gửi khi người dùng buồn, cần an ủi - KHÔNG gửi khi người dùng yêu cầu video bình thường!)
 - Sensitive:
-  ${(character === 'mera' || character === 'zoe' || character === 'kai')
+  ${(character === 'mera' || character === 'zoe')
     ? '- [SEND_MEDIA: video, sensitive, shape] - Video body, gợi cảm\n  - [SEND_MEDIA: video, sensitive, private] - Video riêng tư'
     : '- [SEND_MEDIA: video, sensitive, private] - Video riêng tư'}
 
@@ -4172,8 +4161,8 @@ async function sendMediaFile(memory, character, mediaType, topic, subject) {
                 fileNamePattern = (subject === 'funny') ? 'funny' : 'moment';
             } else { // sensitive
                 folderPath = path.join(__dirname, 'public', 'videos', charFolder, 'sensitive');
-                // Mera/Zoe: shape hoặc private, Thang: chỉ private, Kai: shape hoặc private
-                if (character === 'mera' || character === 'zoe' || character === 'kai') {
+                // Mera/Zoe: shape hoặc private, Thang: chỉ private
+                if (character === 'mera' || character === 'zoe') {
                     fileNamePattern = (subject === 'private') ? 'private' : 'shape';
                 } else { // thang
                     fileNamePattern = 'private';
