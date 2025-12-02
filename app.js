@@ -2061,7 +2061,9 @@ app.post('/chat', async (req, res) => {
         let userProfile = memory.user_profile; 
         
         // Kiểm tra và reset daily message count (reset lúc 6h sáng)
-        userProfile = checkAndResetDailyMessageCount(userProfile);
+        checkAndResetDailyMessageCount(userProfile);
+        // Đảm bảo userProfile vẫn là reference đến memory.user_profile
+        memory.user_profile = userProfile;
         
         // Kiểm tra giới hạn 10 tin nhắn/ngày cho non-premium user
         if (!isPremiumUser) {
