@@ -4,6 +4,23 @@
 .selection-box h1 { font-size: 1.7em; margin: 0; margin-top: 50px; color: #3c3c3c; }
 .login-box { max-width: 420px; }
 .character-box { max-width: 680px; padding: 35px 45px; }
+@media (max-width: 480px) {
+    .character-box {
+        padding: 20px 15px;
+        max-width: 95vw;
+    }
+    .character-box h2 {
+        font-size: 1.1em;
+        margin-bottom: 20px;
+    }
+    .character-box h1 {
+        font-size: 2em;
+        margin-bottom: 10px;
+    }
+    .character-box p {
+        font-size: 0.95em;
+    }
+}
 .character-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; justify-items: center; }
 .character-card { border: none; border-radius: 18px; padding: 18px 12px; background: #f8f9ff; display: flex; flex-direction: column; align-items: center; gap: 12px; cursor: pointer; transition: transform 0.25s ease, box-shadow 0.25s ease; box-shadow: 0 8px 20px rgba(142, 130, 255, 0.1); }
 .character-card:hover { transform: translateY(-6px); box-shadow: 0 15px 35px rgba(142, 130, 255, 0.25); }
@@ -297,18 +314,30 @@ body.premium-features-active .modal#premiumFeaturesModal { display:flex; opacity
     }
     .character-grid {
         grid-template-columns: repeat(2, 1fr);
-        gap: 15px;
+        gap: 12px;
+        padding: 0 5px;
     }
     .character-card {
-        flex-direction: row;
+        flex-direction: column;
         align-items: center;
-        justify-content: flex-start;
-        gap: 15px;
-        padding: 14px;
+        justify-content: center;
+        gap: 10px;
+        padding: 16px 10px;
+        min-height: 160px;
     }
     .character-avatar {
-        width: 80px;
-        height: 80px;
+        width: 90px;
+        height: 90px;
+        flex-shrink: 0;
+    }
+    .character-name {
+        font-size: 1em;
+        margin-top: 4px;
+    }
+    .character-role {
+        font-size: 0.8em;
+        text-align: center;
+        line-height: 1.3;
     }
     .character-name {
         font-size: 1.05em;
