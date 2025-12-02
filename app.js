@@ -2882,10 +2882,14 @@ app.post('/chat', async (req, res) => {
         memory.history = memory.history.slice(memory.history.length - 50); 
     } 
     
+    // Đảm bảo userProfile được sync vào memory.user_profile trước khi save
+    memory.user_profile = userProfile;
+    
     // Lưu memory
     // Log counter trước khi save
     if (userRequestedVideo || userRequestedImage) {
         console.log(`💾 [${character.toUpperCase()}] [BEFORE SAVE] stranger_image_requests=${userProfile.stranger_image_requests}, stranger_video_requests=${userProfile.stranger_video_requests}, stranger_images_sent=${userProfile.stranger_images_sent}, stranger_videos_sent=${userProfile.stranger_videos_sent}`);
+        console.log(`💾 [${character.toUpperCase()}] [BEFORE SAVE] memory.user_profile.stranger_image_requests=${memory.user_profile.stranger_image_requests}, stranger_video_requests=${memory.user_profile.stranger_video_requests}`);
     }
     
     await memory.save(); 
