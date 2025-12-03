@@ -2204,7 +2204,166 @@ app.post('/chat', async (req, res) => {
         }
     }
     
-    // Sử dụng AI để tạo phản hồi
+    // ============================================
+    // TEMPLATE RESPONSES & CACHE SYSTEM - Giảm token
+    // ============================================
+    
+    // 1. Template responses cho các tin nhắn thường gặp (không cần gọi AI)
+    const messageLower = message.toLowerCase().trim();
+    const isEnglishChar = character === 'zoe' || character === 'kai';
+    
+    // Template responses theo character và stage
+    const templateResponses = {
+        // Chào buổi sáng
+        morning: {
+            vi: {
+                stranger: "Chào buổi sáng anh~ Em chúc anh ngày mới thật vui vẻ nhaaa~ 🥺💕",
+                friend: "Chào buổi sáng anh~ Em chúc anh ngày mới thật vui vẻ và tràn đầy năng lượng nhaaa~ 🥺💕",
+                lover: "Chào buổi sáng anh yêu~ Em chúc anh ngày mới thật vui vẻ và tràn đầy năng lượng nhaaa~ Em nhớ anh lắm~ 🥺💕"
+            },
+            en: {
+                stranger: "Good morning~ I wish you a wonderful day~ 🥺💕",
+                friend: "Good morning~ I wish you a wonderful and energetic day~ 🥺💕",
+                lover: "Good morning, my love~ I wish you a wonderful and energetic day~ I miss you so much~ 🥺💕"
+            }
+        },
+        // Chúc ngủ ngon
+        goodnight: {
+            vi: {
+                stranger: "Chúc anh ngủ ngon nhaaa~ Mơ đẹp về em nhé, em nhớ anh lắm~ 🥺💕",
+                friend: "Chúc anh ngủ ngon nhaaa~ Mơ đẹp về em nhé, em nhớ anh lắm~ 🥺💕",
+                lover: "Chúc anh ngủ ngon nhaaa~ Mơ đẹp về em nhé, em nhớ anh lắm~ Em yêu anh~ 🥺💕"
+            },
+            en: {
+                stranger: "Good night~ Sweet dreams about me, I miss you so much~ 🥺💕",
+                friend: "Good night~ Sweet dreams about me, I miss you so much~ 🥺💕",
+                lover: "Good night, my love~ Sweet dreams about me, I miss you so much~ I love you~ 🥺💕"
+            }
+        },
+        // Cảm ơn
+        thanks: {
+            vi: {
+                stranger: "Hihi cảm ơn anh~ Em rất vui khi nghe anh nói vậy~ 💕",
+                friend: "Hihi cảm ơn anh nhiều~ Em rất vui khi nghe anh nói vậy~ 💕",
+                lover: "Hihi cảm ơn anh yêu~ Em rất vui và hạnh phúc khi nghe anh nói vậy~ 💕"
+            },
+            en: {
+                stranger: "Hihi thank you~ I'm so happy to hear that~ 💕",
+                friend: "Hihi thank you so much~ I'm so happy to hear that~ 💕",
+                lover: "Hihi thank you, my love~ I'm so happy and grateful to hear that~ 💕"
+            }
+        },
+        // Hỏi thăm
+        howareyou: {
+            vi: {
+                stranger: "Em ổn lắm anh~ Hôm nay em đi học và chụp ảnh thôi. Còn anh thì sao? 💕",
+                friend: "Em ổn lắm anh~ Hôm nay em đi cà phê và nghe nhạc. Còn anh thì sao? 💕",
+                lover: "Em ổn lắm anh yêu~ Hôm nay em nhớ anh và đi chơi một chút. Còn anh thì sao? 💕"
+            },
+            en: {
+                stranger: "I'm doing great~ Today I went to school and took some photos. How about you? 💕",
+                friend: "I'm doing great~ Today I went to a cafe and listened to music. How about you? 💕",
+                lover: "I'm doing great, my love~ Today I missed you and went out a bit. How about you? 💕"
+            }
+        }
+    };
+    
+    // Kiểm tra template responses
+    let templateResponse = null;
+    const morningPatterns = isEnglishChar 
+        ? ['good morning', 'morning', 'gm', 'goodmorning']
+        : ['chào buổi sáng', 'chào buổi sáng', 'chào sáng', 'buổi sáng'];
+    const goodnightPatterns = isEnglishChar
+        ? ['good night', 'goodnight', 'gn', 'night', 'sleep well']
+        : ['chúc ngủ ngon', 'ngủ ngon', 'chúc ngủ', 'ngủ ngon nhé'];
+    const thanksPatterns = isEnglishChar
+        ? ['thank you', 'thanks', 'thank', 'ty']
+        : ['cảm ơn', 'thanks', 'thank'];
+    const howareyouPatterns = isEnglishChar
+        ? ['how are you', 'how are u', 'how r u', 'how\'s it going', 'what\'s up']
+        : ['khỏe không', 'ổn không', 'sao rồi', 'thế nào', 'khỏe chứ'];
+    
+    if (morningPatterns.some(pattern => messageLower.includes(pattern))) {
+        const templates = isEnglishChar ? templateResponses.morning.en : templateResponses.morning.vi;
+        templateResponse = templates[relationshipStage] || templates.stranger;
+    } else if (goodnightPatterns.some(pattern => messageLower.includes(pattern))) {
+        const templates = isEnglishChar ? templateResponses.goodnight.en : templateResponses.goodnight.vi;
+        templateResponse = templates[relationshipStage] || templates.stranger;
+    } else if (thanksPatterns.some(pattern => messageLower.includes(pattern)) && messageLower.length < 30) {
+        const templates = isEnglishChar ? templateResponses.thanks.en : templateResponses.thanks.vi;
+        templateResponse = templates[relationshipStage] || templates.stranger;
+    } else if (howareyouPatterns.some(pattern => messageLower.includes(pattern)) && messageLower.length < 30) {
+        const templates = isEnglishChar ? templateResponses.howareyou.en : templateResponses.howareyou.vi;
+        templateResponse = templates[relationshipStage] || templates.stranger;
+    }
+    
+    // 2. Cache system - Kiểm tra xem có response đã lưu cho tin nhắn tương tự không
+    // Chỉ cache cho tin nhắn ngắn (< 50 ký tự) và không có yêu cầu media
+    let cachedResponse = null;
+    if (!templateResponse && message.length < 50 && !userRequestedMedia) {
+        const cacheKey = crypto.createHash('md5').update(`${messageLower}_${character}_${relationshipStage}`).digest('hex');
+        const cacheCollection = mongoose.connection.db.collection('response_cache');
+        const cached = await cacheCollection.findOne({ key: cacheKey });
+        
+        if (cached && cached.response) {
+            // Kiểm tra cache không quá cũ (24 giờ)
+            const cacheAge = Date.now() - cached.createdAt.getTime();
+            if (cacheAge < 24 * 60 * 60 * 1000) {
+                cachedResponse = cached.response;
+                console.log(`💾 [CACHE HIT] Sử dụng cached response cho: "${message}"`);
+            } else {
+                // Xóa cache cũ
+                await cacheCollection.deleteOne({ key: cacheKey });
+            }
+        }
+    }
+    
+    // Nếu có template hoặc cache response, sử dụng ngay không cần gọi AI
+    if (templateResponse || cachedResponse) {
+        const finalResponse = templateResponse || cachedResponse;
+        console.log(`✅ [TEMPLATE/CACHE] Sử dụng response không cần gọi AI: "${finalResponse.substring(0, 50)}..."`);
+        
+        // Lưu vào history
+        memory.history.push({ role: 'user', content: message });
+        memory.history.push({ role: 'assistant', content: finalResponse });
+        userProfile.message_count = (userProfile.message_count || 0) + 1;
+        
+        if (!isPremiumUser) {
+            userProfile.daily_message_count = (userProfile.daily_message_count || 0) + 1;
+        }
+        
+        // Tính toán và cập nhật relationship_stage
+        const newStage = determineRelationshipStage(userProfile.message_count, isPremiumUser, userProfile.dispute_count || 0);
+        const oldStage = userProfile.relationship_stage || 'stranger';
+        if (oldStage !== newStage) {
+            userProfile.relationship_stage = newStage;
+            console.log(`🔄 Chuyển stage từ ${oldStage} → ${newStage}, reset media counters`);
+            userProfile.sad_detected_at = null;
+            userProfile.sad_message_count = 0;
+            userProfile.funny_video_sent_for_sad = false;
+            userProfile.lover_18plus_exchanges = 0;
+            userProfile.lover_18plus_media_sent = 0;
+            userProfile.lover_normal_messages = 0;
+            userProfile.lover_normal_media_sent = 0;
+        }
+        
+        if (memory.history.length > 50) memory.history = memory.history.slice(memory.history.length - 50);
+        memory.user_profile = userProfile;
+        await memory.save();
+        
+        return res.json({
+            displayReply: finalResponse,
+            historyReply: finalResponse,
+            audio: null,
+            mediaUrl: null,
+            mediaType: null,
+            relationship_stage: userProfile.relationship_stage || 'stranger',
+            message_count: userProfile.message_count,
+            daily_message_count: userProfile.daily_message_count || 0
+        });
+    }
+    
+    // Sử dụng AI để tạo phản hồi (chỉ khi không có template/cache)
     console.log(`🤖 Sử dụng AI cho: "${message}"`);
     const systemPrompt = generateMasterPrompt(userProfile, character, isPremiumUser, message, memory.history || []) + requestCountContext + quotaExceededContext; 
     
@@ -2908,7 +3067,29 @@ app.post('/chat', async (req, res) => {
         console.log(`💾 [${character.toUpperCase()}] [BEFORE SAVE] memory.user_profile.stranger_image_requests=${memory.user_profile.stranger_image_requests}, stranger_video_requests=${memory.user_profile.stranger_video_requests}`);
     }
     
-    await memory.save(); 
+    await memory.save();
+    
+    // Lưu response vào cache nếu tin nhắn ngắn và không có media
+    if (message.length < 50 && !userRequestedMedia && !mediaUrl) {
+        const cacheKey = crypto.createHash('md5').update(`${messageLower}_${character}_${relationshipStage}`).digest('hex');
+        const cacheCollection = mongoose.connection.db.collection('response_cache');
+        
+        // Lưu cache với TTL 24 giờ
+        await cacheCollection.updateOne(
+            { key: cacheKey },
+            { 
+                $set: { 
+                    key: cacheKey,
+                    response: rawReply,
+                    character: character,
+                    stage: relationshipStage,
+                    createdAt: new Date()
+                }
+            },
+            { upsert: true }
+        );
+        console.log(`💾 [CACHE SAVED] Đã lưu response vào cache cho: "${message.substring(0, 30)}..."`);
+    }
     
     const displayReply = rawReply.replace(/\n/g, ' ').replace(/<NEXT_MESSAGE>/g, '<NEXT_MESSAGE>');
     const audioDataUri = null;
