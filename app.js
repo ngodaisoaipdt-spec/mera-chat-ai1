@@ -2449,12 +2449,24 @@ app.post('/chat', async (req, res) => {
     try {
         gptResponse = await callXaiOnce();
     } catch (firstErr) {
-        console.warn("⚠️ XAI lỗi lần 1:", firstErr.message);
-        try {
-            gptResponse = await callXaiOnce();
-        } catch (secondErr) {
-            console.error("❌ XAI lỗi lần 2:", secondErr.message);
-            gptResponse = null;
+        // Kiểm tra lỗi 429 (spending limit) - không retry
+        const is429Error = firstErr.status === 429 || 
+                           firstErr.message?.includes('429') || 
+                           firstErr.message?.includes('spending limit') ||
+                           firstErr.message?.includes('tín dụng') ||
+                           firstErr.message?.includes('chi tiêu');
+        
+        if (is429Error) {
+            console.error("❌ [429 ERROR] API spending limit đã hết - sử dụng fallback response");
+            gptResponse = null; // Sẽ dùng fallback response
+        } else {
+            console.warn("⚠️ XAI lỗi lần 1:", firstErr.message);
+            try {
+                gptResponse = await callXaiOnce();
+            } catch (secondErr) {
+                console.error("❌ XAI lỗi lần 2:", secondErr.message);
+                gptResponse = null;
+            }
         }
     }
     // Nếu vẫn không có phản hồi từ AI → tạo câu trả lời fallback, tránh hiển thị 'lỗi kết nối'
@@ -5074,6 +5086,18 @@ Hãy tạo tin nhắn follow-up NGẮN GỌN, TỰ NHIÊN, phù hợp với giai
         
         return followUpText;
     } catch (error) {
+        // Kiểm tra lỗi 429 (spending limit) - không retry
+        const is429Error = error.status === 429 || 
+                           error.message?.includes('429') || 
+                           error.message?.includes('spending limit') ||
+                           error.message?.includes('tín dụng') ||
+                           error.message?.includes('chi tiêu');
+        
+        if (is429Error) {
+            console.error('❌ [429 ERROR] API spending limit đã hết - không thể generate follow-up message');
+            return null; // Trả về null để không gửi auto message
+        }
+        
         console.error('❌ Lỗi generate follow-up message:', {
             error: error?.message || 'Unknown error',
             stack: error?.stack,
